@@ -91,7 +91,7 @@
 	<!-- High Resolution 3D Rendered Vehicle Sprite -->
 	<img
 		src={spriteSrc}
-		alt={vehicle.id}
+		alt=""
 		draggable="false"
 		class="w-full h-full object-contain pointer-events-none transition-[filter] duration-150 select-none"
 		style:transform={flipTransform}

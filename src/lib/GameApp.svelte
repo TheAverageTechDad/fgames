@@ -20,8 +20,12 @@
   if(import.meta.env.DEV){const p=new URLSearchParams(location.search),g=p.get('game');if(g==='nuts'||g==='escape')void goto(`/${g}/play?difficulty=${p.get('diff')??'easy'}`);}
   return installHaptics();
  });
- const goHome=()=>goto('/');
- const goDifficulty=()=>goto(`/${selectedGame}?difficulty=${currentDifficulty}`);
+ function backTo(url:string){
+  if((page.state as {parent?:string}).parent && history.length>1)history.back();
+  else void goto(url,{replace:true});
+ }
+ const goHome=()=>backTo('/');
+ const goDifficulty=()=>backTo(`/${selectedGame}?difficulty=${currentDifficulty}`);
 </script>
 <svelte:head><title>{screen==='home'?'Offline Games':selectedGame==='nuts'?'Nuts & Bolts · Offline Games':'Escape · Offline Games'}</title></svelte:head>
 <div class="app-surround"><div class="app-shell">
@@ -33,7 +37,7 @@
  <main class="game-library">
  <p class="home-intro">Little games. Any spare moment.</p>
  {#each [{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'}] as game}
- <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();goto(`/${game.game}`);}} aria-label={`Play ${game.title}`}>
+ <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();goto(`/${game.game}`,{state:{parent:'/'}});}} aria-label={`Play ${game.title}`}>
  <div class="library-art"><img src={`/cards/${game.game}-gameplay.webp`} alt={`${game.title} gameplay`} width="640" height="340"/></div>
  <div class="library-label"><div><h2>{game.title}</h2><p>{game.description}</p></div><span class="card-play"><Icon name="play" size={26}/></span></div>
  </button>
@@ -41,7 +45,7 @@
  </main>
  </div>
  {:else if screen==='difficulty'}
- <DifficultyModal gameType={selectedGame} {currentDifficulty} {library} onSelectDifficulty={d=>goto(`/${selectedGame}?difficulty=${d}`,{replace:true,reset:false})} onPlay={level=>goto(`/${selectedGame}/play?difficulty=${currentDifficulty}&stage=${level}`)} onBack={goHome}/>
+ <DifficultyModal gameType={selectedGame} {currentDifficulty} {library} onSelectDifficulty={d=>goto(`/${selectedGame}?difficulty=${d}`,{replace:true,reset:false,state:page.state})} onPlay={level=>goto(`/${selectedGame}/play?difficulty=${currentDifficulty}&stage=${level}`,{state:{parent:`/${selectedGame}`}})} onBack={goHome}/>
  {:else if library}
  {#key currentDifficulty}
  {#if selectedGame==='nuts'}<NutsGame levels={library[currentDifficulty] as StoredNutsLevel[]} initialLevelId={initialLevel} difficulty={currentDifficulty} onBack={goDifficulty}/>

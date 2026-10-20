@@ -1,80 +1,54 @@
-# fgames 🎮
+# fgames
 
-Two offline puzzle games built with **SvelteKit 3**, **Svelte 5**, **Three.js**, and the **Web Audio API**. The app can be installed and played without a network connection after its first visit.
+An installable library of offline puzzles built with SvelteKit 3, Svelte 5 and Three.js r185.
 
----
+Nuts & Bolts transfers matching groups with one tap, animates each nut, and undoes a whole group in one step. Escape follows the finger inside the available lane, snaps to cells, and drives the red car out before showing the result. Both games share the same controls, settings, guided first moves and result card.
 
-## 🕹️ Featured Games
+## Levels and progress
 
-### 1. Nuts & Bolts 3D (Screw Sort)
-- **3D Visuals**: Interactive Three.js board with colorful nuts, metallic bolts, and lift and spin animations.
-- **Gameplay**:
-  - Color-matching sorting logic with undo stack, hint pathfinding solver, and extra bolt unlocking.
-  - Deterministic levels across four difficulty tiers, generated through reversible moves so each puzzle can be solved.
-  - Procedural sound synthesis (metallic clicks, thread unscrewing, satisfying stack thuds).
+The app ships 100 puzzles per game and difficulty: 800 in total. JSON files in `static/levels` contain exact shortest solutions and are ordered by move count. Generators run during development, never on the player's device. Hints solve the current position in a worker.
 
-### 2. Escape (Traffic Rush Hour)
-- **Pixel-crisp 2D Assets**: Clean top-down toy vehicles with subtle shadows, headlights, and directional indicators.
-- **Gameplay**:
-  - Unblock the red hero car to escape the grid through the exit gate.
-  - Interactive BFS solver providing real-time hints and optimal move sequences.
-- The board scales to narrow phones and vehicles also support arrow-key movement.
-  - Procedural level generator ensuring every level has a guaranteed valid, non-trivial solution.
+Each difficulty starts at Level 1. The new library uses versioned progress keys because its puzzles replace the old generated levels. Hints are saved per game and do not refill when restarting, changing difficulty or changing level. Sound and haptics preferences are saved on the device.
 
----
+## Offline support
 
-## 📱 Progressive Web App (PWA)
+The service worker precaches routes, puzzle JSON, fonts, icons, sprites and both workers. Navigation queries select local game state and share the cached route document. Everything required for play is local after the first successful download.
 
-- **Installable**: Full web app manifest with custom responsive icons (192px, 512px, maskable, Apple touch icon).
-- **Offline after first visit**: The Service Worker caches the app shell, locally hosted fonts, game assets, and vehicle sprites. Navigations use the latest version when online and the cached shell when offline.
-- **Mobile First**: Touch-optimized controls, haptic vibration support, and responsive layouts.
+The pocket arcade icon source and export instructions are in `assets/branding`. The menu art uses actual gameplay captures. Phosphor icons and both fonts are bundled with their licences.
 
----
+## Development
 
-## 🚀 Tech Stack
-
-- **Framework**: [SvelteKit 3](https://svelte.dev/) + [Svelte 5](https://svelte.dev/) (Runes mode)
-- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
-- **3D Graphics**: [Three.js](https://threejs.org/)
-- **Audio**: Web Audio API (Synthesizer & procedural sound effects)
-- **Testing**: [Vitest](https://vitest.dev/)
-- **Deployment**: [Cloudflare Pages](https://pages.cloudflare.com/)
-
----
-
-## 🛠️ Development
-
-```bash
-# Install dependencies
+```sh
 pnpm install
-
-# Start local dev server
 pnpm dev
-
-# Run unit tests
-pnpm test
-
-# Typecheck
 pnpm check
-
-# Build for production
+pnpm test
 pnpm build
-
-# Preview production build
-pnpm preview
+pnpm preview --host 127.0.0.1 --port 4174
 ```
 
-## Deployment
+In another terminal, run browser verification against that production preview:
 
-Build and publish to the existing Cloudflare Pages project on the active Wrangler account:
-
-```bash
-pnpm build
-pnpm dlx wrangler@latest pages deploy build --project-name fgames
+```sh
+pnpm exec playwright install chromium
+pnpm smoke
 ```
 
----
+`FGAMES_URL` changes the target URL. The smoke script checks fresh Level 1 starts and plays stored solutions in all eight combinations, then checks replay, navigation, hints, a small viewport and offline reloads. It records startup tasks in `test-results/smoke.json`; `FGAMES_STRICT_PERF=1` enforces the report's 50 ms startup task gate on both games.
 
-## 📄 License
+Regenerate the library explicitly with `pnpm levels`. `node scripts/generate-levels.mjs --resume` keeps completed libraries. Every shipped solution is checked by `pnpm test` for legal moves and a winning final state.
 
-MIT
+## Rendering and device support
+
+The retained Nuts scene runs in an OffscreenCanvas worker where supported, with a main-thread fallback for older browsers. It uses shared shaft geometry, blob shadows, adaptive resolution and no preserved drawing buffer. Rendering resources and workers are released on exit.
+
+Haptics use Catcha's vendored modules. Android uses the Vibration API; the Safari switch fallback depends on the iOS version and browser restrictions. The preference is a real switch, and the UI does not claim that every device supports it.
+
+## Release
+
+```sh
+pnpm build
+pnpm dlx wrangler@latest pages deploy build --project-name fgames --branch main
+```
+
+See `docs/FIX_REPORT_STATUS.md` for the report mapping and device verification limits.

@@ -6,6 +6,8 @@ export function setHapticsEnabled(value:boolean){try{localStorage.setItem('fgame
 export function haptic(name:HapticPattern='tick'){if(hapticsEnabled())engine?.haptic(name);}
 export function installHaptics(){
  let active=true;
- void import('./feedback/haptics.js').then(module=>{if(active){engine=module;module.setHapticsOff(!hapticsEnabled());}});
- return ()=>{active=false;};
+ const press=(event:PointerEvent)=>{const target=(event.target as Element|null)?.closest('button,[role="button"]');if(target && !(target instanceof HTMLButtonElement&&target.disabled))haptic('tick');};
+ document.addEventListener('pointerdown',press,{capture:true});
+ void import('./feedback/haptics.js').then(module=>{if(active){engine=module;if(module.isHapticsOff()===hapticsEnabled())module.setHapticsOff(!hapticsEnabled());}});
+ return ()=>{active=false;document.removeEventListener('pointerdown',press,{capture:true});};
 }

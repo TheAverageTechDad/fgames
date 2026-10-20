@@ -1,0 +1,50 @@
+[
+  {
+    "game": "nuts",
+    "difficulty": "easy",
+    "moves": 3,
+    "longTasks": []
+  },
+  {
+    "game": "nuts",
+    "difficulty": "medium",
+    "moves": 9,
+    "longTasks": []
+  },
+  {
+    "game": "nuts",
+    "difficulty": "hard",
+    "moves": 13,
+    "longTasks": []
+  },
+  {
+    "game": "nuts",
+    "difficulty": "extra_hard",
+    "moves": 18,
+    "longTasks": []
+  },
+  {
+    "game": "escape",
+    "difficulty": "easy",
+    "moves": 2,
+    "longTasks": []
+  },
+  {
+    "game": "escape",
+    "difficulty": "medium",
+    "moves": 6,
+    "longTasks": []
+  },
+  {
+    "game": "escape",
+    "difficulty": "hard",
+    "moves": 12,
+    "longTasks": []
+  },
+  {
+    "game": "escape",
+    "difficulty": "extra_hard",
+    "moves": 18,
+    "longTasks": []
+  }
+]

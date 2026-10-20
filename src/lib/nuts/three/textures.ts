@@ -1,21 +1,26 @@
 import * as THREE from 'three';
 import { NUT_THEMES, type NutColor } from '../types';
 
-const textureCache = new Map<NutColor, THREE.CanvasTexture>();
+export function makeCanvas(width:number,height:number):HTMLCanvasElement|OffscreenCanvas {
+ if(typeof document==='undefined')return new OffscreenCanvas(width,height);
+ const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;
+}
+
+const textureCache = new Map<NutColor, THREE.CanvasTexture<HTMLCanvasElement|OffscreenCanvas>>();
 
 /**
  * Creates a high-res canvas texture for each nut color featuring the embossed icon
  */
-export function getNutIconTexture(color: NutColor): THREE.CanvasTexture {
+export function getNutIconTexture(color: NutColor): THREE.CanvasTexture<HTMLCanvasElement|OffscreenCanvas> {
 	if (textureCache.has(color)) {
 		return textureCache.get(color)!;
 	}
 
 	const size = 128;
-	const canvas = document.createElement('canvas');
+	const canvas = makeCanvas(size,size);
 	canvas.width = size;
 	canvas.height = size;
-	const ctx = canvas.getContext('2d')!;
+	const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
 	const theme = NUT_THEMES[color];
 
@@ -163,13 +168,13 @@ function drawIcon(ctx: CanvasRenderingContext2D, color: NutColor) {
 /**
  * Creates normal map for metallic screw thread
  */
-export function getThreadNormalMap(): THREE.CanvasTexture {
+export function getThreadNormalMap(): THREE.CanvasTexture<HTMLCanvasElement|OffscreenCanvas> {
 	const width = 512;
 	const height = 512;
-	const canvas = document.createElement('canvas');
+	const canvas = makeCanvas(width,height);
 	canvas.width = width;
 	canvas.height = height;
-	const ctx = canvas.getContext('2d')!;
+	const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
 	// Draw diagonal thread ridges
 	const threadCount = 16;

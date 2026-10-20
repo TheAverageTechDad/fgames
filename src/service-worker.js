@@ -58,7 +58,11 @@ self.addEventListener('fetch', (event) => {
 	event.respondWith(
 		(async () => {
 			const cache = await caches.open(CACHE_NAME);
-			const cachedResponse = await cache.match(request);
+			// The cached files are static and have identical content across request headers.
+            // Module requests may add Origin (Vite sends Vary: Origin); route queries
+            // select local game state rather than a different HTML document.
+            const knownPath = ASSETS_TO_CACHE.includes(url.pathname);
+            const cachedResponse = await cache.match(knownPath ? url.pathname : request, { ignoreVary: knownPath });
 			if (request.mode !== 'navigate' && cachedResponse) return cachedResponse;
 
 			// Navigation uses the latest shell when online and the cached shell offline.

@@ -1,5 +1,8 @@
 <script lang="ts">
+ import solverWorkerUrl from '../solver.worker.ts?worker&url';
+ import {createOfflineWorker} from '#lib/offline-worker';
  import {goto} from '$app/navigation';
+ import {page} from '$app/state';
 	import confetti from 'canvas-confetti';
 	import { onMount, onDestroy } from 'svelte';
  import { groupMoveCount } from './moves';
@@ -43,12 +46,13 @@
 	let busy = $state(false);
  let hintBusy = $state(false);
  let hintWorker: Worker | undefined;
+ let disposed=false;
  let tutorial = $state(false);
  let showBoltTip = $state(false);
  const capacity = $derived(currentLevel.capacity ?? 4);
  const guidedMove = $derived(tutorial && moveHistory.length < 2 ? currentLevel.solution[moveHistory.length] : null);
  onMount(()=>{ hintsCount=readHints('nuts');try{tutorial=currentLevelId===1&&!localStorage.getItem('fgames_nuts_tutorial');showBoltTip=!localStorage.getItem('fgames_bolt_tip');}catch{} });
- onDestroy(()=>hintWorker?.terminate());
+ onDestroy(()=>{disposed=true;hintWorker?.terminate();});
  let nutIdSeq = 0;
 	// Initialize level
 	function initLevel(lvl: NutsLevel) {
@@ -167,7 +171,7 @@
 		sound.playHaptic(15);
 	}
 
-	function handleHint() {
+	async function handleHint() {
 		if (isWon || busy || hintBusy) return;
 		if (hintsCount <= 0) {
 			sound.playError();
@@ -177,7 +181,8 @@
 
         hintBusy=true;
         hintWorker?.terminate();
-        hintWorker=new Worker(new URL('../solver.worker.ts',import.meta.url),{type:'module'});
+        try{hintWorker=await createOfflineWorker(solverWorkerUrl);}catch{hintBusy=false;sound.playError();return;}
+        if(disposed){hintWorker.terminate();return;}
         hintWorker.onmessage=({data})=>{hintBusy=false;if(data){hintMove=data;hintsCount--;saveHints('nuts',hintsCount);sound.playTap();}else sound.playError();hintWorker?.terminate();};
         hintWorker.onerror=()=>{hintBusy=false;hintWorker?.terminate();sound.playError();};
         hintWorker.postMessage({game:'nuts',state:bolts.map(b=>b.map(n=>n.color)),capacity});
@@ -196,7 +201,7 @@
 	}
 
 	function handleRestart() {
-        if(busy)return;
+        if(busy||hintBusy)return;
 		sound.playTap();
 		initLevel(currentLevel);
 	}
@@ -205,7 +210,7 @@
 		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
 		if(currentLevelId>=levels.length){onBack();return;}
-        tutorial=false; currentLevelId++; void goto(`/nuts/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false});
+        tutorial=false; currentLevelId++; void goto(`/nuts/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false,state:page.state});
 	}
 
 </script>
@@ -214,9 +219,7 @@
 <div class="game-screen nuts-screen">
  <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
  <main class="nuts-field">
-  {#key currentLevelId}
   <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
-  {/key}
  </main>
  {#if guidedMove}<p class="guidance" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>{/if}
  {#if showBoltTip}<button class="bolt-tip" onclick={()=>{showBoltTip=false;try{localStorage.setItem('fgames_bolt_tip','true');}catch{}}}>+1 Bolt adds an empty bolt for this level. Tap to dismiss.</button>{/if}

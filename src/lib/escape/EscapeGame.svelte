@@ -1,5 +1,8 @@
 <script lang="ts">
+ import solverWorkerUrl from '../solver.worker.ts?worker&url';
+ import {createOfflineWorker} from '#lib/offline-worker';
  import {goto} from '$app/navigation';
+ import {page} from '$app/state';
 	import confetti from 'canvas-confetti';
 	import Vehicle from './Vehicle.svelte';
 	import { buildGrid, solveEscape, type VehicleMove } from './solver';
@@ -44,9 +47,10 @@
  let settling=$state(false),hintBusy=$state(false),tutorial=$state(false);
  let timer: ReturnType<typeof setTimeout> | undefined;
  let hintWorker:Worker|undefined;
+ let disposed=false;
  const guidedMove=$derived(tutorial&&moveHistory.length<2?currentLevel.solution[moveHistory.length]:null);
  onMount(()=>{hintsCount=readHints('escape');try{tutorial=currentLevelId===1&&!localStorage.getItem('fgames_escape_tutorial');}catch{}});
- onDestroy(()=>{clearTimeout(timer);hintWorker?.terminate();});
+ onDestroy(()=>{disposed=true;clearTimeout(timer);hintWorker?.terminate();});
 	const PADDING = 10;
 	const GAP = 5;
 	const CELL_SIZE = $derived((boardSize - PADDING * 2 - GAP * 5) / 6);
@@ -62,7 +66,8 @@
 	let dragOffset = $state(0); // in pixels along movement axis
 	let dragMinPx = $state(0);
 	let dragMaxPx = $state(0);
-	let dragStartPointer = 0;
+	let activePointerId: number | null = null;
+    let dragStartPointer = 0;
 	let dragStartPos = 0; // initial row or col
 	let hasHitBump = $state(false);
 
@@ -75,6 +80,7 @@
 		isWon = false;
 		isExiting = false;
 		activeVehicleId = null;
+        activePointerId=null;
 		dragOffset = 0;
 		hasHitBump = false;
 	}
@@ -120,13 +126,13 @@
 	}
 
 	function handlePointerDown(e: PointerEvent, v: VehicleData) {
-		if (isWon || isExiting || settling || hintBusy) return;
+		if (isWon || isExiting || settling || hintBusy || activeVehicleId) return;
+        activePointerId=e.pointerId;
 		if (e.currentTarget instanceof HTMLElement) {
 			e.currentTarget.setPointerCapture(e.pointerId);
 		}
 
-		if(activeVehicleId)return;
-        activeVehicleId = v.id;
+		activeVehicleId = v.id;
 		hintMove = null;
 		hasHitBump = false;
 
@@ -150,7 +156,7 @@
 	}
 
 	function handlePointerMove(e: PointerEvent) {
-		if (!activeVehicleId) return;
+		if (!activeVehicleId || e.pointerId!==activePointerId) return;
 
 		const v = vehicles.find((item) => item.id === activeVehicleId);
 		if (!v) return;
@@ -182,8 +188,9 @@
 	}
 
 	function handlePointerUp(e: PointerEvent) {
-		if (!activeVehicleId) return;
+		if (!activeVehicleId || e.pointerId!==activePointerId) return;
 		if (e.type === 'pointercancel') {
+            activePointerId=null;
 			activeVehicleId = null;
 			dragOffset = 0;
 			return;
@@ -257,6 +264,7 @@
 		clearTimeout(timer);
         timer=setTimeout(() => {
 			isWon = true;
+            settling=false;
 			isExiting = false;
 			unlockedThrough = Math.max(unlockedThrough, currentLevelId + 1);
 			sound.playVictory();
@@ -288,7 +296,7 @@
 		}
 	}
 
-	function handleHint() {
+	async function handleHint() {
 		if (isWon || isExiting || settling || hintBusy) return;
 		if (hintsCount <= 0) {
 			sound.playError();
@@ -297,14 +305,15 @@
 
 
         hintBusy=true;hintWorker?.terminate();
-        hintWorker=new Worker(new URL('../solver.worker.ts',import.meta.url),{type:'module'});
+        try{hintWorker=await createOfflineWorker(solverWorkerUrl);}catch{hintBusy=false;sound.playError();return;}
+        if(disposed){hintWorker.terminate();return;}
         hintWorker.onmessage=({data})=>{hintBusy=false;if(data){hintMove=data;hintsCount--;saveHints('escape',hintsCount);sound.playTap();}else sound.playError();hintWorker?.terminate();};
         hintWorker.onerror=()=>{hintBusy=false;hintWorker?.terminate();sound.playError();};
         hintWorker.postMessage({game:'escape',state:$state.snapshot(vehicles)});
     }
 
 	function handleRestart() {
-        if(isExiting||settling)return;
+        if(isExiting||settling||hintBusy)return;
 		sound.playTap();
 		initLevel(currentLevel);
 	}
@@ -313,7 +322,7 @@
 		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
 		if(currentLevelId>=levels.length){onBack();return;}
-        tutorial=false; currentLevelId++; void goto(`/escape/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false});
+        tutorial=false; currentLevelId++; void goto(`/escape/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false,state:page.state});
 	}
 
 	function prevLevel() {
@@ -388,6 +397,7 @@
 						tabindex="0"
 						aria-label={v.isTarget ? 'Red car' : `${v.color} ${v.type}`}
 					>
+                        {#if isEscaping}<span class="exit-streak" aria-hidden="true"></span>{/if}
                         {#if guidedMove?.id===v.id}<span class="car-guide" aria-hidden="true"><Icon name="hand-pointing" size={32}/></span>{/if}
 						<Vehicle
 							vehicle={v}
@@ -411,4 +421,4 @@
  </footer>
  {#if isWon}<WinCard moves={moveHistory.length} best={currentLevel.minMoves} last={currentLevelId===levels.length} onNext={nextLevel} onReplay={handleRestart}/>{/if}
 </div>
-<style>.car-guide{position:absolute;z-index:50;left:30%;top:40%;pointer-events:none;color:#fff6e6;filter:drop-shadow(1px 2px 1px #241b3a)}</style>
+<style>.exit-streak{position:absolute;right:95%;top:20%;width:70px;height:60%;border-top:4px solid #fff6e6;border-bottom:4px solid #fff6e6;opacity:.7;pointer-events:none}.car-guide{position:absolute;z-index:50;left:30%;top:40%;pointer-events:none;color:#fff6e6;filter:drop-shadow(1px 2px 1px #241b3a)}</style>
