@@ -1,19 +1,25 @@
 <script lang="ts">
+ import {goto} from '$app/navigation';
 	import confetti from 'canvas-confetti';
-	import Bolt from './Bolt.svelte';
+	import { onMount, onDestroy } from 'svelte';
+ import { groupMoveCount } from './moves';
+ import GameHeader from '#lib/components/GameHeader.svelte';
+ import WinCard from '#lib/components/WinCard.svelte';
+ import Icon from '#lib/components/Icon.svelte';
 	import Nuts3DScene from './three/Nuts3DScene.svelte';
-	import { solveNutsGame, isLevelSolved } from './solver';
-	import { getNutsLevel } from './generator';
+	import { isLevelSolved } from './solver';
+	import { saveProgress, readHints, saveHints, type StoredNutsLevel } from '#lib/level-library';
 	import { sound } from '#lib/sound';
-	import type { NutColor, NutsLevel, NutItem } from './types';
+	import type { NutsLevel, NutItem } from './types';
 
 	interface Props {
+        levels: StoredNutsLevel[];
 		initialLevelId?: number;
 		difficulty?: 'easy' | 'medium' | 'hard' | 'extra_hard';
 		onBack: () => void;
 	}
 
-	let { initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
+	let { levels, initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
 
 	let currentLevelId = $state(1);
 	let unlockedThrough = $state(1);
@@ -23,7 +29,7 @@
 		unlockedThrough = initialLevelId;
 	});
 
-	const currentLevel = $derived(getNutsLevel(currentLevelId, difficulty));
+	const currentLevel = $derived(levels[Math.min(levels.length-1, Math.max(0, currentLevelId-1))]);
 
 	// Game state
 	let bolts: NutItem[][] = $state([]);
@@ -34,14 +40,23 @@
 	let isWon = $state(false);
 	let hasAddedBolt = $state(false);
 
-	let nutIdSeq = 0;
+	let busy = $state(false);
+ let hintBusy = $state(false);
+ let hintWorker: Worker | undefined;
+ let tutorial = $state(false);
+ let showBoltTip = $state(false);
+ const capacity = $derived(currentLevel.capacity ?? 4);
+ const guidedMove = $derived(tutorial && moveHistory.length < 2 ? currentLevel.solution[moveHistory.length] : null);
+ onMount(()=>{ hintsCount=readHints('nuts');try{tutorial=currentLevelId===1&&!localStorage.getItem('fgames_nuts_tutorial');showBoltTip=!localStorage.getItem('fgames_bolt_tip');}catch{} });
+ onDestroy(()=>hintWorker?.terminate());
+ let nutIdSeq = 0;
 	// Initialize level
 	function initLevel(lvl: NutsLevel) {
-		nutIdSeq = 0;
+		nutIdSeq += 1000;
+        busy=false; hintBusy=false; hintWorker?.terminate();
 		bolts = lvl.bolts.map((b) => b.map((color) => ({ id: `nut-${++nutIdSeq}-${color}`, color })));
 		selectedBolt = null;
 		moveHistory = [];
-		hintsCount = 3;
 		hintMove = null;
 		isWon = false;
 		hasAddedBolt = false;
@@ -53,13 +68,9 @@
 		}
 	});
 
-	// Split bolts into two rows: top row has 4 bolts (like the original video), bottom row has remaining
-	const topCount = $derived(bolts.length >= 8 ? 4 : Math.ceil(bolts.length / 2));
-	const topRowBolts = $derived(bolts.slice(0, topCount));
-	const bottomRowBolts = $derived(bolts.slice(topCount));
 
 	function handleBoltClick(index: number) {
-		if (isWon) return;
+		if (isWon || busy || hintBusy) return;
 		if (index < 0 || index >= bolts.length) {
 			sound.playError();
 			return;
@@ -73,7 +84,7 @@
 				return;
 			}
 			// If already complete, no need to touch
-			if (clickedBolt.length === 4 && clickedBolt.every((c) => c.color === clickedBolt[0].color)) {
+			if (clickedBolt.length === capacity && clickedBolt.every((c) => c.color === clickedBolt[0].color)) {
 				sound.playTap();
 				return;
 			}
@@ -95,7 +106,7 @@
 		const src = bolts[selectedBolt];
 		const dst = bolts[index];
 
-		if (dst.length >= 4) {
+		if (dst.length >= capacity) {
 			sound.playError();
 			sound.playHaptic([20, 30, 20]);
 			return;
@@ -110,50 +121,39 @@
 			return;
 		}
 
-		// Apply move (1 nut at a time for true 3D unthreading & threading physics)
-		const fromIdx = selectedBolt;
-		dst.push(src.pop()!);
-		bolts = bolts.map((b) => [...b]);
-		moveHistory.push({ from: fromIdx, to: index, count: 1 });
-		selectedBolt = null;
-		hintMove = null;
-		sound.playScrewDown();
-		sound.playHaptic(18);
 
-		// Check if target bolt just completed
-		if (dst.length === 4 && dst.every((c) => c.color === dst[0].color)) {
-			sound.playBoltComplete();
-			sound.playHaptic([30, 40, 50]);
-		}
-
-		// Check win condition
-		const colorMatrix = bolts.map((b) => b.map((n) => n.color));
-		if (isLevelSolved(colorMatrix)) {
-			isWon = true;
-			unlockedThrough = Math.max(unlockedThrough, currentLevelId + 1);
-			sound.playVictory();
-			sound.playHaptic([50, 60, 100]);
-			try {
-				confetti({
-					particleCount: 100,
-					spread: 75,
-					origin: { y: 0.6 }
-				});
-			} catch (_) {}
-
-			try {
-				localStorage.setItem(`fgames_nuts_${difficulty}_level`, unlockedThrough.toString());
-			} catch (_) {}
-		}
-	}
+        const count=groupMoveCount(src,dst,capacity);
+        if(!count)return;
+        const fromIdx=selectedBolt;
+        if(guidedMove && (fromIdx!==guidedMove.from || index!==guidedMove.to)) tutorial=false;
+        busy=true;
+        for(let i=0;i<count;i++)dst.push(src.pop()!);
+        bolts=bolts.map(b=>[...b]);
+        moveHistory.push({from:fromIdx,to:index,count});
+        selectedBolt=null; hintMove=null;
+        if(moveHistory.length>=2){tutorial=false;try{localStorage.setItem('fgames_nuts_tutorial','true');}catch{}}
+    }
+    function finishAnimation(){
+        if(!busy)return;
+        busy=false;
+        sound.playScrewDown();
+        const last=moveHistory.at(-1);
+        if(last&&bolts[last.to].length===capacity&&bolts[last.to].every(n=>n.color===bolts[last.to][0].color))sound.playBoltComplete();
+        else sound.resetCombo();
+        if(isLevelSolved(bolts.map(b=>b.map(n=>n.color)),capacity)){
+            isWon=true; saveProgress('nuts',difficulty,currentLevelId+1);sound.playVictory();
+            if(!matchMedia('(prefers-reduced-motion: reduce)').matches)confetti({particleCount:60,spread:65,origin:{y:.6}});
+        }
+    }
 
 	function handleUndo() {
-		if (moveHistory.length === 0 || isWon) {
+		if (moveHistory.length === 0 || isWon || busy || hintBusy) {
 			sound.playError();
 			sound.playHaptic([20, 30]);
 			return;
 		}
-		const lastMove = moveHistory.pop()!;
+		busy=true; tutorial=false;
+        const lastMove = moveHistory.pop()!;
 		const src = bolts[lastMove.to];
 		const dst = bolts[lastMove.from];
 
@@ -168,27 +168,23 @@
 	}
 
 	function handleHint() {
-		if (isWon) return;
+		if (isWon || busy || hintBusy) return;
 		if (hintsCount <= 0) {
 			sound.playError();
 			return;
 		}
 
-		const colorMatrix = bolts.map((b) => b.map((n) => n.color));
-		const solution = solveNutsGame(colorMatrix, 4);
-		if (solution && solution.length > 0) {
-			const next = solution[0];
-			hintMove = { from: next.from, to: next.to };
-			hintsCount--;
-			sound.playBoltComplete();
-			sound.playHaptic([20, 40]);
-		} else {
-			sound.playError();
-		}
-	}
+
+        hintBusy=true;
+        hintWorker?.terminate();
+        hintWorker=new Worker(new URL('../solver.worker.ts',import.meta.url),{type:'module'});
+        hintWorker.onmessage=({data})=>{hintBusy=false;if(data){hintMove=data;hintsCount--;saveHints('nuts',hintsCount);sound.playTap();}else sound.playError();hintWorker?.terminate();};
+        hintWorker.onerror=()=>{hintBusy=false;hintWorker?.terminate();sound.playError();};
+        hintWorker.postMessage({game:'nuts',state:bolts.map(b=>b.map(n=>n.color)),capacity});
+    }
 
 	function handleAddBolt() {
-		if (hasAddedBolt || isWon) {
+		if (hasAddedBolt || isWon || busy || hintBusy) {
 			sound.playError();
 			return;
 		}
@@ -200,6 +196,7 @@
 	}
 
 	function handleRestart() {
+        if(busy)return;
 		sound.playTap();
 		initLevel(currentLevel);
 	}
@@ -207,178 +204,27 @@
 	function nextLevel() {
 		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
-		currentLevelId++;
+		if(currentLevelId>=levels.length){onBack();return;}
+        tutorial=false; currentLevelId++; void goto(`/nuts/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false});
 	}
 
-	function prevLevel() {
-		if (currentLevelId > 1) {
-			sound.playTap();
-			currentLevelId--;
-		}
-	}
 </script>
 
-<div
-	class="relative flex flex-col justify-between w-full h-full min-h-0 max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
-	style="background: radial-gradient(circle at 50% 20%, #2e224e 0%, #1a122e 60%, #120b22 100%);"
->
-	<!-- TOP BAR (Exact match of video: Back, MEDIUM/Level 1, Restart) -->
-	<header class="flex items-center justify-between px-6 pt-5 pb-2 z-20">
-		<!-- Back Button -->
-		<button
-			type="button"
-			onclick={onBack}
-			class="w-11 h-11 bg-white/95 rounded-full flex items-center justify-center text-slate-800 shadow-lg active:scale-90 transition-transform cursor-pointer"
-			aria-label="Back to main menu"
-		>
-			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-				<polyline points="15 18 9 12 15 6"></polyline>
-			</svg>
-		</button>
 
-		<!-- Level Badge & Title with Previous/Next Arrows -->
-		<div class="flex items-center gap-2.5">
-			<button
-				type="button"
-				onclick={prevLevel}
-				disabled={currentLevelId <= 1}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
-				aria-label="Previous level"
-			>
-				◀
-			</button>
-
-			<div class="flex flex-col items-center">
-				<span class="text-[11px] font-extrabold uppercase tracking-widest text-slate-300/80 mb-0.5">
-					{difficulty.replace('_', ' ')}
-				</span>
-				<h2 class="text-2xl font-black text-white tracking-wide drop-shadow-md">
-					{currentLevel.name}
-				</h2>
-				<span class="text-[10px] font-bold text-slate-300/70">{moveHistory.length} moves</span>
-			</div>
-
-			<button
-				type="button"
-				onclick={nextLevel}
-				disabled={currentLevelId >= unlockedThrough && !isWon}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
-				aria-label="Next level"
-			>
-				▶
-			</button>
-		</div>
-
-		<!-- Restart Button -->
-		<button
-			type="button"
-			onclick={handleRestart}
-			class="w-11 h-11 bg-white/95 rounded-full flex items-center justify-center text-slate-800 shadow-lg active:scale-90 transition-transform cursor-pointer"
-			aria-label="Restart level"
-		>
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l6 5.81" />
-			</svg>
-		</button>
-	</header>
-
-	<!-- PLAYING FIELD: Three.js 3D WebGL Scene with True Unscrewing Physics -->
-	<main class="flex-1 min-h-0 w-full flex flex-col items-center justify-center relative overflow-hidden z-10">
-		<Nuts3DScene
-			{bolts}
-			{selectedBolt}
-			{hintMove}
-			{isWon}
-			onBoltClick={handleBoltClick}
-		/>
-	</main>
-
-	<!-- BOTTOM ACTION CONTROLS (Undo, Hint, Add Bolt) -->
-	<footer class="flex items-center justify-around px-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 z-20">
-		<!-- Undo Button -->
-		<div class="flex flex-col items-center">
-			<button
-				type="button"
-				onclick={handleUndo}
-				disabled={moveHistory.length === 0 || isWon}
-				class="w-14 h-14 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 shadow-[0_6px_0_#b45309] text-white flex items-center justify-center active:translate-y-1 active:shadow-[0_2px_0_#b45309] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-				aria-label="Undo move"
-			>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M9 14 4 9l5-5" />
-					<path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
-				</svg>
-			</button>
-			<span class="text-xs font-bold text-amber-200/90 mt-1.5">Undo</span>
-		</div>
-
-		<!-- Hint Button with Badge -->
-		<div class="flex flex-col items-center relative">
-			<button
-				type="button"
-				onclick={handleHint}
-				disabled={isWon || hintsCount <= 0}
-				class="w-14 h-14 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 shadow-[0_6px_0_#b45309] text-white flex items-center justify-center active:translate-y-1 active:shadow-[0_2px_0_#b45309] transition-all cursor-pointer disabled:opacity-50"
-				aria-label="Use hint"
-			>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
-					<path d="M9 18h6" />
-					<path d="M10 22h4" />
-				</svg>
-			</button>
-			<!-- Badge Count -->
-			<span class="absolute -top-1.5 -right-1 bg-white text-slate-800 text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
-				{hintsCount}
-			</span>
-			<span class="text-xs font-bold text-amber-200/90 mt-1.5">Hint</span>
-		</div>
-
-		<!-- Add Bolt (+1) Button -->
-		<div class="flex flex-col items-center relative">
-			<button
-				type="button"
-				onclick={handleAddBolt}
-				disabled={hasAddedBolt || isWon}
-				class="w-14 h-14 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 shadow-[0_6px_0_#b45309] text-white flex items-center justify-center active:translate-y-1 active:shadow-[0_2px_0_#b45309] transition-all cursor-pointer disabled:opacity-50"
-				aria-label="Add extra bolt"
-			>
-				<div class="flex items-center font-black text-xl leading-none">
-					<span>+1</span>
-				</div>
-			</button>
-			<span class="text-xs font-bold text-amber-200/90 mt-1.5">Add</span>
-		</div>
-	</footer>
-
-	<!-- LEVEL COMPLETE MODAL -->
-	{#if isWon}
-		<div
-			class="absolute inset-0 bg-black/75 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 animate-pop-in"
-		>
-			<div class="w-full max-w-xs bg-gradient-to-b from-[#2a1d49] to-[#1a122e] rounded-3xl p-6 border-2 border-amber-400/40 shadow-2xl flex flex-col items-center text-center">
-					<div class="text-5xl mb-2">🏆</div>
-				<h3 class="text-2xl font-black text-amber-400 mb-1 tracking-wider uppercase">Level Cleared!</h3>
-				<p class="text-slate-300 text-sm mb-6">All nuts sorted in {moveHistory.length} moves.</p>
-
-				<div class="flex flex-col gap-3 w-full">
-					<button
-						type="button"
-						onclick={nextLevel}
-						class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-extrabold rounded-2xl shadow-[0_5px_0_#9a3412] active:translate-y-1 active:shadow-none transition-all cursor-pointer text-lg tracking-wide"
-					>
-						NEXT LEVEL
-					</button>
-
-					<button
-						type="button"
-						onclick={handleRestart}
-						class="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition-all cursor-pointer text-sm"
-					>
-						Replay
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
+<div class="game-screen nuts-screen">
+ <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
+ <main class="nuts-field">
+  {#key currentLevelId}
+  <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
+  {/key}
+ </main>
+ {#if guidedMove}<p class="guidance" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>{/if}
+ {#if showBoltTip}<button class="bolt-tip" onclick={()=>{showBoltTip=false;try{localStorage.setItem('fgames_bolt_tip','true');}catch{}}}>+1 Bolt adds an empty bolt for this level. Tap to dismiss.</button>{/if}
+ <footer class="power-row">
+  <button class="toy-button" onclick={handleUndo} disabled={!moveHistory.length||isWon||busy||hintBusy} aria-label="Undo move"><Icon name="arrow-u-up-left"/><span>Undo</span></button>
+  <button class="toy-button grape" onclick={handleHint} disabled={isWon||busy||hintBusy||hintsCount<=0} aria-label="Use hint"><Icon name="lightbulb"/><span>{hintBusy?'Thinking…':`Hint · ${hintsCount}`}</span></button>
+  <button class="toy-button mint" onclick={handleAddBolt} disabled={hasAddedBolt||isWon||busy||hintBusy} aria-label="Add extra bolt"><Icon name="plus"/><span>+1 Bolt</span></button>
+  <button class="toy-button" onclick={handleRestart} disabled={busy} aria-label="Restart level"><Icon name="arrow-counter-clockwise"/><span>Restart</span></button>
+ </footer>
+ {#if isWon}<WinCard moves={moveHistory.length} best={currentLevel.minMoves} assisted={hasAddedBolt} last={currentLevelId===levels.length} onNext={nextLevel} onReplay={handleRestart}/>{/if}
 </div>
