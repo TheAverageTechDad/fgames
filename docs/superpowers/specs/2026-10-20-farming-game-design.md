@@ -17,6 +17,7 @@ Harvesting, selling, and buying property are the largest moments of reward. Move
 ## What the user has established
 
 - One-handed mobile play, similar in pace and overall experience to the supplied video.
+- Start the implementation in portrait orientation, with a home-screen launch card and a separate game within the existing arcade. The user explicitly requested scaffolding the project, assets, and launch flow on 20 October 2026.
 - Seeds are a physical step before planting. She approaches the supply, collects seed bags automatically, and carries them to the planting area.
 - Crops grow in seconds during active play, supporting sessions of roughly a minute.
 - Harvesting, item collection, delivering produce, and collecting customer payments happen automatically through proximity.
