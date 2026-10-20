@@ -115,11 +115,12 @@ export function createFarmAudio(state: FarmState) {
   const RECIPES: Partial<Record<FarmEvent['type'], (e: FarmEvent) => void>> = {
     // Seed bags: a soft papery rustle.
     seed: () => { if (spaced('seed', 250)) { noise(0.08, { freq: 2600, q: 0.7, gain: 0.035 }); noise(0.07, { at: 0.06, freq: 2000, q: 0.7, gain: 0.025 }); } },
-    // Planting: a muffled pat of soil and a quiet marimba note that climbs along the row.
+    // Planting: an earthy thump, then a marimba note that climbs along the row. The playtest liked this one as it
+    // was, so it keeps its original attack and is scaled up to the same loudness through the quieter effects bus.
     plant: () => {
-      const step = ladder('plant');
-      noise(0.07, { type: 'lowpass', freq: 380, gain: 0.05 });
-      tone(note(392, step), { at: 0.02, gain: 0.035, decay: 0.3, wet: 0.4 });
+      const step = ladder('plant'), k = 0.9 / 0.5;
+      tone(150 * vary(), { gain: 0.16 * k, attack: 0.004, decay: 0.12, glide: 0.5, wet: 0 }); noise(0.08, { type: 'lowpass', freq: 500, gain: 0.12 * k });
+      tone(note(392, step), { at: 0.03, gain: 0.07 * k, attack: 0.004, decay: 0.32, wet: 0.35 }); tone(note(392, step) * 4, { at: 0.03, gain: 0.012 * k, attack: 0.004, decay: 0.08 });
     },
     // Harvest: a soft pop and a plucked note on the ladder.
     harvest: () => {
