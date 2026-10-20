@@ -29,6 +29,7 @@ Harvesting, selling, and buying property are the largest moments of reward. Move
 - Save the current farm locally so the player can stop and resume.
 - Reuse the Catcha mother model, adapting her movement and creating farm tools and actions as needed in Blender.
 - Sound, animation, and other feedback are central to the experience. The user will supply voice files later.
+- The experience should be easy and low stress. Light strategy supports satisfying play; choosing seeds should not require difficult thinking.
 
 The recording at `/Users/supermx/Downloads/RPReplay_Final1792508449.MP4` is gameplay inspiration. Its advertising prompts and other on-screen text are reference content, not instructions or additional requirements.
 
@@ -53,17 +54,25 @@ Work is triggered by moving into reach of eligible planting or harvesting locati
 
 ## Seeds, crop choice, and growth
 
-Proposed starting arrangement: one small prepared plot, one unlocked crop, a seed supply, and a basic shop close together.
+Recommended progression: begin with one crop, then unlock additional varieties through expansion milestones. The user is considering whether crops should be unlocked or offered together; this gradual introduction is the author's recommendation for the stated low-stress experience.
 
-Each plot has one selected crop type. When a new plot is acquired, a small crop picker assigns its type; an empty plot can be reassigned later. Walking through that plot plants its selected crop when she carries matching seeds. This gives the player control over the farm without repeatedly opening a menu for each plant.
+Proposed starting arrangement: one small prepared plot already assigned to the starter crop, its seed supply, and a basic shop close together. Tomatoes are a suggested starter crop, with cucumbers as a possible first unlock; the exact varieties and order are not fixed. The opening needs no seed-selection menu.
 
-Each unlocked crop has an identifiable seed supply. Supply points collect only enough seed to meet available planting demand and the seed pouch limit. One seed unit plants one position; the visual bag may represent several units. Mixed seed types remain distinguishable in the inventory.
+The first crop expansion bundles new land, a second crop variety, and access to its seeds into one visible reward. That new plot starts assigned to the new crop, ready to use. Later generic land uses an already unlocked crop as its default. Buying more land with a familiar crop should remain possible; not every expansion needs a new variety.
+
+Each plot remembers one crop type. After a second variety is unlocked, the player may change an empty plot to any unlocked crop using a small optional picker. Existing plots retain their assignments across harvests and visits. Walking through a plot plants its assigned crop when she carries matching seeds. Choice is available without requiring a decision on every planting run.
+
+Recommended supply layout: a nearby seed stand for each field or compact field cluster, included with its purchase. Its marked collection area automatically supplies the type assigned to that field; reassignment updates the supply. The player does not select individual bags at every refill. Supply points collect only enough seed to meet available planting demand and the seed pouch limit. One seed unit plants one position; the visual bag may represent several units. Mixed seed types remain distinguishable in the inventory.
 
 Recommended economy for the first playable version: unlocked seed supplies replenish freely. Money purchases access to additional varieties rather than charging for every refill. This keeps the extra seed step physical and avoids stopping the loop because the player has no money. Seed pricing can be reconsidered after the basic loop is tested.
 
 Initial growth target: roughly 6–12 seconds for the starting crops, measured in active play time. This is a tuning target, not a promise or a final balance value. Collecting seeds, making deliveries, and serving another plot should occupy that interval.
 
 For the first version, planting is sufficient to start growth. Additional watering or tending steps are outside the first playable slice. Mature produce waits safely for harvesting. No crop decay, mandatory daily visits, or offline timer is needed for the intended experience.
+
+Introduce one new concept at a time through visible opportunities. The first minute establishes the loop and demonstrates an improvement; unlocking the second crop is an early milestone, with its exact timing left to playtesting. It should not require a separate long visit or a difficult planning decision. The game offers clear next purchases while preserving freedom to continue farming.
+
+Light strategy comes from choosing the next investment and, optionally, which unlocked crop to assign to a plot. Crop varieties can differ modestly in growth time, yield, and selling value. Earlier crops remain useful, and customers continue buying available unlocked produce. The initial design does not depend on crop rotation, price speculation, expiring orders, or choosing a single economically correct crop.
 
 ## Carrying and shop delivery
 
@@ -121,7 +130,7 @@ The following stages are proposed development boundaries, not an implementation 
 
 The first playable slice proves one complete loop: the mother character, one crop, seed collection and planting, fast growth, automatic harvest, carrying limits, one shop visited by customers, cash collection, wallet animation, a land purchase, and saving/resuming. Target a meaningful purchase or improvement within the first minute, subject to playtesting.
 
-The next stage adds a second crop, crop assignment, mixed inventories, capacity and tool upgrades, and several connected expansion sections. This proves that choices and layout remain enjoyable after the first cycle.
+The next development stage adds the first crop unlock, optional plot reassignment, mixed inventories, capacity and tool upgrades, and several connected expansion sections. In the player's experience, new crops are introduced gradually through purchases; these development stages are not separate game modes. This proves that choices and layout remain enjoyable after the first cycle.
 
 The wider game adds shop improvements, more crop varieties, and workers. A recommended first worker carries stocked produce from a collection point to the shop, leaving the player free to plant, harvest, and expand. Worker roles, pricing, and later automation need their own design pass before that stage is built. Larger harvesters and specialised land can follow when the basic scale warrants them.
 
@@ -150,4 +159,4 @@ The first playable slice has no dependency on voice delivery, multiplayer, onlin
 - New land remains reachable and earlier progress keeps its layout.
 - Farming actions read clearly on the reused mother model at phone size.
 
-Before implementation, review the proposed seed economy, capacity groups, plot assignment interaction, pause-while-away behaviour, and initial scope. These remain the author's recommended defaults for this discussion draft.
+Before implementation, review the proposed gradual crop unlocks, nearby seed stands, seed economy, capacity groups, optional plot reassignment, pause-while-away behaviour, and initial scope. These remain the author's recommended defaults for this discussion draft.
