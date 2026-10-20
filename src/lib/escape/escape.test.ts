@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildGrid, solveEscape } from './solver';
 import { getEscapeLevel } from './generator';
+import { ESCAPE_LEVELS } from './levels';
 import type { VehicleData } from './types';
 
 describe('Escape Game Solver and Generator', () => {
@@ -70,5 +71,25 @@ describe('Escape Game Solver and Generator', () => {
 		console.log('Level 19 solution steps (' + (sol ? sol.length : 0) + ' moves):', sol);
 		expect(sol).not.toBeNull();
 		expect(sol!.length).toBeGreaterThan(0);
+	});
+
+	it('keeps every curated vehicle inside the board without overlap', () => {
+		for (const level of ESCAPE_LEVELS) {
+			expect(solveEscape(level.vehicles, 100000), `${level.difficulty} ${level.id}`).not.toBeNull();
+			const occupied = new Set<string>();
+			for (const vehicle of level.vehicles) {
+				for (let offset = 0; offset < vehicle.length; offset++) {
+					const row = vehicle.row + (vehicle.orientation === 'V' ? offset : 0);
+					const col = vehicle.col + (vehicle.orientation === 'H' ? offset : 0);
+					expect(row, `${level.difficulty} ${level.id}`).toBeGreaterThanOrEqual(0);
+					expect(row, `${level.difficulty} ${level.id}`).toBeLessThan(6);
+					expect(col, `${level.difficulty} ${level.id}`).toBeGreaterThanOrEqual(0);
+					expect(col, `${level.difficulty} ${level.id}`).toBeLessThan(6);
+					const cell = `${row},${col}`;
+					expect(occupied.has(cell), `${level.difficulty} ${level.id}: ${cell}`).toBe(false);
+					occupied.add(cell);
+				}
+			}
+		}
 	});
 });

@@ -16,9 +16,11 @@
 	let { initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
 
 	let currentLevelId = $state(1);
+	let unlockedThrough = $state(1);
 
 	$effect(() => {
 		currentLevelId = initialLevelId;
+		unlockedThrough = initialLevelId;
 	});
 
 	const currentLevel = $derived(getNutsLevel(currentLevelId, difficulty));
@@ -39,6 +41,7 @@
 		bolts = lvl.bolts.map((b) => b.map((color) => ({ id: `nut-${++nutIdSeq}-${color}`, color })));
 		selectedBolt = null;
 		moveHistory = [];
+		hintsCount = 3;
 		hintMove = null;
 		isWon = false;
 		hasAddedBolt = false;
@@ -127,6 +130,7 @@
 		const colorMatrix = bolts.map((b) => b.map((n) => n.color));
 		if (isLevelSolved(colorMatrix)) {
 			isWon = true;
+			unlockedThrough = Math.max(unlockedThrough, currentLevelId + 1);
 			sound.playVictory();
 			sound.playHaptic([50, 60, 100]);
 			try {
@@ -138,7 +142,7 @@
 			} catch (_) {}
 
 			try {
-				localStorage.setItem(`fgames_nuts_${difficulty}_level`, (currentLevelId + 1).toString());
+				localStorage.setItem(`fgames_nuts_${difficulty}_level`, unlockedThrough.toString());
 			} catch (_) {}
 		}
 	}
@@ -201,26 +205,21 @@
 	}
 
 	function nextLevel() {
+		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
 		currentLevelId++;
-		try {
-			localStorage.setItem(`fgames_nuts_${difficulty}_level`, currentLevelId.toString());
-		} catch (_) {}
 	}
 
 	function prevLevel() {
 		if (currentLevelId > 1) {
 			sound.playTap();
 			currentLevelId--;
-			try {
-				localStorage.setItem(`fgames_nuts_${difficulty}_level`, currentLevelId.toString());
-			} catch (_) {}
 		}
 	}
 </script>
 
 <div
-	class="relative flex flex-col justify-between w-full h-full min-h-[640px] max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
+	class="relative flex flex-col justify-between w-full h-full min-h-0 max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
 	style="background: radial-gradient(circle at 50% 20%, #2e224e 0%, #1a122e 60%, #120b22 100%);"
 >
 	<!-- TOP BAR (Exact match of video: Back, MEDIUM/Level 1, Restart) -->
@@ -256,12 +255,14 @@
 				<h2 class="text-2xl font-black text-white tracking-wide drop-shadow-md">
 					{currentLevel.name}
 				</h2>
+				<span class="text-[10px] font-bold text-slate-300/70">{moveHistory.length} moves</span>
 			</div>
 
 			<button
 				type="button"
 				onclick={nextLevel}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
+				disabled={currentLevelId >= unlockedThrough && !isWon}
+				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
 				aria-label="Next level"
 			>
 				▶
@@ -282,7 +283,7 @@
 	</header>
 
 	<!-- PLAYING FIELD: Three.js 3D WebGL Scene with True Unscrewing Physics -->
-	<main class="flex-1 w-full h-full flex flex-col items-center justify-center relative overflow-hidden z-10 min-h-[420px]">
+	<main class="flex-1 min-h-0 w-full flex flex-col items-center justify-center relative overflow-hidden z-10">
 		<Nuts3DScene
 			{bolts}
 			{selectedBolt}
@@ -293,7 +294,7 @@
 	</main>
 
 	<!-- BOTTOM ACTION CONTROLS (Undo, Hint, Add Bolt) -->
-	<footer class="flex items-center justify-around px-8 pb-8 pt-2 z-20">
+	<footer class="flex items-center justify-around px-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 z-20">
 		<!-- Undo Button -->
 		<div class="flex flex-col items-center">
 			<button
@@ -358,14 +359,7 @@
 			<div class="w-full max-w-xs bg-gradient-to-b from-[#2a1d49] to-[#1a122e] rounded-3xl p-6 border-2 border-amber-400/40 shadow-2xl flex flex-col items-center text-center">
 				<div class="text-5xl mb-2 animate-bounce">🏆</div>
 				<h3 class="text-2xl font-black text-amber-400 mb-1 tracking-wider uppercase">Level Cleared!</h3>
-				<p class="text-slate-300 text-sm mb-4">All nuts sorted with perfection!</p>
-
-				<!-- Stars -->
-				<div class="flex gap-2 text-3xl mb-6 text-amber-400">
-					<span>⭐</span>
-					<span>⭐</span>
-					<span>⭐</span>
-				</div>
+				<p class="text-slate-300 text-sm mb-6">All nuts sorted in {moveHistory.length} moves.</p>
 
 				<div class="flex flex-col gap-3 w-full">
 					<button

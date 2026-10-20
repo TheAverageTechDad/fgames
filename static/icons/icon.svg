@@ -1,136 +1,32 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'>
-    <defs>
-      <!-- Background Gradient -->
-      <radialGradient id='bgGrad' cx='50%' cy='35%' r='65%'>
-        <stop offset='0%' stop-color='#3b2568'/>
-        <stop offset='60%' stop-color='#1e1338'/>
-        <stop offset='100%' stop-color='#0f091c'/>
-      </radialGradient>
-
-      <!-- Gold Nut Gradients -->
-      <linearGradient id='goldNutTop' x1='0%' y1='0%' x2='100%' y2='100%'>
-        <stop offset='0%' stop-color='#fde047'/>
-        <stop offset='50%' stop-color='#eab308'/>
-        <stop offset='100%' stop-color='#ca8a04'/>
-      </linearGradient>
-      <linearGradient id='goldNutSide' x1='0%' y1='0%' x2='0%' y2='100%'>
-        <stop offset='0%' stop-color='#ca8a04'/>
-        <stop offset='100%' stop-color='#854d0e'/>
-      </linearGradient>
-
-      <!-- Silver Screw Gradients -->
-      <linearGradient id='silverShaft' x1='0%' y1='0%' x2='100%' y2='0%'>
-        <stop offset='0%' stop-color='#94a3b8'/>
-        <stop offset='30%' stop-color='#f8fafc'/>
-        <stop offset='70%' stop-color='#cbd5e1'/>
-        <stop offset='100%' stop-color='#64748b'/>
-      </linearGradient>
-
-      <!-- Red Car Gradients -->
-      <linearGradient id='redCar' x1='0%' y1='0%' x2='100%' y2='50%'>
-        <stop offset='0%' stop-color='#ef4444'/>
-        <stop offset='50%' stop-color='#dc2626'/>
-        <stop offset='100%' stop-color='#991b1b'/>
-      </linearGradient>
-      <linearGradient id='windowGrad' x1='0%' y1='0%' x2='0%' y2='100%'>
-        <stop offset='0%' stop-color='#38bdf8'/>
-        <stop offset='100%' stop-color='#0284c7'/>
-      </linearGradient>
-
-      <!-- Drop Shadows -->
-      <filter id='shadow' x='-20%' y='-20%' width='140%' height='140%'>
-        <feDropShadow dx='0' dy='12' stdDeviation='10' flood-color='#000000' flood-opacity='0.65'/>
-      </filter>
-      <filter id='glow' x='-20%' y='-20%' width='140%' height='140%'>
-        <feGaussianBlur stdDeviation='6' result='blur'/>
-        <feComposite in='SourceGraphic' in2='blur' operator='over'/>
-      </filter>
-    </defs>
-
-    <!-- Outer Squircle / Circle for Icon -->
-    <rect x='0' y='0' width='512' height='512' rx='112' fill='url(#bgGrad)'/>
-    
-
-    <!-- Outer Border Glow -->
-    <rect x='6' y='6' width='500' height='500' rx='106' fill='none' stroke='#f59e0b' stroke-width='4' stroke-opacity='0.4'/>
-
-    <!-- Background Sparkles / Dots -->
-    <circle cx='100' cy='110' r='4' fill='#fef08a' opacity='0.7'/>
-    <circle cx='410' cy='120' r='6' fill='#fef08a' opacity='0.8'/>
-    <circle cx='420' cy='340' r='3' fill='#93c5fd' opacity='0.6'/>
-    <circle cx='90' cy='360' r='4' fill='#93c5fd' opacity='0.6'/>
-    <path d='M390 100 L395 115 L410 120 L395 125 L390 140 L385 125 L370 120 L385 115 Z' fill='#fde047' filter='url(#glow)'/>
-
-    <!-- Centered Composition: 3D Bolt, Nut & Escape Truck -->
-    <g filter='url(#shadow)'>
-      <!-- Vertical Screw Bolt -->
-      <g transform='translate(256, 175)'>
-        <!-- Top rounded dome cap -->
-        <path d='M-24 -45 C-24 -68 24 -68 24 -45 Z' fill='url(#silverShaft)' stroke='#e2e8f0' stroke-width='1.5'/>
-        <!-- Threaded Shaft -->
-        <rect x='-22' y='-45' width='44' height='150' fill='url(#silverShaft)'/>
-        <!-- Thread Ridges -->
-        <line x1='-24' y1='-30' x2='24' y2='-25' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-        <line x1='-24' y1='-10' x2='24' y2='-5' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-        <line x1='-24' y1='10' x2='24' y2='15' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-        <line x1='-24' y1='30' x2='24' y2='35' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-        <line x1='-24' y1='50' x2='24' y2='55' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-        <line x1='-24' y1='70' x2='24' y2='75' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
-
-        <!-- Base Pedestal Washer -->
-        <ellipse cx='0' cy='105' rx='75' ry='24' fill='url(#silverShaft)' stroke='#475569' stroke-width='2'/>
-      </g>
-
-      <!-- Golden 3D Hex Nut (Hovering mid-bolt) -->
-      <g transform='translate(256, 195)'>
-        <!-- Nut Side Bevels -->
-        <path d='M-85 -10 L-85 24 L-44 54 L44 54 L85 24 L85 -10 Z' fill='url(#goldNutSide)'/>
-        <!-- Nut Front Vertical Facet -->
-        <path d='M-44 20 L44 20 L44 54 L-44 54 Z' fill='#a16207'/>
-        <path d='M-85 -10 L-44 20 L-44 54 L-85 24 Z' fill='#854d0e'/>
-        <path d='M44 20 L85 -10 L85 24 L44 54 Z' fill='#713f12'/>
-
-        <!-- Nut Top Face (Hexagon with hole) -->
-        <path d='M0 -56 L76 -20 L76 16 L0 52 L-76 16 L-76 -20 Z' fill='url(#goldNutTop)' stroke='#fef08a' stroke-width='2'/>
-        <!-- Center Hole -->
-        <ellipse cx='0' cy='-2' rx='32' ry='16' fill='#1e1338' stroke='#ca8a04' stroke-width='3'/>
-        <!-- Embossed star on front face -->
-        <path d='M0 26 L3 33 L10 33 L5 37 L7 44 L0 40 L-7 44 L-5 37 L-10 33 L-3 33 Z' fill='#fef08a'/>
-      </g>
-    </g>
-
-    <!-- Red Escape Truck (Zooming to the right across bottom) -->
-    <g transform='translate(256, 365)' filter='url(#shadow)'>
-      <!-- Shadow under car -->
-      <ellipse cx='0' cy='46' rx='130' ry='16' fill='#000000' opacity='0.55'/>
-
-      <!-- Car Body -->
-      <rect x='-110' y='-32' width='220' height='74' rx='22' fill='url(#redCar)' stroke='#fca5a5' stroke-width='2.5'/>
-
-      <!-- Windshield & Windows -->
-      <rect x='28' y='-24' width='48' height='58' rx='10' fill='url(#windowGrad)' stroke='#e0f2fe' stroke-width='2'/>
-      <rect x='-40' y='-24' width='56' height='58' rx='8' fill='#1e293b' opacity='0.75'/>
-
-      <!-- Chevron Arrow on Cargo Box -->
-      <path d='M-78 -16 L-56 5 L-78 26 L-62 26 L-40 5 L-62 -16 Z' fill='#ffffff' filter='url(#glow)'/>
-
-      <!-- Headlights (Glowing Yellow) -->
-      <ellipse cx='108' cy='-14' rx='6' ry='10' fill='#fef08a' filter='url(#glow)'/>
-      <ellipse cx='108' cy='24' rx='6' ry='10' fill='#fef08a' filter='url(#glow)'/>
-
-      <!-- Front Grille / Bumper -->
-      <rect x='104' y='-6' width='10' height='22' rx='4' fill='#334155'/>
-
-      <!-- Wheels (Top and Bottom) -->
-      <rect x='-75' y='-42' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
-      <rect x='48' y='-42' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
-      <rect x='-75' y='40' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
-      <rect x='48' y='40' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
-    </g>
-
-    <!-- Bottom Badge Ribbon: OFFLINE GAMES -->
-    <g transform='translate(256, 452)' filter='url(#shadow)'>
-      <rect x='-115' y='-16' width='230' height='32' rx='16' fill='#0f172a' stroke='#f59e0b' stroke-width='2'/>
-      <text x='0' y='6' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='13' letter-spacing='2.5' fill='#fde047'>OFFLINE GAMES</text>
-    </g>
-  </svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Puzzle games">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#302153"/><stop offset="1" stop-color="#17132d"/></linearGradient>
+    <linearGradient id="bolt" x2="1"><stop stop-color="#8c9aad"/><stop offset=".35" stop-color="#f9fbff"/><stop offset=".7" stop-color="#a9b7c8"/><stop offset="1" stop-color="#647487"/></linearGradient>
+    <linearGradient id="red" x2="0" y2="1"><stop stop-color="#ff7e70"/><stop offset="1" stop-color="#e33447"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M86 112h340" stroke="#665080" stroke-width="8" stroke-linecap="round" opacity=".35"/>
+  <circle cx="394" cy="112" r="11" fill="#ffc85d"/>
+  <g transform="translate(126 146)">
+    <ellipse cx="68" cy="226" rx="89" ry="22" fill="#070914" opacity=".45"/>
+    <rect x="50" y="10" width="36" height="220" rx="15" fill="url(#bolt)"/>
+    <path d="M50 37h36M50 57h36M50 77h36M50 97h36M50 117h36M50 137h36M50 157h36M50 177h36" stroke="#667688" stroke-width="5"/>
+    <path d="M52 5q16-22 32 0v23H52z" fill="#e6edf5"/>
+    <path d="M11 88 38 73h60l27 15v39l-27 15H38l-27-15z" fill="#1b8cba"/>
+    <path d="m11 88 27-15h60l27 15-27 15H38z" fill="#59d7ed"/>
+    <path d="M11 150 38 135h60l27 15v39l-27 15H38l-27-15z" fill="#ef9d29"/>
+    <path d="m11 150 27-15h60l27 15-27 15H38z" fill="#ffd25b"/>
+    <ellipse cx="68" cy="226" rx="81" ry="18" fill="#dde5ef"/>
+  </g>
+  <g transform="translate(248 226)">
+    <ellipse cx="89" cy="176" rx="108" ry="18" fill="#070914" opacity=".45"/>
+    <rect x="7" y="89" width="165" height="82" rx="27" fill="#971a36"/>
+    <rect x="1" y="70" width="176" height="87" rx="27" fill="url(#red)"/>
+    <path d="M41 79h71a17 17 0 0 1 17 17v35H28V96a17 17 0 0 1 13-17" fill="#ff9889" opacity=".5"/>
+    <path d="M125 82h32q11 0 11 13v34h-43z" fill="#98e7f5"/>
+    <path d="m60 94 19 19-19 19" fill="none" stroke="#fff9e9" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="23" y="149" width="34" height="23" rx="9" fill="#18162a"/>
+    <rect x="122" y="149" width="34" height="23" rx="9" fill="#18162a"/>
+    <path d="M171 101h10" stroke="#ffe293" stroke-width="10" stroke-linecap="round"/>
+  </g>
+</svg>

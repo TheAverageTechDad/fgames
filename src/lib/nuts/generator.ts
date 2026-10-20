@@ -1,5 +1,5 @@
 import { createPRNG } from '../utils/prng';
-import { solveNutsGame, isLevelSolved } from './solver';
+import { isLevelSolved } from './solver';
 import { NUTS_LEVELS } from './levels';
 import type { NutsLevel, NutColor } from './types';
 
@@ -38,13 +38,22 @@ for (const lvl of NUTS_LEVELS) {
 	CURATED_LEVELS.set(`${lvl.difficulty}_${lvl.id}`, lvl);
 }
 
+function hasCompleteColorSets(bolts: NutColor[][], capacity: number): boolean {
+	const counts = new Map<NutColor, number>();
+	for (const bolt of bolts) {
+		if (bolt.length > capacity) return false;
+		for (const color of bolt) counts.set(color, (counts.get(color) ?? 0) + 1);
+	}
+	return [...counts.values()].every((count) => count === capacity);
+}
+
 /**
  * Procedurally generates a deterministic, guaranteed-solvable Nuts and Bolts level.
  */
 export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'hard' | 'extra_hard' = 'medium'): NutsLevel {
 	// 1. Check curated iconic levels (e.g. Medium Level 1 from video)
 	const curated = CURATED_LEVELS.get(`${difficulty}_${levelId}`);
-	if (curated) {
+	if (curated && hasCompleteColorSets(curated.bolts, 4)) {
 		return {
 			...curated,
 			bolts: curated.bolts.map((b) => [...b])
@@ -69,75 +78,55 @@ export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'h
 		bolts.push([]);
 	}
 
-	// Reverse shuffling (perform valid moves in reverse)
+	// Scramble by reversing legal moves. After removing a nut, its source must
+	// still show that same colour (or be empty), so every step can be undone.
 	const totalSteps = config.shuffleSteps + (levelId % 10) * 3;
 	let lastFrom = -1;
 	let lastTo = -1;
 
 	for (let step = 0; step < totalSteps; step++) {
-		// Valid moves: from a bolt with at least 1 nut to a bolt with < capacity
-		const possibleMoves: { from: number; to: number }[] = [];
+		const possibleMoves: { from: number; to: number; score: number }[] = [];
+		const emptyCount = bolts.filter((bolt) => bolt.length === 0).length;
 
 		for (let i = 0; i < totalBolts; i++) {
-			if (bolts[i].length === 0) continue;
+			const source = bolts[i];
+			if (source.length === 0) continue;
+			if (source.length > 1 && source.at(-1) !== source.at(-2)) continue;
 			for (let j = 0; j < totalBolts; j++) {
 				if (i === j) continue;
-				if (bolts[j].length >= config.capacity) continue;
-				// Avoid immediate undo
+				const target = bolts[j];
+				if (target.length >= config.capacity) continue;
+				if (target.length === 0 && emptyCount <= 1 && source.length > 1) continue;
 				if (i === lastTo && j === lastFrom) continue;
-				possibleMoves.push({ from: i, to: j });
+				possibleMoves.push({
+					from: i,
+					to: j,
+					score: target.length > 0 && target.at(-1) !== source.at(-1) ? 4 : 1
+				});
 			}
 		}
 
 		if (possibleMoves.length === 0) break;
 
-		const move = prng.choice(possibleMoves);
+		const totalWeight = possibleMoves.reduce((sum, move) => sum + move.score, 0);
+		let choice = prng.next() * totalWeight;
+		const move = possibleMoves.find((candidate) => (choice -= candidate.score) < 0) ?? possibleMoves[0];
 		const nut = bolts[move.from].pop()!;
 		bolts[move.to].push(nut);
 		lastFrom = move.from;
 		lastTo = move.to;
 	}
 
-	// Ensure there are at least 1-2 empty bolts available for sorting breathing room
-	let emptyCount = bolts.filter((b) => b.length === 0).length;
-	while (emptyCount < config.emptyBolts) {
-		// Find the bolt with smallest number of nuts (> 0) and redistribute
-		const nonEmpties = bolts
-			.map((b, idx) => ({ idx, count: b.length }))
-			.filter((item) => item.count > 0 && item.count < config.capacity)
-			.sort((a, b) => a.count - b.count);
-
-		if (nonEmpties.length === 0) break;
-		const targetEmpty = nonEmpties[0].idx;
-
-		// Move all nuts from this bolt to other bolts that have space
-		let movedAll = true;
-		while (bolts[targetEmpty].length > 0) {
-			const nut = bolts[targetEmpty][bolts[targetEmpty].length - 1];
-			const receiver = bolts.findIndex((b, idx) => idx !== targetEmpty && b.length < config.capacity);
-			if (receiver !== -1) {
-				bolts[targetEmpty].pop();
-				bolts[receiver].push(nut);
-			} else {
-				movedAll = false;
-				break;
-			}
-		}
-		if (movedAll) {
-			emptyCount++;
-		} else {
-			break;
-		}
-	}
-
-	// Verify that it is not solved already
+	// A rare scramble can return to a solved arrangement. Force one reversible
+	// mixed stack while keeping every colour count intact.
 	if (isLevelSolved(bolts, config.capacity)) {
-		// Swap two nuts
-		if (bolts[0].length > 0 && bolts[1].length > 0) {
-			const n0 = bolts[0].pop()!;
-			const n1 = bolts[1].pop()!;
-			bolts[0].push(n1);
-			bolts[1].push(n0);
+		const sources = bolts
+			.map((bolt, index) => ({ bolt, index }))
+			.filter(({ bolt }) => bolt.length === config.capacity);
+		const empty = bolts.findIndex((bolt) => bolt.length === 0);
+		if (sources.length > 1 && empty >= 0) {
+			bolts[empty].push(bolts[sources[0].index].pop()!);
+			bolts[empty].push(bolts[sources[1].index].pop()!);
 		}
 	}
 

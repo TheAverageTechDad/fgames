@@ -52,12 +52,14 @@
 	});
 
 	onMount(() => {
+		savedLevels.medium = gameType === 'escape' ? 19 : 1;
 		try {
 			for (const d of difficulties) {
 				const key = `fgames_${gameType}_${d}_level`;
 				const stored = localStorage.getItem(key);
 				if (stored) {
-					savedLevels[d] = parseInt(stored, 10);
+					const parsed = parseInt(stored, 10);
+					if (Number.isFinite(parsed) && parsed > 0) savedLevels[d] = parsed;
 				}
 			}
 		} catch {}
@@ -131,7 +133,7 @@
 </script>
 
 <div
-	class="relative flex flex-col justify-between w-full h-full min-h-[640px] max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
+	class="relative flex flex-col justify-between w-full h-full min-h-0 max-w-md mx-auto select-none overflow-y-auto rounded-3xl shadow-2xl"
 	style="background: {gameType === 'nuts' ? '#22193b' : '#232b28'};"
 >
 	<!-- TOP SECTION: HEADER & INSTRUCTIONS -->

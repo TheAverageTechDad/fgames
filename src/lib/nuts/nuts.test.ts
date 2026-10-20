@@ -63,16 +63,24 @@ describe('Nuts & Bolts Solver and Generator', () => {
 	});
 
 	it('generates solvable levels across all difficulties', () => {
-		const easy = getNutsLevel(1, 'easy');
-		expect(easy.bolts.length).toBeGreaterThan(0);
-
-		const medium = getNutsLevel(2, 'medium');
-		expect(medium.bolts.length).toBeGreaterThan(0);
-
-		const hard = getNutsLevel(1, 'hard');
-		expect(hard.bolts.length).toBeGreaterThan(0);
-
-		const extraHard = getNutsLevel(1, 'extra_hard');
-		expect(extraHard.bolts.length).toBeGreaterThan(0);
+		for (const difficulty of ['easy', 'medium', 'hard', 'extra_hard'] as const) {
+			for (let id = 1; id <= 12; id++) {
+				const level = getNutsLevel(id, difficulty);
+				const counts = new Map<NutColor, number>();
+				for (const bolt of level.bolts) {
+					expect(bolt.length).toBeLessThanOrEqual(4);
+					for (const color of bolt) counts.set(color, (counts.get(color) ?? 0) + 1);
+				}
+				expect([...counts.values()].every((count) => count === 4)).toBe(true);
+				expect(isLevelSolved(level.bolts)).toBe(false);
+				expect(level.bolts.some((bolt) => bolt.length === 0)).toBe(true);
+			}
+		}
+		for (const difficulty of ['easy', 'medium'] as const) {
+			for (const id of [1, 4, 7]) {
+				const level = getNutsLevel(id, difficulty);
+				expect(solveNutsGame(level.bolts, 4, 100000), `${difficulty} ${id}`).not.toBeNull();
+			}
+		}
 	});
 });

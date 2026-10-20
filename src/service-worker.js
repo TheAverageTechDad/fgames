@@ -1,7 +1,8 @@
 import { immutable, assets, prerendered } from '$app/manifest';
 import { version } from '$app/env';
 
-const CACHE_NAME = `fgames-cache-${version}`;
+const CACHE_PREFIX = 'fgames-cache-';
+const CACHE_NAME = `${CACHE_PREFIX}${version}`;
 
 function getPath(entry) {
 	if (!entry) return null;
@@ -23,13 +24,7 @@ self.addEventListener('install', (event) => {
 	event.waitUntil(
 		(async () => {
 			const cache = await caches.open(CACHE_NAME);
-			await Promise.allSettled(
-				ASSETS_TO_CACHE.map((url) =>
-					cache.add(url).catch((err) => {
-						console.warn('[SW] Could not precache:', url, err);
-					})
-				)
-			);
+			await cache.addAll(ASSETS_TO_CACHE);
 			await self.skipWaiting();
 		})()
 	);
@@ -41,7 +36,7 @@ self.addEventListener('activate', (event) => {
 			const keys = await caches.keys();
 			await Promise.all(
 				keys.map((key) => {
-					if (key !== CACHE_NAME) {
+					if (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) {
 						return caches.delete(key);
 					}
 				})
@@ -62,34 +57,20 @@ self.addEventListener('fetch', (event) => {
 
 	event.respondWith(
 		(async () => {
-			const cachedResponse = await caches.match(request);
-			if (cachedResponse) {
-				// Revalidate in background for page navigation
-				if (request.mode === 'navigate') {
-					fetch(request)
-						.then((networkResponse) => {
-							if (networkResponse && networkResponse.status === 200) {
-								caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
-							}
-						})
-						.catch(() => {});
-				}
-				return cachedResponse;
-			}
+			const cache = await caches.open(CACHE_NAME);
+			const cachedResponse = await cache.match(request);
+			if (request.mode !== 'navigate' && cachedResponse) return cachedResponse;
 
-			// If not in cache, fetch from network
+			// Navigation uses the latest shell when online and the cached shell offline.
 			try {
 				const networkResponse = await fetch(request);
-				if (networkResponse && networkResponse.status === 200) {
-					const responseToCache = networkResponse.clone();
-					const cache = await caches.open(CACHE_NAME);
-					cache.put(request, responseToCache);
+				if (networkResponse.ok) {
+					event.waitUntil(cache.put(request, networkResponse.clone()));
 				}
 				return networkResponse;
 			} catch {
-				// If network fails (offline), return index.html for navigation requests
+				if (cachedResponse) return cachedResponse;
 				if (request.mode === 'navigate') {
-					const cache = await caches.open(CACHE_NAME);
 					const fallback = await cache.match('/');
 					if (fallback) return fallback;
 				}

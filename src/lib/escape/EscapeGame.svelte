@@ -5,6 +5,7 @@
 	import { getEscapeLevel } from './generator';
 	import { sound } from '#lib/sound';
 	import type { EscapeLevel, VehicleData } from './types';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		initialLevelId?: number;
@@ -15,9 +16,11 @@
 	let { initialLevelId = 19, difficulty = 'medium', onBack }: Props = $props();
 
 	let currentLevelId = $state(19);
+	let unlockedThrough = $state(1);
 
 	$effect(() => {
 		currentLevelId = initialLevelId;
+		unlockedThrough = initialLevelId;
 	});
 
 	const currentLevel = $derived(getEscapeLevel(currentLevelId, difficulty));
@@ -31,10 +34,19 @@
 	let isExiting = $state(false);
 
 	// Board geometry
-	const BOARD_SIZE = 350;
+	let boardSize = $state(350);
 	const PADDING = 10;
 	const GAP = 5;
-	const CELL_SIZE = (BOARD_SIZE - PADDING * 2 - GAP * 5) / 6; // ~50.8px
+	const CELL_SIZE = $derived((boardSize - PADDING * 2 - GAP * 5) / 6);
+
+	onMount(() => {
+		const updateBoardSize = () => {
+			boardSize = Math.max(180, Math.min(350, window.innerWidth - 32, window.innerHeight - 180));
+		};
+		updateBoardSize();
+		window.addEventListener('resize', updateBoardSize);
+		return () => window.removeEventListener('resize', updateBoardSize);
+	});
 
 	// Dragging state
 	let activeVehicleId = $state<string | null>(null);
@@ -73,6 +85,7 @@
 
 		vehicles = safeVehicles;
 		moveHistory = [];
+		hintsCount = 3;
 		hintMove = null;
 		isWon = false;
 		isExiting = false;
@@ -184,6 +197,11 @@
 
 	function handlePointerUp(e: PointerEvent) {
 		if (!activeVehicleId) return;
+		if (e.type === 'pointercancel') {
+			activeVehicleId = null;
+			dragOffset = 0;
+			return;
+		}
 
 		const v = vehicles.find((item) => item.id === activeVehicleId);
 		if (!v) {
@@ -195,11 +213,18 @@
 		const steps = Math.round(dragOffset / stepPx);
 		const targetPos = dragStartPos + steps;
 
-		// Check if target vehicle reached exit
+		moveVehicle(v, targetPos);
+		activeVehicleId = null;
+		dragOffset = 0;
+	}
+
+	function moveVehicle(v: VehicleData, targetPos: number) {
+		if (isWon || isExiting) return;
+		const { minPos, maxPos } = getMovementRange(v);
+		if (targetPos < minPos || targetPos > maxPos) return;
 		if (v.isTarget && targetPos >= 4) {
+			moveHistory.push({ id: v.id, prevRow: v.row, prevCol: v.col });
 			v.col = 4;
-			dragOffset = 0;
-			activeVehicleId = null;
 			triggerWin();
 			return;
 		}
@@ -220,8 +245,16 @@
 			}
 		}
 
-		activeVehicleId = null;
-		dragOffset = 0;
+		hintMove = null;
+	}
+
+	function handleVehicleKeydown(event: KeyboardEvent, v: VehicleData) {
+		const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 :
+			event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+		if (!step || (v.orientation === 'H' && !['ArrowLeft', 'ArrowRight'].includes(event.key)) ||
+			(v.orientation === 'V' && !['ArrowUp', 'ArrowDown'].includes(event.key))) return;
+		event.preventDefault();
+		moveVehicle(v, (v.orientation === 'H' ? v.col : v.row) + step);
 	}
 
 	function triggerWin() {
@@ -232,6 +265,7 @@
 		setTimeout(() => {
 			isWon = true;
 			isExiting = false;
+			unlockedThrough = Math.max(unlockedThrough, currentLevelId + 1);
 			sound.playUnstoppable();
 			try {
 				confetti({
@@ -243,7 +277,7 @@
 
 			// Save progress
 			try {
-				localStorage.setItem(`fgames_escape_${difficulty}_level`, (currentLevelId + 1).toString());
+				localStorage.setItem(`fgames_escape_${difficulty}_level`, unlockedThrough.toString());
 			} catch (_) {}
 		}, 650);
 	}
@@ -286,26 +320,21 @@
 	}
 
 	function nextLevel() {
+		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
 		currentLevelId++;
-		try {
-			localStorage.setItem(`fgames_escape_${difficulty}_level`, currentLevelId.toString());
-		} catch (_) {}
 	}
 
 	function prevLevel() {
 		if (currentLevelId > 1) {
 			sound.playTap();
 			currentLevelId--;
-			try {
-				localStorage.setItem(`fgames_escape_${difficulty}_level`, currentLevelId.toString());
-			} catch (_) {}
 		}
 	}
 </script>
 
 <div
-	class="relative flex flex-col justify-between w-full h-full min-h-[640px] max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
+	class="relative flex flex-col justify-between w-full h-full min-h-0 max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
 	style="background: radial-gradient(circle at 50% 25%, #232c28 0%, #171d1b 60%, #0e1211 100%);"
 	onpointermove={handlePointerMove}
 	onpointerup={handlePointerUp}
@@ -344,12 +373,14 @@
 				<h2 class="text-2xl font-black text-white tracking-wide drop-shadow-md">
 					{currentLevel.name}
 				</h2>
+				<span class="text-[10px] font-bold text-slate-400">{moveHistory.length} moves</span>
 			</div>
 
 			<button
 				type="button"
 				onclick={nextLevel}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
+				disabled={currentLevelId >= unlockedThrough && !isWon}
+				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
 				aria-label="Next level"
 			>
 				▶
@@ -370,7 +401,7 @@
 
 	<!-- PLAYING FIELD: 6x6 ASPHALT GRID WITH EXIT OPENING -->
 	<main class="flex-1 flex flex-col justify-center items-center px-4 py-2 z-10">
-		<div class="relative" style="width: {BOARD_SIZE}px; height: {BOARD_SIZE}px;">
+		<div class="relative" style="width: {boardSize}px; height: {boardSize}px;">
 			<!-- Outer Rounded Concrete Curb Frame (Matching Image 2) -->
 			<div
 				class="absolute inset-0 rounded-3xl bg-[#37413d] border-[7px] border-[#4b5550] shadow-[0_14px_28px_rgba(0,0,0,0.65)]"
@@ -378,7 +409,8 @@
 
 			<!-- Exit Gate Opening on Row 2 Right Curb -->
 			<div
-				class="absolute -right-2 top-[120px] w-6 h-[54px] bg-[#272c29] border-y-[3px] border-[#4b5550] flex flex-col items-center justify-center gap-0.5 z-10"
+				class="absolute -right-2 w-6 bg-[#272c29] border-y-[3px] border-[#4b5550] flex flex-col items-center justify-center gap-0.5 z-10"
+				style="top: {PADDING + 2 * (CELL_SIZE + GAP)}px; height: {CELL_SIZE}px;"
 			>
 				<span class="text-emerald-400 font-black text-[11px] leading-tight select-none animate-pulse">&gt;</span>
 				<span class="text-emerald-400 font-black text-[11px] leading-tight select-none animate-pulse">&gt;</span>
@@ -421,6 +453,7 @@
 						class:ease-in={isEscaping}
 						style="left: {currentLeft}px; top: {currentTop}px; width: {vWidth}px; height: {vHeight}px; z-index: {isDragging ? 35 : isEscaping ? 40 : 20};"
 						onpointerdown={(e) => handlePointerDown(e, v)}
+						onkeydown={(e) => handleVehicleKeydown(e, v)}
 						role="button"
 						tabindex="0"
 						aria-label={v.isTarget ? 'Red Escape Vehicle' : `${v.color} ${v.type}`}
@@ -440,7 +473,7 @@
 	</main>
 
 	<!-- BOTTOM ACTION CONTROLS (Undo, Hint) -->
-	<footer class="flex items-center justify-around px-12 pb-8 pt-2 z-20">
+	<footer class="flex items-center justify-around px-12 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 z-20">
 		<!-- Undo Button -->
 		<div class="flex flex-col items-center">
 			<button
@@ -500,7 +533,7 @@
 				>
 					UNSTOPPABLE!
 				</h1>
-				<p class="text-slate-300 text-base font-bold mb-6">Traffic jam cleared in style!</p>
+			<p class="text-slate-300 text-base font-bold mb-6">Cleared in {moveHistory.length} moves.</p>
 
 				<div class="flex flex-col gap-3 w-64 mt-2">
 					<button

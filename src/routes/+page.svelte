@@ -76,13 +76,13 @@
 </svelte:head>
 
 <div class="min-h-screen w-full bg-[#0f0c18] flex items-center justify-center p-0 sm:p-4 text-white font-['Fredoka','Nunito',sans-serif]">
-	<div class="w-full sm:max-w-md h-screen sm:h-[840px] bg-[#171224] sm:rounded-[36px] overflow-hidden flex flex-col relative shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/5">
+	<div class="w-full sm:max-w-md h-dvh sm:h-[840px] bg-[#171224] sm:rounded-[36px] overflow-hidden flex flex-col relative shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/5">
 		
 		<!-- 1. HOME SCREEN (Offline Games Hub) -->
 		{#if currentScreen === 'home'}
-			<div class="flex flex-col h-full overflow-y-auto">
+			<div class="flex flex-col h-full overflow-y-auto bg-[#f8efdf] text-[#251a35]">
 				<!-- Header matching video frame 025 -->
-				<header class="flex items-center justify-between px-5 pt-4 pb-3 sticky top-0 bg-[#171224]/95 backdrop-blur-md z-30 border-b border-white/5">
+				<header class="flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3 sticky top-0 bg-[#f8efdf]/95 backdrop-blur-md z-30 border-b border-[#251a35]/10">
 					<!-- Menu hamburger -->
 					<button
 						type="button"
@@ -90,38 +90,27 @@
 							sound.playTap();
 							showSettings = true;
 						}}
-						class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex flex-col items-center justify-center gap-1 cursor-pointer"
-						aria-label="Menu"
+						class="w-10 h-10 rounded-xl bg-[#251a35] hover:bg-[#3a2c52] flex flex-col items-center justify-center gap-1 cursor-pointer"
+						aria-label="Settings"
 					>
-						<span class="w-5 h-0.5 bg-slate-300 rounded-full"></span>
-						<span class="w-5 h-0.5 bg-slate-300 rounded-full"></span>
-						<span class="w-5 h-0.5 bg-slate-300 rounded-full"></span>
+						<span class="w-5 h-0.5 bg-white rounded-full"></span>
+						<span class="w-5 h-0.5 bg-white rounded-full"></span>
+						<span class="w-5 h-0.5 bg-white rounded-full"></span>
 					</button>
 
-					<!-- Coins / Energy Badge -->
-					<div class="flex items-center gap-1.5 px-3 py-1 bg-[#fef08a] text-slate-900 rounded-full font-black text-sm shadow-sm">
-						<span class="text-amber-600">⚡</span>
-						<span>100</span>
+					<div class="flex items-center gap-2 px-3 py-2 bg-white/80 text-[#315344] rounded-full font-black text-xs shadow-sm">
+						<span class="w-2 h-2 rounded-full bg-[#37a46b]"></span>
+						PLAY OFFLINE
 					</div>
-
-					<!-- Remove Ads Pill -->
-					<button
-						type="button"
-						onclick={() => sound.playBoltComplete()}
-						class="flex items-center gap-1.5 px-3 py-1.5 bg-[#9333ea] hover:bg-[#a855f7] rounded-xl font-black text-xs uppercase tracking-wide shadow-md active:scale-95 transition-transform cursor-pointer"
-					>
-						<span>📢</span>
-						<span>NO ADS</span>
-					</button>
 				</header>
 
 				<!-- Hero Header Subtitle -->
 				<div class="px-5 pt-4 pb-2 text-center">
-					<h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-md">
+					<h1 class="text-3xl sm:text-4xl font-black tracking-tight text-[#251a35]">
 						OFFLINE GAMES
 					</h1>
-					<p class="text-xs font-extrabold uppercase tracking-widest text-amber-400 mt-0.5">
-						NO WIFI REQUIRED
+					<p class="text-sm font-bold text-[#6f6175] mt-1">
+						Two satisfying puzzles, ready whenever you are.
 					</p>
 				</div>
 
@@ -141,22 +130,9 @@
 							imageSrc="/cards/card_escape.jpg"
 							onClick={() => openPreGame('escape')}
 						/>
-
-						<!-- Card 3: FRUIT MERGE -->
-						<GameCard
-							title="FRUIT MERGE"
-							imageSrc="/cards/card_fruit_merge.jpg"
-							disabled={true}
-						/>
-
-						<!-- Card 4: COLOR BLOCKS -->
-						<GameCard
-							title="COLOR BLOCKS"
-							imageSrc="/cards/card_color_blocks.jpg"
-							disabled={true}
-						/>
 					</div>
 				</main>
+				<p class="px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-xs font-bold text-[#8a7d88]">Your progress saves on this device.</p>
 			</div>
 
 		<!-- 2. PRE-GAME DIFFICULTY MODAL -->
