@@ -1,4 +1,4 @@
-import { createFarm, makePlot, total, CROP_CAPACITY, SEED_CAPACITY, GROW_SECONDS, type FarmState, type Inventory } from './model';
+import { createFarm, makePlot, total, BOUNDS, CROP_CAPACITY, SEED_CAPACITY, GROW_SECONDS, type FarmState, type Inventory } from './model';
 export const SAVE_KEY = 'pocket-farm:v1';
 type Reader = Pick<Storage, 'getItem'>;
 type Writer = Pick<Storage, 'setItem'>;
@@ -15,7 +15,7 @@ export function readFarm(storage: Reader): FarmState {
     if (!raw) return createFarm();
     const s = JSON.parse(raw) as FarmState;
     if (!s || s.version !== 1 || !Array.isArray(s.plots) || s.plots.length < 1 || s.plots.length > 2 ||
-      !s.player || !Number.isFinite(s.player.x) || !Number.isFinite(s.player.z) || Math.abs(s.player.x) > 3.8 || s.player.z < -4.8 || s.player.z > 4.7 ||
+      !s.player || !Number.isFinite(s.player.x) || !Number.isFinite(s.player.z) || Math.abs(s.player.x) > BOUNDS || Math.abs(s.player.z) > BOUNDS ||
       !inventory(s.seeds, SEED_CAPACITY) || !inventory(s.produce, CROP_CAPACITY) || !inventory(s.stock, 1_000_000) ||
       !number(s.wallet, 1_000_000_000) || !number(s.cash, 1_000_000_000) || !number(s.sold, 1_000_000_000)) return createFarm();
     const fresh = createFarm();

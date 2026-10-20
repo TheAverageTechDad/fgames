@@ -33,10 +33,10 @@ Files: `src/lib/games/farm/model.ts`, `model.test.ts`, `storage.ts`, `storage.te
 
 Interfaces: `createFarm(): FarmState`, `stepFarm(state, dt, input): FarmEvent[]`, `purchaseLand(state): boolean`, `readFarm(storage): FarmState`, `saveFarm(storage, state): boolean`.
 
-- [ ] Write simulation tests for free seeds, planting/growth/harvest, full inventory, mixed inventory, sales/payment separation, affordable purchases, and insufficient funds.
-- [ ] Watch the new tests fail, then implement the state and simulation.
-- [ ] Add save tests for roundtrip, invalid values, wrong version, and unavailable storage; implement strict bounded recovery.
-- [ ] Run the targeted suite, then commit this task.
+- [x] Write simulation tests for free seeds, planting/growth/harvest, full inventory, mixed inventory, sales/payment separation, affordable purchases, and insufficient funds.
+- [x] Watch the new tests fail, then implement the state and simulation.
+- [x] Add save tests for roundtrip, invalid values, wrong version, and unavailable storage; implement strict bounded recovery.
+- [x] Run the targeted suite, then commit this task.
 
 ## Task 2: Portrait farm and arcade launch
 
@@ -44,25 +44,43 @@ Files: `src/routes/farm/+page.svelte`, `src/lib/games/farm/FarmGame.svelte`, `sc
 
 Interfaces: `createFarmScene(host, state, onEvent, onReady): Promise<{ destroy(): void }>`; the scene advances Task 1's state, exposes ready state, and emits events to update HUD and sound. `createFarmInput(canvas)` returns `read()`, a joystick display snapshot, and `destroy()`.
 
-- [ ] Implement reusable crop, soil, stand, basket, market, fence, tree, and marker factories with a local asset manifest for the existing mother and customer GLBs.
-- [ ] Build an angled portrait camera and mother character with farm movement, carrying, planting and harvest animation hooks; add automatic interaction markers and simple customers.
-- [ ] Add a Svelte HUD for wallet, crop/seed capacity, next action, pause/settings, loading, recoverable errors, wallet-to-purchase animation, and home navigation.
-- [ ] Save valid state during play and on hide; pause while hidden; dispose input, audio, geometry, materials, animation loop, and WebGL on unmount.
-- [ ] Add a home-screen game card, actual scene thumbnail, and documentation of assets and remaining work.
-- [ ] Run type checks and build; verify direct navigation and launch from home.
+- [x] Implement reusable crop, soil, stand, basket, market, fence, tree, and marker factories with a local asset manifest for the existing mother and customer GLBs.
+- [x] Build an angled portrait camera and mother character with farm movement, carrying, planting and harvest animation hooks; add automatic interaction markers and simple customers.
+- [x] Add a Svelte HUD for wallet, crop/seed capacity, next action, pause/settings, loading, recoverable errors, wallet-to-purchase animation, and home navigation.
+- [x] Save valid state during play and on hide; pause while hidden; dispose input, audio, geometry, materials, animation loop, and WebGL on unmount.
+- [x] Add a home-screen game card, actual scene thumbnail, and documentation of assets and remaining work.
+- [x] Run type checks and build; verify direct navigation and launch from home.
 
 ## Task 3: Browser verification and handoff
 
 Files: `scripts/farm-smoke.mjs`, `docs/verification/farm-scaffold.md`; update this checklist with results.
 
-- [ ] Verify the 390×844 and 375×667 portrait layouts and a wide desktop layout; review screenshots.
-- [ ] Exercise actual touch/keyboard movement and the complete seed/plant/harvest/deliver/cash/purchase loop; reload and verify state.
-- [ ] Verify pause, mute, cleanup after home navigation, cancellation, safe handling of invalid saves, and local assets in the production build.
-- [ ] Run existing tests, static checks, and production build; obtain a fresh review and fix material findings.
-- [ ] Commit verified scaffold and leave a local preview available.
+- [x] Verify the 390×844 and 375×667 portrait layouts and a wide desktop layout; review screenshots.
+- [x] Exercise actual touch/keyboard movement and the complete seed/plant/harvest/deliver/cash/purchase loop; reload and verify state.
+- [x] Verify pause, mute, cleanup after home navigation, cancellation, safe handling of invalid saves, and local assets in the production build.
+- [x] Run existing tests, static checks, and production build; obtain a fresh review and fix material findings.
+- [x] Commit verified scaffold and leave a local preview available.
 
 ## Execution notes
 
 - Ruling: use a feature branch in the existing user workspace rather than move to a second checkout; this makes the scaffolding immediately reviewable in the project the user named. No changes to the user's untracked `.claude/` files.
 - Ruling: this request authorises the scaffold and its playable foundation now; do not add another plan approval round. The wider design remains a staged proposal.
 - Visual direction: leaf green `#75a940`, dark foliage `#294d35`, tomato red `#e65c42`, sunflower `#f5c653`, soil `#845335`, and parchment `#fff6df`. Keep the existing Lilita One/Luckiest Guy arcade type. The farm is the main surface; HUD uses compact physical counters and a small bottom task strip.
+
+## Session 2 rulings (20 October 2026, Claude)
+
+The user asked to continue from the Codex scaffold and to aim for the reference video's polish: an isometric layout that showcases the farm, and Catcha's tasteful finish. The scaffold was committed unchanged first (`d0cc21f`), then:
+
+- Camera: orthographic at 45° yaw, about 47° elevation, following the farmer and clamped to the farm. The world stays axis-aligned; the joystick and arrow keys report screen directions, which the scene rotates into world movement.
+- Layout: a stone cross with one quadrant each for the tomato field (top), purchasable cucumber field (right), farmhouse garden (left) and market (bottom). Balustrade on the far edges, low hedges on the near edges, a tree line behind. Tall props are kept clear of tiles further up the screen.
+- Solid props: the counter, seed stands and house block movement (push-out along the shallower side). The cucumber stand only blocks once bought.
+- Seed pickup now follows the spec: only as many seeds as there are empty spots for that crop (the scaffold took twice the demand).
+- Customers: replaced the sale timer with a visible queue of up to three shoppers. The front shopper shows the crop and count wanted, takes stock one item at a time and pays per item onto the coin pile; an empty-handed shopper switches to a crop in stock. Shoppers are not saved, so reloading cannot lose or duplicate goods.
+- Carrying: seeds and produce stack visibly in her arms (two columns, seeds at the bottom). Every transfer is animated: seeds and harvest into the stack, the stack onto the counter, produce to the shopper, coins to the pile and from the pile to her.
+- Purchase: the scaffold's HUD popup is replaced by an in-world gold ring that fills on the price tile over 0.8 s, as the spec recommends. The new field pops in with confetti.
+- Guidance: a bobbing arrow over the next goal and a chevron at her feet pointing to it, both driven by `farmGoal`, which also writes the hint.
+- HUD: one compact task card (seeds, basket, fields, hint, progress); the movement tip disappears after she first moves.
+- Haptics go through the shared Catcha module (installed on the farm route), so iPhones get feedback; the scaffold's `navigator.vibrate` was Android-only.
+- Rendering: Neutral tone mapping, baked grass/paver/soil textures, rounded geometry, merged static world, cached crop templates, instanced stacks/coins/shelf, and shader precompilation behind the loading card.
+
+Verification for this session is recorded in `docs/verification/farm-scaffold.md`.

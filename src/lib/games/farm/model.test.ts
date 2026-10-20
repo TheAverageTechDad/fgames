@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFarm, stepFarm, purchaseLand, CROP_CAPACITY, SEED_CAPACITY, GROW_SECONDS, SPOTS } from './model';
+import { createFarm, stepFarm, purchaseLand, farmGoal, CROP_CAPACITY, GROW_SECONDS, PRICES, SPOTS } from './model';
 
 const stay = { x: 0, z: 0 };
 function visit(s: ReturnType<typeof createFarm>, point: { x: number; z: number }) {
@@ -8,15 +8,17 @@ function visit(s: ReturnType<typeof createFarm>, point: { x: number; z: number }
 }
 
 describe('Pocket Farm loop', () => {
-  it('supplies free seeds and plants the assigned crop', () => {
+  it('supplies free seeds for the empty spots only and plants the assigned crop', () => {
     const s = createFarm();
     visit(s, SPOTS.seeds);
-    expect(s.seeds.tomato).toBe(SEED_CAPACITY);
+    expect(s.seeds.tomato).toBe(9);
     expect(s.wallet).toBe(0);
     const cell = s.plots[0].cells[0];
     visit(s, cell);
     expect(cell.stage).toBe('growing');
-    expect(s.seeds.tomato).toBeLessThan(SEED_CAPACITY);
+    expect(s.seeds.tomato).toBe(8);
+    visit(s, SPOTS.seeds);
+    expect(s.seeds.tomato).toBe(8);
   });
   it('grows crops while active, collects them, and leaves ripe crops when full', () => {
     const s = createFarm();
@@ -76,6 +78,53 @@ describe('Pocket Farm loop', () => {
     stepFarm(s, 1, stay);
     expect(s.plots).toHaveLength(2);
     expect(s.wallet).toBe(0);
+  });
+  it('queues shoppers who take stock one item at a time, pay per item, then leave', () => {
+    const s = createFarm();
+    s.player = { x: 0, z: -4 };
+    stepFarm(s, 10, stay);
+    expect(s.customers).toHaveLength(3);
+    expect(s.cash).toBe(0);
+    const front = s.customers[0];
+    s.stock.tomato = 1;
+    stepFarm(s, 0.3, stay);
+    expect(s.stock.tomato).toBe(0);
+    expect(s.cash).toBe(PRICES.tomato);
+    expect(front.got).toBe(1);
+    s.stock.tomato = 10;
+    const events = stepFarm(s, 2, stay);
+    expect(events.some(e => e.type === 'served')).toBe(true);
+    expect(s.customers.some(c => c.id === front.id)).toBe(false);
+    expect(s.cash).toBe(s.sold * PRICES.tomato);
+  });
+  it('lets an empty-handed shopper switch to produce that is in stock', () => {
+    const s = createFarm();
+    s.wallet = 40; purchaseLand(s);
+    s.customers = [{ id: 1, crop: 'cucumber', want: 2, got: 0, wait: 0 }];
+    s.stock.tomato = 2; s.player = { x: 0, z: -4 };
+    stepFarm(s, 0.6, stay);
+    expect(s.stock.tomato).toBe(0);
+    expect(s.cash).toBe(2 * PRICES.tomato);
+  });
+  it('points the guide at the next useful place', () => {
+    const s = createFarm();
+    expect(farmGoal(s).at).toEqual(SPOTS.seeds);
+    s.seeds.tomato = 2;
+    expect(s.plots[0].cells).toContainEqual(expect.objectContaining(farmGoal(s).at));
+    s.cash = 4;
+    expect(farmGoal(s).at).toEqual(SPOTS.cash);
+  });
+  it('walks around solid props, and the second seed stand only once it exists', () => {
+    const s = createFarm();
+    s.player = { x: 2.4, z: 3.2 };
+    for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
+    expect(s.player.z).toBeGreaterThan(2.4);
+    s.player = { x: 3.2, z: -0.4 };
+    for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
+    expect(s.player.z).toBeLessThan(-1.5);
+    s.wallet = 40; purchaseLand(s); s.player = { x: 3.2, z: -0.4 };
+    for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
+    expect(s.player.z).toBeGreaterThan(-0.8);
   });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();

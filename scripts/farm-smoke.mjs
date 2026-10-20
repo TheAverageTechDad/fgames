@@ -21,12 +21,14 @@ try {
     await page.waitForFunction(() => document.activeElement?.matches('[data-farm-canvas]'));
     return s;
   }
-  async function walk(x, z) {
+  // Arrow keys move along the screen, which shows the farm at 45°: Right walks world (+x, -z), Down walks (+x, +z).
+  async function walk(x, z, downFirst = false) {
     for (let attempt = 0; attempt < 4; attempt++) {
       const s = await current();
       const dx = x - s.player.x, dz = z - s.player.z;
       if (Math.hypot(dx, dz) < 0.18) return;
-      for (const [delta, negative, positive] of [[dx, 'ArrowLeft', 'ArrowRight'], [dz, 'ArrowUp', 'ArrowDown']]) {
+      const legs = [[(dx - dz) * Math.SQRT1_2, 'ArrowLeft', 'ArrowRight'], [(dx + dz) * Math.SQRT1_2, 'ArrowUp', 'ArrowDown']];
+      for (const [delta, negative, positive] of downFirst ? legs.reverse() : legs) {
         if (Math.abs(delta) < 0.07) continue;
         const key = delta < 0 ? negative : positive;
         await page.keyboard.down(key);
@@ -37,6 +39,11 @@ try {
     const s = await current();
     assert(Math.hypot(x - s.player.x, z - s.player.z) < 0.45, `Unable to reach ${x},${z}: ${JSON.stringify(s.player)}`);
   }
+  // Rows nearest the path first, snaking so each step crosses one plant.
+  const snake = cells => [-20, -28, -36].flatMap((z, r) => {
+    const row = cells.filter(c => Math.round(c.z * 10) === z).sort((a, b) => a.x - b.x);
+    return r % 2 ? row : row.reverse();
+  });
   // Genuine touch input, followed by cancellation, must move then release the character.
   const cdp = await context.newCDPSession(page);
   const initial = await current();
@@ -50,29 +57,29 @@ try {
   assert(Math.abs((await current()).player.x - touched.player.x) < 0.05);
   report.push('Real one-thumb drag moves the character; cancellation releases movement.');
 
-  await walk(-2.9, 1.25);
-  assert((await current()).seeds.tomato > 0);
-  const cells = (await current()).plots[0].cells;
+  await walk(-2.2, -0.4);
+  assert.equal((await current()).seeds.tomato, 9);
+  const cells = snake((await current()).plots[0].cells);
   for (const cell of cells) await walk(cell.x, cell.z);
   await walk(0, 0);
   await page.waitForTimeout(8200);
   await page.screenshot({ path: 'test-results/farm-portrait-390.png' });
+  await walk(-2.0, -2.0);
   for (const cell of cells) await walk(cell.x, cell.z);
   const harvested = await current();
   console.log('Harvested', harvested.produce, harvested.plots[0].cells.map(c => c.stage));
   assert(harvested.produce.tomato >= 20);
-  await walk(0, 1.5);
-  await walk(2.45, 1.5);
+  await walk(0, 0);
+  await walk(0.9, 2.3);
   assert.equal((await current()).produce.tomato, 0);
-  await walk(2.9, 3.2);
+  await walk(1.45, 3.1);
   await page.waitForFunction(() => {
     const text = document.querySelector('[data-wallet]')?.textContent;
     return Number(text) >= 40;
   }, undefined, { timeout: 35_000 });
-  await walk(0, 2);
-  await walk(0, -1.85);
+  await walk(0, 0, true);
   const earned = (await current()).wallet;
-  await walk(1.85, -1.85);
+  await walk(2.8, -2.8);
   await page.waitForFunction(() => document.querySelector('.field-count')?.textContent?.includes('2 fields'));
   const purchased = await current();
   assert.equal(purchased.plots.length, 2);
