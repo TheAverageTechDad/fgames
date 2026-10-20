@@ -4,7 +4,7 @@ import {difficulties, type StoredEscapeLevel,type StoredNutsLevel} from './level
 import {isLevelSolved} from './nuts/solver';
 import {groupMoveCount} from './nuts/moves';
 import {buildGrid} from './escape/solver';
-const ranges={escape:[[2,6],[6,14],[12,22],[18,35]],nuts:[[3,7],[8,12],[13,17],[18,30]]};
+const ranges={escape:[[2,6],[6,14],[12,22],[18,35]],nuts:[[7,14],[16,30],[36,50],[50,70]]};
 describe('Shipped level library',()=>{
  for(const game of ['nuts','escape'] as const)for(const [di,difficulty] of difficulties.entries())it(`${game} ${difficulty}: 100 unique, ordered levels with legal winning solutions`,()=>{
  const levels=files[`../../static/levels/${game}/${difficulty}.json`] as (StoredEscapeLevel|StoredNutsLevel)[];

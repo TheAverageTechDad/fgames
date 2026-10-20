@@ -146,6 +146,39 @@ function drawIcon(ctx: CanvasRenderingContext2D, color: NutColor) {
 			}
 			break;
 
+		case 'cyan': // Moon (it shared purple's star, which mattered on 9-colour boards)
+			ctx.beginPath();
+			ctx.arc(0, 0, 17, 0.35 * Math.PI, 1.65 * Math.PI, false);
+			ctx.arc(8, -4, 13, 1.45 * Math.PI, 0.6 * Math.PI, true);
+			ctx.closePath();
+			ctx.fill();
+			ctx.stroke();
+			break;
+
+		case 'brown': // Cloud
+			ctx.beginPath();
+			ctx.arc(-9, 4, 9, Math.PI * 0.5, Math.PI * 1.5);
+			ctx.arc(0, -4, 11, Math.PI * 1.1, Math.PI * 1.9);
+			ctx.arc(10, 3, 9, Math.PI * 1.5, Math.PI * 0.5);
+			ctx.closePath();
+			ctx.fill();
+			ctx.stroke();
+			break;
+
+		case 'lime': // Leaf
+			ctx.beginPath();
+			ctx.moveTo(-15, 15);
+			ctx.bezierCurveTo(-17, -8, 2, -18, 17, -17);
+			ctx.bezierCurveTo(17, 3, 6, 17, -15, 15);
+			ctx.closePath();
+			ctx.fill();
+			ctx.stroke();
+			ctx.beginPath();
+			ctx.moveTo(-12, 12);
+			ctx.lineTo(8, -8);
+			ctx.stroke();
+			break;
+
 		default:
 			// Star
 			ctx.beginPath();

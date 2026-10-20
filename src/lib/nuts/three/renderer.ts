@@ -33,33 +33,21 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 	const BOLT_SPACING_X_TOP = 2.24;
 	const BOLT_SPACING_X_BOTTOM = 1.95;
-	const TOP_Y = 1.30;
-	const BOTTOM_Y = -2.35;
 
 	function getBoltPosition(index: number, total: number): THREE.Vector3 {
 		if (total <= 4) {
 			const x = (index - (total - 1) / 2) * BOLT_SPACING_X_TOP;
 			return new THREE.Vector3(x, 0, 0);
 		}
-		if (total <= 6) {
-			const isTop = index < 3;
-			const col = isTop ? index : index - 3;
-			const x = (col - 1) * 2.3;
-			const y = isTop ? 1.4 : -1.8;
-			return new THREE.Vector3(x, y, 0);
-		}
-		const topCount = Math.ceil(total / 2);
-        if (index < topCount) {
-			// Top row of 4 bolts
-			const x = (index - (topCount - 1) / 2) * BOLT_SPACING_X_TOP;
-			return new THREE.Vector3(x, TOP_Y, 0);
-		} else {
-			// Bottom row of remaining bolts (centered)
-			const bottomCount = total - topCount;
-			const bottomIdx = index - topCount;
-			const x = (bottomIdx - (bottomCount - 1) / 2) * BOLT_SPACING_X_BOTTOM;
-			return new THREE.Vector3(x, BOTTOM_Y, 0);
-		}
+		// Two rows. The gap follows the stack height so a lifted nut on the bottom row stays clear of
+		// the row above, whatever the level's capacity.
+		const rowGap = HOVER_Y_OFFSET + 0.9;
+		const topCount = total <= 6 ? 3 : Math.ceil(total / 2);
+		const isTop = index < topCount;
+		const count = isTop ? topCount : total - topCount;
+		const col = isTop ? index : index - topCount;
+		const spacing = total <= 6 ? 2.3 : BOLT_SPACING_X_BOTTOM;
+		return new THREE.Vector3((col - (count - 1) / 2) * spacing, isTop ? rowGap / 2 : -rowGap / 2, 0);
 	}
 
 	// Nut animation state structure

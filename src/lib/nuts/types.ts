@@ -1,4 +1,4 @@
-export type NutColor = 'blue' | 'orange' | 'pink' | 'green' | 'red' | 'yellow' | 'purple' | 'cyan';
+export type NutColor = 'blue' | 'orange' | 'pink' | 'green' | 'red' | 'yellow' | 'purple' | 'cyan' | 'brown' | 'lime';
 
 export interface NutItem {
 	id: string;
@@ -96,6 +96,26 @@ export const NUT_THEMES: Record<NutColor, NutTheme> = {
 		holeShadow: '#083344',
 		symbol: 'moon',
 		iconSvg: `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="currentColor"/>`
+	},
+	brown: {
+		primary: '#92400e',
+		topFace: '#b45309',
+		leftFace: '#78350f',
+		rightFace: '#5c2a0b',
+		highlight: '#fcd9a8',
+		holeShadow: '#2b1404',
+		symbol: 'cloud',
+		iconSvg: `<path d="M7 19a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9.5H7z" fill="currentColor"/>`
+	},
+	lime: {
+		primary: '#65a30d',
+		topFace: '#84cc16',
+		leftFace: '#4d7c0f',
+		rightFace: '#3f6212',
+		highlight: '#d9f99d',
+		holeShadow: '#1a2e05',
+		symbol: 'leaf',
+		iconSvg: `<path d="M20 4C9 4 4 9 4 16c0 1.4.3 2.7.8 4L6.6 18A9 9 0 0 1 14 9a10 10 0 0 0-6.7 9.6C16 20 20 13 20 4z" fill="currentColor"/>`
 	}
 };
 
