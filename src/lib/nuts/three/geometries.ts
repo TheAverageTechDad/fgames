@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+let shaftGeometryCache: THREE.BufferGeometry | null = null;
 
 let nutGeometryCache: THREE.BufferGeometry | null = null;
 let boltBaseGeometryCache: THREE.BufferGeometry | null = null;
@@ -62,8 +64,9 @@ export function getNutGeometry(): THREE.BufferGeometry {
 	const extrudeSettings: THREE.ExtrudeGeometryOptions = {
 		depth: 0.42,
 		bevelEnabled: true,
-		bevelSegments: 4,
+		bevelSegments: 2,
 		steps: 1,
+        curveSegments: 6,
 		bevelSize: 0.05,
 		bevelThickness: 0.04
 	};
@@ -93,7 +96,7 @@ export function getBoltBaseGeometry(): THREE.BufferGeometry {
 	shape.lineTo(0, 0.16);
 	shape.closePath();
 
-	const geom = new THREE.LatheGeometry(shape.getPoints(), 36);
+	const geom = new THREE.LatheGeometry(shape.getPoints(), 24);
 	boltBaseGeometryCache = geom;
 	return geom;
 }
@@ -124,45 +127,17 @@ export function createBoltMeshGroup(
 		return group;
 	}
 
-	// 2. Visible Threaded Screw Shaft standing upright
-	const shaftHeight = 2.45;
-	const shaftRadius = 0.27;
 
-	// Core Cylinder
-	const core = new THREE.Mesh(
-		new THREE.CylinderGeometry(shaftRadius * 0.94, shaftRadius * 0.94, shaftHeight, 28),
-		shaftMaterial
-	);
-	core.position.y = 0.12 + shaftHeight / 2;
-	core.castShadow = true;
-	core.receiveShadow = true;
-	group.add(core);
-
-	// 3. Top Rounded Dome Cap of the Screw
-	const dome = new THREE.Mesh(
-		new THREE.SphereGeometry(shaftRadius * 0.95, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-		shaftMaterial
-	);
-	dome.position.y = 0.12 + shaftHeight;
-	dome.castShadow = true;
-	group.add(dome);
-
-	// 4. Thread Ridges (12 stacked tori catching specular highlights along the screw)
-	const ridgeCount = 12;
-	const startY = 0.24;
-	const endY = 0.12 + shaftHeight - 0.12;
-	const stepY = (endY - startY) / ridgeCount;
-
-	for (let i = 0; i < ridgeCount; i++) {
-		const torus = new THREE.Mesh(
-			new THREE.TorusGeometry(shaftRadius, 0.022, 8, 24),
-			shaftMaterial
-		);
-		torus.rotation.x = Math.PI / 2;
-		torus.position.y = startY + i * stepY;
-		torus.castShadow = true;
-		group.add(torus);
-	}
-
-	return group;
+    // Reuse one merged shaft geometry for every bolt: two draw calls per bolt.
+    if (!shaftGeometryCache) {
+        const height=2.45,radius=.27;
+        const core=new THREE.CylinderGeometry(radius*.94,radius*.94,height,16).translate(0,.12+height/2,0);
+        const cap=new THREE.SphereGeometry(radius*.95,16,8,0,Math.PI*2,0,Math.PI/2).translate(0,.12+height,0);
+        const parts:THREE.BufferGeometry[]=[core,cap];
+        for(let i=0;i<12;i++)parts.push(new THREE.TorusGeometry(radius,.022,6,16).rotateX(Math.PI/2).translate(0,.24+i*(height-.24)/12,0));
+        shaftGeometryCache=mergeGeometries(parts);
+        parts.forEach(part=>part.dispose());
+    }
+    group.add(new THREE.Mesh(shaftGeometryCache!,shaftMaterial));
+    return group;
 }

@@ -4,7 +4,7 @@
 	import { getNutGeometry, createBoltMeshGroup } from './geometries';
 	import { getNutIconTexture } from './textures';
 	import { NUT_THEMES, type NutColor, type NutItem } from '../types';
-	import { sound } from '#lib/sound';
+	import Icon from '#lib/components/Icon.svelte';
 
 	interface Props {
 		bolts: NutItem[][];
@@ -12,6 +12,9 @@
 		hintMove: { from: number; to: number } | null;
 		isWon: boolean;
 		onBoltClick: (index: number) => void;
+        onSettled: () => void;
+        capacity?: number;
+        guided?: boolean;
 	}
 
 	let {
@@ -19,7 +22,7 @@
 		selectedBolt,
 		hintMove,
 		isWon,
-		onBoltClick
+		onBoltClick, onSettled, capacity=4, guided=false
 	}: Props = $props();
 
 	let container: HTMLDivElement;
@@ -56,14 +59,15 @@
 			const y = isTop ? 1.4 : -1.8;
 			return new THREE.Vector3(x, y, 0);
 		}
-		if (index < 4) {
+		const topCount = Math.ceil(total / 2);
+        if (index < topCount) {
 			// Top row of 4 bolts
-			const x = (index - 1.5) * BOLT_SPACING_X_TOP;
+			const x = (index - (topCount - 1) / 2) * BOLT_SPACING_X_TOP;
 			return new THREE.Vector3(x, TOP_Y, 0);
 		} else {
 			// Bottom row of remaining bolts (centered)
-			const bottomCount = total - 4;
-			const bottomIdx = index - 4;
+			const bottomCount = total - topCount;
+			const bottomIdx = index - topCount;
 			const x = (bottomIdx - (bottomCount - 1) / 2) * BOLT_SPACING_X_BOTTOM;
 			return new THREE.Vector3(x, BOTTOM_Y, 0);
 		}
@@ -80,6 +84,7 @@
 		progress: number;
 		duration: number;
 		squashTimer: number;
+        delay?: number;
 	}
 
 	interface NutInstance {
@@ -121,11 +126,17 @@
 	onMount(() => {
 		initThree();
 		buildScene();
-		animate();
+        let alive=true;
+        void renderer.compileAsync(scene,camera).then(()=>{if(alive)animate();});
 
-		window.addEventListener('resize', handleResize);
+		const observer=new ResizeObserver(handleResize);observer.observe(container);
+        window.addEventListener('resize', handleResize);
 		return () => {
-			window.removeEventListener('resize', handleResize);
+			alive=false;
+            observer.disconnect();
+            window.removeEventListener('resize', handleResize);
+            if(import.meta.env.DEV)delete (window as any).__nuts;
+            scene.traverse(obj=>{if(obj instanceof THREE.Mesh){obj.geometry.dispose();const materials=Array.isArray(obj.material)?obj.material:[obj.material];for(const material of materials){if(material.map)material.map.dispose();material.dispose();}}});
 			cancelAnimationFrame(animationFrameId);
 			renderer.dispose();
 		};
@@ -142,12 +153,12 @@
 			canvas,
 			antialias: true,
 			alpha: true,
-			preserveDrawingBuffer: true,
-			powerPreference: 'high-performance'
+			preserveDrawingBuffer: false,
+			powerPreference: 'default'
 		});
 		renderer.setSize(container.clientWidth, container.clientHeight);
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.enabled = false;
 		renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 		renderer.toneMapping = THREE.ACESFilmicToneMapping;
 		renderer.toneMappingExposure = 1.22;
@@ -155,7 +166,7 @@
 		raycaster = new THREE.Raycaster();
 		pointer = new THREE.Vector2();
 
-		if (typeof window !== 'undefined') {
+		if (import.meta.env.DEV) {
 			(window as any).__nuts = {
 				scene,
 				camera,
@@ -173,17 +184,17 @@
 
 		// Studio 3-Point + Hemisphere Lighting
 		// 1. Soft purple ambient bounce matching background
-		const ambient = new THREE.AmbientLight(new THREE.Color('#581c87'), 1.4);
+		const ambient = new THREE.AmbientLight(new THREE.Color('#fff6e6'), 1.4);
 		scene.add(ambient);
 
 		// 2. Hemisphere Light (Soft Sky White above, Slate/Ground below)
-		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x3b2d54, 1.6);
+		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7058, 1.6);
 		scene.add(hemiLight);
 
 		// 3. Main Key Light (Warm white, cast soft shadows)
 		const keyLight = new THREE.DirectionalLight(new THREE.Color('#ffffff'), 2.6);
 		keyLight.position.set(-6, 16, 12);
-		keyLight.castShadow = true;
+		keyLight.castShadow = false;
 		keyLight.shadow.mapSize.width = 1024;
 		keyLight.shadow.mapSize.height = 1024;
 		keyLight.shadow.camera.near = 0.5;
@@ -253,7 +264,7 @@
 		boltMeshes.forEach((m) => scene.remove(m));
 		boltMeshes.length = 0;
 
-		const totalBolts = Math.max(bolts.length, 9);
+		const totalBolts = bolts.length;
 
 		for (let i = 0; i < totalBolts; i++) {
 			const isExtraEmpty = i >= bolts.length;
@@ -264,7 +275,11 @@
 			boltGroup.position.copy(pos);
 			boltGroup.userData = { boltIndex: i };
 
-			// Add large invisible hit target cylinder to make every bolt easy to tap/click
+			const shadowCanvas=document.createElement('canvas');shadowCanvas.width=64;shadowCanvas.height=64;
+            const ctx=shadowCanvas.getContext('2d')!;const gradient=ctx.createRadialGradient(32,32,2,32,32,32);gradient.addColorStop(0,'rgba(36,27,58,.35)');gradient.addColorStop(1,'rgba(36,27,58,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);
+            const blob=new THREE.Mesh(new THREE.PlaneGeometry(2.4,1.1),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowCanvas),transparent:true,depthWrite:false}));
+            blob.position.set(0,-.18,-.2);blob.rotation.x=-.45;boltGroup.add(blob);
+            // Add large invisible hit target cylinder to make every bolt easy to tap/click
 			const hitGeom = new THREE.CylinderGeometry(1.05, 1.05, 4.8, 16);
 			const hitMat = new THREE.MeshBasicMaterial({
 				transparent: true,
@@ -281,6 +296,7 @@
 		}
 
 		syncNuts();
+        updateCameraFraming();
 	}
 
 	function createNutGroup(id: string, color: NutColor): { group: THREE.Group; nutMesh: THREE.Mesh } {
@@ -302,7 +318,7 @@
 			polygonOffsetFactor: -1,
 			polygonOffsetUnits: -1
 		});
-		const iconPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.36), iconMat);
+		const iconPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.40), iconMat);
 		iconPlane.position.set(0, 0, 0.745);
 		iconPlane.renderOrder = 10;
 		group.add(iconPlane);
@@ -311,8 +327,9 @@
 	}
 
 	function syncNuts() {
-		const totalBolts = Math.max(bolts.length, 9);
+		const totalBolts = bolts.length;
 		const activeKeys = new Set<string>();
+        let stagger=0;
 
 		bolts.forEach((boltNuts, bIdx) => {
 			const boltPos = getBoltPosition(bIdx, totalBolts);
@@ -376,6 +393,7 @@
 
 						instance.anim = {
 							state: 'flying',
+                            delay: stagger++ * 0.06,
 							fromPos: startPos,
 							toPos: destHoverPos,
 							arcPeakY: peakY,
@@ -482,20 +500,22 @@
 		const aspect = w / h;
 		camera.aspect = aspect;
 
-		// Frame all bolts comfortably with side padding
-		const hSpanNeeded = 10.4;
-		const vSpanNeeded = 8.6;
-		const halfFovRad = THREE.MathUtils.degToRad(camera.fov / 2);
-		const tanFov = Math.tan(halfFovRad);
 
-		const zForHeight = (vSpanNeeded / 2) / tanFov;
-		const zForWidth = (hSpanNeeded / 2) / (tanFov * aspect);
-		const targetZ = Math.max(26.5, zForHeight, zForWidth);
+        const positions=bolts.map((_,i)=>getBoltPosition(i,bolts.length));
+        if(!positions.length)return;
+        const minX=Math.min(...positions.map(p=>p.x))-1.15;
+        const maxX=Math.max(...positions.map(p=>p.x))+1.15;
+        const minY=Math.min(...positions.map(p=>p.y))-.7;
+        const maxY=Math.max(...positions.map(p=>p.y))+HOVER_Y_OFFSET+1.4;
+        const centerY=(minY+maxY)/2;
+        const tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+        const distance=Math.max((maxX-minX)/(2*tan*aspect),(maxY-minY)/(2*tan))*1.16;
+        camera.position.set(0,centerY+distance*.23,distance);
+        camera.lookAt(0,centerY,0);
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld();
+        boltTargets=positions.map(p=>{p=p.clone();p.y+=1.4;p.project(camera);return {x:(p.x+1)*50,y:(1-p.y)*50};});
 
-		camera.position.z = targetZ;
-		camera.position.y = targetZ * 0.33;
-		camera.lookAt(0, -0.6, 0);
-		camera.updateProjectionMatrix();
 	}
 
 	function handleResize() {
@@ -505,13 +525,19 @@
 	}
 
 	let clock = new THREE.Clock();
+    let moving=false;
+    let frameCount=0,slowTime=0;
+    let boltTargets: {x:number;y:number}[]=$state([]);
+    let pointerPositions: {x:number;y:number}[]=$state([]);
+
 
 	function animate() {
 		animationFrameId = requestAnimationFrame(animate);
 		const rawDelta = clock.getDelta();
 		const delta = Math.min(rawDelta, 0.05); // Cap to 50ms to prevent jumps if tab backgrounded
 		const time = clock.getElapsedTime();
-		const totalBolts = Math.max(bolts.length, 9);
+		const totalBolts = bolts.length;
+        if(frameCount++>60){slowTime+=rawDelta;if(frameCount>=180){if(slowTime/120>.022 && renderer.getPixelRatio()>1.5)renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));frameCount=60;slowTime=0;}}
 
 		for (const inst of nutInstances.values()) {
 			const anim = inst.anim;
@@ -519,7 +545,8 @@
 			const restingY = boltPos.y + NUT_BASE_Y + inst.targetSlotIndex * NUT_HEIGHT;
 			const hoverY = boltPos.y + HOVER_Y_OFFSET;
 
-			if (anim.state === 'unscrewing') {
+			if(anim.delay && anim.delay>0){anim.delay-=delta;continue;}
+            if (anim.state === 'unscrewing') {
 				anim.progress = Math.min(1.0, anim.progress + delta / anim.duration);
 				const t = easeOutCubic(anim.progress);
 
@@ -608,7 +635,7 @@
 
 		// 3D Hint Indicators (Pulsing glowing rings above source and destination)
 		if (hintMove) {
-			const total = Math.max(bolts.length, 9);
+			const total = bolts.length;
 			const srcPos = getBoltPosition(hintMove.from, total);
 			const dstPos = getBoltPosition(hintMove.to, total);
 			const pulse = 1.0 + Math.sin(time * 6.5) * 0.12;
@@ -635,7 +662,13 @@
 			if (hintTargetMarker) hintTargetMarker.visible = false;
 		}
 
-		renderer.render(scene, camera);
+        const active=[...nutInstances.values()].some(n=>['flying','screwing_down','squashing'].includes(n.anim.state));
+        if(moving&&!active)onSettled();
+        moving=active;
+        if(guided&&hintMove){
+            pointerPositions=[hintMove.from,hintMove.to].map(i=>{const p=getBoltPosition(i,totalBolts);p.y+=1.5;p.project(camera);return {x:(p.x+1)*50,y:(1-p.y)*50};});
+        }else if(pointerPositions.length)pointerPositions=[];
+        renderer.render(scene, camera);
 	}
 
 	function easeOutCubic(t: number): number {
@@ -662,4 +695,13 @@
 		onpointerdown={handlePointerDown}
 		class="w-full h-full cursor-pointer touch-none"
 	></canvas>
+    {#each boltTargets as target,i}
+      <button class="bolt-target" style:left="{target.x}%" style:top="{target.y}%" onclick={()=>onBoltClick(i)} aria-label={`Bolt ${i+1}: ${bolts[i]?.map(n=>n.color).join(', ')||'empty'}`} data-bolt={i}></button>
+    {/each}
+    {#each pointerPositions as p,i}<span class="guide-hand" style:left="{p.x}%" style:top="{p.y}%" aria-hidden="true"><Icon name="hand-pointing" size={32}/><b>{i+1}</b></span>{/each}
 </div>
+<style>
+.bolt-target{position:absolute;width:44px;height:70px;min-width:44px;transform:translate(-50%,-50%);background:transparent;border:0;color:transparent;cursor:pointer}
+.bolt-target:focus-visible{outline:3px solid #241b3a;background:#fff6e644;border-radius:12px}
+.guide-hand{position:absolute;transform:translate(-40%,20px);pointer-events:none;color:#fff6e6;filter:drop-shadow(1px 2px 1px #241b3a);display:flex;align-items:center}
+</style>

@@ -11,7 +11,7 @@ export function getNutIconTexture(color: NutColor): THREE.CanvasTexture {
 		return textureCache.get(color)!;
 	}
 
-	const size = 512;
+	const size = 128;
 	const canvas = document.createElement('canvas');
 	canvas.width = size;
 	canvas.height = size;
@@ -41,17 +41,17 @@ export function getNutIconTexture(color: NutColor): THREE.CanvasTexture {
 function drawIcon(ctx: CanvasRenderingContext2D, color: NutColor) {
 	// Shadow for emboss effect
 	ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-	ctx.shadowBlur = 6;
+	ctx.shadowBlur = 1;
 	ctx.shadowOffsetX = 0;
-	ctx.shadowOffsetY = 3;
+	ctx.shadowOffsetY = 1;
 
 	// High-contrast foreground icon badge
 	const theme = NUT_THEMES[color];
 	ctx.fillStyle = '#ffffff';
 	ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-	ctx.lineWidth = 3.5;
+	ctx.lineWidth = 2.5;
 
-	const scale = 3.8;
+	const scale = 2.5;
 	ctx.scale(scale, scale);
 
 	switch (color) {
@@ -131,7 +131,7 @@ function drawIcon(ctx: CanvasRenderingContext2D, color: NutColor) {
 			ctx.fill();
 			ctx.stroke();
 			// Rays
-			ctx.lineWidth = 3.5;
+			ctx.lineWidth = 2.5;
 			for (let i = 0; i < 8; i++) {
 				const a = (i * Math.PI) / 4;
 				ctx.beginPath();
