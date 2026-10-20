@@ -10,9 +10,11 @@ export function seeded(seed: number) {
 export const COLORS = {
   grass: '#79b545', lawn: '#86c04f', hedge: '#9cc43c', hedgeDark: '#7fa830', foliage: '#4e8f37', foliageLight: '#6fad45',
   cypress: '#3f7d3a', soil: '#7b4a2d', ridge: '#8f5836', paver: '#ddd3be', stone: '#efe5cb', wood: '#b9824a', woodDark: '#8a5a35',
-  tomato: '#e5463a', cucumber: '#3f8a35', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
+  tomato: '#e5463a', cucumber: '#3f8a35', strawberry: '#e8344f', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
 };
 type Draw = (c: CanvasRenderingContext2D, w: number, h: number) => void;
+// Crate positions along the counter, one per crop, shared with the scene's shelf display.
+export const SHELF_X = [-0.62, -0.08, 0.44];
 // Collapse every mesh under `root` into one mesh per material: hundreds of props become a few draw calls.
 // Returns the merged geometries so the caller can dispose them.
 export function mergeByMaterial(root: THREE.Object3D) {
@@ -40,6 +42,9 @@ export function createFarmProps() {
   const materials = new Map<string, THREE.Material>();
   const geometries = new Map<string, THREE.BufferGeometry>();
   const textures: THREE.Texture[] = [];
+  // Lit windows and lamp bulbs: the day cycle turns `emissiveIntensity` up at dusk.
+  const glow = new THREE.MeshStandardMaterial({ color: '#cfe6ee', emissive: '#ffc96a', emissiveIntensity: 0, roughness: 0.4 });
+  materials.set('glow', glow);
   function material(color: string, roughness = 0.82) {
     let m = materials.get(color);
     if (!m) { m = new THREE.MeshStandardMaterial({ color, roughness }); materials.set(color, m); }
@@ -193,6 +198,18 @@ export function createFarmProps() {
         ball(fruit, COLORS.tomato, Math.sin(a) * 0.16, 0.2 + (i % 2) * 0.14, Math.cos(a) * 0.16, 0.085);
         ball(fruit, '#3f7a35', Math.sin(a) * 0.16, 0.28 + (i % 2) * 0.14, Math.cos(a) * 0.16, 0.035, 0.015, 0.035);
       }
+    } else if (kind === 'strawberry') {
+      // A low clump of trefoil leaves with white flowers; berries hang over the edge.
+      for (let i = 0; i < 7; i++) {
+        const a = i * 0.9, d = 0.06 + (i % 3) * 0.05, leaf = ball(leaves, i % 2 ? '#3f8f3a' : '#57a843', Math.sin(a) * d, 0.1 + (i % 2) * 0.05, Math.cos(a) * d, 0.11, 0.05, 0.09);
+        leaf.rotation.set(Math.cos(a) * 0.4, a, -Math.sin(a) * 0.4);
+      }
+      for (let i = 0; i < 3; i++) { const a = i * 2.1 + 1; ball(leaves, '#fffaf0', Math.sin(a) * 0.1, 0.2, Math.cos(a) * 0.1, 0.035, 0.02, 0.035); ball(leaves, '#f3c444', Math.sin(a) * 0.1, 0.21, Math.cos(a) * 0.1, 0.015); }
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.26 + 0.3, d = 0.2;
+        ball(fruit, COLORS.strawberry, Math.sin(a) * d, 0.08, Math.cos(a) * d, 0.055, 0.07, 0.055);
+        ball(fruit, '#3f8f3a', Math.sin(a) * d, 0.15, Math.cos(a) * d, 0.04, 0.012, 0.04);
+      }
     } else {
       for (let i = 0; i < 5; i++) {
         const a = i * 1.26, leaf = cylinder(leaves, i % 2 ? COLORS.leaf : '#5aa442', Math.sin(a) * 0.12, 0.14 + (i % 3) * 0.06, Math.cos(a) * 0.12, 0.12, 0.02);
@@ -224,7 +241,7 @@ export function createFarmProps() {
       const x = (i - 1) * 0.3;
       ball(g, COLORS.burlap, x, 0.6, 0, 0.14, 0.17, 0.13);
       ball(g, '#c4a271', x, 0.76, 0, 0.07, 0.04, 0.07);
-      ball(g, kind === 'tomato' ? COLORS.tomato : COLORS.cucumber, x, 0.61, 0.12, 0.055, kind === 'tomato' ? 0.055 : 0.04, 0.02);
+      ball(g, COLORS[kind], x, 0.61, 0.12, 0.055, kind === 'cucumber' ? 0.04 : 0.055, 0.02);
     }
     return g;
   }
@@ -238,8 +255,8 @@ export function createFarmProps() {
       const stripe = box(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.82, -0.2, 0.25, 0.06, 0.7); stripe.rotation.x = 0.32;
       rbox(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.66, 0.13, 0.25, 0.16, 0.04, 0.02);
     }
-    crate(g, -0.5, 0.79, 0); crate(g, 0.15, 0.79, 0);
-    rbox(g, '#6b8fb0', 0.72, 0.9, 0.05, 0.3, 0.2, 0.26, 0.04);
+    for (const x of SHELF_X) crate(g, x, 0.79, 0, 0.48);
+    rbox(g, '#6b8fb0', 0.86, 0.88, 0.12, 0.2, 0.16, 0.2, 0.04);
     return g;
   }
   function house() {
@@ -253,13 +270,59 @@ export function createFarmProps() {
     rbox(g, '#a6503e', 0.65, 2.05, -0.35, 0.28, 0.6, 0.28, 0.03);
     rbox(g, '#8a5a35', 1.11, 0.62, 0.3, 0.05, 0.85, 0.5, 0.03);
     ball(g, COLORS.coin, 1.14, 0.62, 0.45, 0.03);
-    for (const z of [-0.45]) { rbox(g, '#ffffff', 1.11, 0.9, z, 0.05, 0.45, 0.45, 0.03); rbox(g, '#9fd0e3', 1.13, 0.9, z, 0.03, 0.36, 0.36, 0.02); }
-    for (const x of [-0.5, 0.45]) { rbox(g, '#ffffff', x, 0.9, 0.91, 0.45, 0.45, 0.05, 0.03); rbox(g, '#9fd0e3', x, 0.9, 0.93, 0.36, 0.36, 0.03, 0.02); }
+    for (const z of [-0.45]) { rbox(g, '#ffffff', 1.11, 0.9, z, 0.05, 0.45, 0.45, 0.03); rbox(g, '#9fd0e3', 1.13, 0.9, z, 0.03, 0.36, 0.36, 0.02).material = glow; }
+    for (const x of [-0.5, 0.45]) { rbox(g, '#ffffff', x, 0.9, 0.91, 0.45, 0.45, 0.05, 0.03); rbox(g, '#9fd0e3', x, 0.9, 0.93, 0.36, 0.36, 0.03, 0.02).material = glow; }
     for (const x of [-0.5, 0.45]) rbox(g, '#e46a4f', x, 0.62, 1.0, 0.5, 0.12, 0.16, 0.04);
     return g;
   }
+  // A chibi shopper or child built from rounded shapes. Limb pivots are named like the Catcha
+  // models (arm-left, leg-right…) so the same walk code swings them.
+  type Look = { height: number; skin: string; shirt: string; legs: string; hair: string; style: 'short' | 'bun' | 'long' | 'cap' | 'curly' | 'pony'; dress?: boolean; seed: number };
+  function person(look: Look) {
+    const root = new THREE.Group(), k = look.height / 1.45, body = new THREE.Group(); root.add(body); body.scale.setScalar(k);
+    const limb = (name: string, x: number, y: number, color: string, end: string, length: number, width: number) => {
+      const pivot = new THREE.Group(); pivot.name = name; pivot.position.set(x, y, 0); body.add(pivot);
+      rbox(pivot, color, 0, -length / 2, 0, width, length, width, width / 2);
+      ball(pivot, end, 0, -length + 0.02, name.startsWith('leg') ? 0.03 : 0, width * 0.62, width * 0.5, width * (name.startsWith('leg') ? 0.85 : 0.6));
+      return pivot;
+    };
+    for (const side of [-1, 1]) limb(`leg-${side < 0 ? 'left' : 'right'}`, side * 0.09, 0.42, look.legs, '#3d3a3a', 0.36, 0.13);
+    rbox(body, look.shirt, 0, 0.62, 0, 0.36, 0.42, 0.24, 0.1);
+    if (look.dress) mesh(body, geometry('skirt', () => new THREE.CylinderGeometry(0.16, 0.27, 0.3, 16)), material(look.shirt), 0, 0.44, 0);
+    for (const side of [-1, 1]) limb(`arm-${side < 0 ? 'left' : 'right'}`, side * 0.23, 0.78, look.shirt, look.skin, 0.3, 0.1).rotation.z = side * 0.12;
+    const head = new THREE.Group(); head.position.y = 1.08; body.add(head);
+    ball(head, look.skin, 0, 0, 0, 0.27, 0.25, 0.25);
+    for (const side of [-1, 1]) {
+      ball(head, '#2a2220', side * 0.09, 0.0, 0.225, 0.035, 0.045, 0.02);
+      ball(head, '#ffffff', side * 0.09 + 0.012, 0.018, 0.24, 0.011);
+      ball(head, '#f19a8a', side * 0.15, -0.07, 0.19, 0.045, 0.025, 0.02);
+    }
+    ball(head, '#7a3b30', 0, -0.1, 0.235, 0.04, 0.015, 0.015);
+    const hair = (x: number, y: number, z: number, sx: number, sy = sx, sz = sx) => ball(head, look.hair, x, y, z, sx, sy, sz);
+    if (look.style === 'cap') {
+      mesh(head, geometry('cap', () => new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2)), material(look.hair), 0, 0.04, 0, 0.29, 0.24, 0.28);
+      const brim = cylinder(head, look.hair, 0, 0.07, 0.2, 0.17, 0.025); brim.scale.z = 0.12; brim.rotation.x = 0.15;
+    } else {
+      mesh(head, geometry('cap', () => new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2)), material(look.hair), 0, 0.02, -0.02, 0.29, 0.27, 0.28);
+      if (look.style === 'bun') hair(0, 0.27, -0.06, 0.11);
+      if (look.style === 'pony') { hair(0, 0.1, -0.27, 0.08); hair(0, -0.04, -0.31, 0.06, 0.12, 0.06); }
+      if (look.style === 'long') hair(0, -0.08, -0.12, 0.26, 0.28, 0.2);
+      if (look.style === 'curly') { const r = seeded(look.seed); for (let i = 0; i < 9; i++) { const a = i * 0.7; hair(Math.cos(a) * 0.2, 0.12 + r() * 0.1, Math.sin(a) * 0.2 - 0.05, 0.1); } }
+    }
+    for (const part of [body, head]) part.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    return root;
+  }
+  function lamp() {
+    const g = new THREE.Group();
+    cylinder(g, '#3d4a3f', 0, 0.06, 0, 0.13, 0.12);
+    cylinder(g, '#3d4a3f', 0, 0.85, 0, 0.04, 1.6);
+    rbox(g, '#3d4a3f', 0, 1.68, 0, 0.26, 0.05, 0.26, 0.02);
+    const bulb = ball(g, '#fff3c8', 0, 1.82, 0, 0.12, 0.14, 0.12); bulb.material = glow;
+    mesh(g, geometry('lampTop', () => new THREE.ConeGeometry(0.17, 0.14, 4)), material('#3d4a3f'), 0, 2.0, 0).rotation.y = Math.PI / 4;
+    return g;
+  }
   return {
-    material, box, rbox, ball, cylinder, surface, decal, label, canvasTexture, hedge, balustrade, cypress, roundTree, bush, crate, crop, fieldBed, seedStand, market, house,
+    glow, person, lamp, material, box, rbox, ball, cylinder, surface, decal, label, canvasTexture, hedge, balustrade, cypress, roundTree, bush, crate, crop, fieldBed, seedStand, market, house,
     dispose() { geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   };
 }

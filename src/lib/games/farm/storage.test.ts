@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFarm, purchaseLand } from './model';
+import { createFarm, purchaseNext } from './model';
 import { readFarm, saveFarm } from './storage';
 
 function memory(initial: string | null = null) {
@@ -9,7 +9,7 @@ function memory(initial: string | null = null) {
 describe('farm saves', () => {
   it('roundtrips progress and a completed purchase without charging again', () => {
     const store = memory(), s = createFarm();
-    s.wallet = 45; purchaseLand(s);
+    s.wallet = 45; purchaseNext(s);
     s.seeds.tomato = 3; s.produce.cucumber = 2; s.cash = 7; s.stock.tomato = 5;
     s.plots[0].cells[0].stage = 'growing'; s.plots[0].cells[0].age = 3;
     expect(saveFarm(store, s)).toBe(true);
@@ -17,7 +17,8 @@ describe('farm saves', () => {
     expect(loaded.wallet).toBe(5); expect(loaded.plots).toHaveLength(2);
     expect(loaded.produce.cucumber).toBe(2); expect(loaded.cash).toBe(7);
     expect(loaded.plots[0].cells[0].age).toBe(3);
-    expect(purchaseLand(loaded)).toBe(false);
+    expect(loaded.purchased).toBe(1);
+    expect(purchaseNext(loaded)).toBe(false);
   });
   it.each(['{bad', '{"version":99}', 'null', '[]', '{"version":1}'])('recovers from corrupt or unsupported saves: %s', value => {
     expect(readFarm(memory(value))).toEqual(createFarm());
@@ -32,6 +33,16 @@ describe('farm saves', () => {
       const s = createFarm(); mutate(s);
       expect(readFarm(memory(JSON.stringify(s)))).toEqual(createFarm());
     }
+  });
+  it('upgrades a save from before strawberries, goals and ratings', () => {
+    const old = { version: 1, player: { x: 1, z: 1 }, plots: [createFarm().plots[0], { id: 1, crop: 'cucumber', cells: createFarm().plots[0].cells.map(c => ({ ...c, id: c.id.replace('0-', '1-') })) }],
+      seeds: { tomato: 1, cucumber: 0 }, produce: { tomato: 2, cucumber: 3 }, stock: { tomato: 0, cucumber: 0 }, wallet: 7, cash: 0, sold: 20, muted: false, haptics: true };
+    const loaded = readFarm(memory(JSON.stringify(old)));
+    expect(loaded.plots).toHaveLength(2);
+    expect(loaded.purchased).toBe(1);
+    expect(loaded.produce).toEqual({ tomato: 2, cucumber: 3, strawberry: 0 });
+    expect(loaded.rating).toBe(3);
+    expect(loaded.goal).toBe(0);
   });
   it('works when browser storage is unavailable', () => {
     const store = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('full'); } };

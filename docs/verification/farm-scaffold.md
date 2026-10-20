@@ -19,3 +19,9 @@ The smoke run, in headless Chromium at 390×844 with touch:
 Reviewed by eye in the dev build at 375×812: the opening view, a mid-game field with a carried stack, the purchase tile and its reveal, ripe cucumbers, and the carrying pose.
 
 Not verified here: a physical iPhone (haptics use the shared module's Safari switch fallback, which depends on the iOS version), frame rate on older phones, and sound balance.
+
+## After the first phone playtest (same day)
+
+`pnpm check` clean; `pnpm test` 42 Vitest tests (21 farm) and 60 Catcha tests pass; `pnpm build` and the farm smoke against `vite preview` pass with no page errors or failed requests. The smoke now also checks the purchase track and goal rewards, and walks at the load-dependent speed.
+
+Reviewed in headless Chromium at 390×844: a fresh start, a three-field mid-game, night (`?time=0.78`), a shower (`?rain`), the centred pause dialog, and shoppers queueing with patience rings. The iOS top-inset fix uses an iOS-only CSS rule that desktop Chromium cannot exercise, so it still needs a look on the iPhone.

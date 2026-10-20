@@ -28,11 +28,14 @@ try {
       const dx = x - s.player.x, dz = z - s.player.z;
       if (Math.hypot(dx, dz) < 0.18) return;
       const legs = [[(dx - dz) * Math.SQRT1_2, 'ArrowLeft', 'ArrowRight'], [(dx + dz) * Math.SQRT1_2, 'ArrowUp', 'ArrowDown']];
+      // She runs at 3.6 and slows towards 55% of that as the basket fills (model.ts speed()).
+      const load = Object.values(s.produce).reduce((a, b) => a + b, 0) / (24 + 12 * ((s.purchased > 1) + (s.purchased > 3)));
+      const pace = 3.6 * (1 - 0.45 * load);
       for (const [delta, negative, positive] of downFirst ? legs.reverse() : legs) {
         if (Math.abs(delta) < 0.07) continue;
         const key = delta < 0 ? negative : positive;
         await page.keyboard.down(key);
-        await page.waitForTimeout(Math.max(40, Math.abs(delta) / 3.1 * 1000));
+        await page.waitForTimeout(Math.max(40, Math.abs(delta) / pace * 1000));
         await page.keyboard.up(key);
       }
     }
@@ -40,9 +43,9 @@ try {
     assert(Math.hypot(x - s.player.x, z - s.player.z) < 0.45, `Unable to reach ${x},${z}: ${JSON.stringify(s.player)}`);
   }
   // Rows nearest the path first, snaking so each step crosses one plant.
-  const snake = cells => [-20, -28, -36].flatMap((z, r) => {
+  const snake = cells => [-24, -32, -40].flatMap((z, r) => {
     const row = cells.filter(c => Math.round(c.z * 10) === z).sort((a, b) => a.x - b.x);
-    return r % 2 ? row : row.reverse();
+    return r % 2 ? row.reverse() : row;
   });
   // Genuine touch input, followed by cancellation, must move then release the character.
   const cdp = await context.newCDPSession(page);
@@ -57,36 +60,40 @@ try {
   assert(Math.abs((await current()).player.x - touched.player.x) < 0.05);
   report.push('Real one-thumb drag moves the character; cancellation releases movement.');
 
-  await walk(-2.2, -0.4);
+  await walk(-3.8, -0.4);
   assert.equal((await current()).seeds.tomato, 9);
   const cells = snake((await current()).plots[0].cells);
+  // Round the seed stand, into the near corner of the field.
+  await walk(cells[0].x, cells[0].z, true);
   for (const cell of cells) await walk(cell.x, cell.z);
   await walk(0, 0);
   await page.waitForTimeout(8200);
   await page.screenshot({ path: 'test-results/farm-portrait-390.png' });
-  await walk(-2.0, -2.0);
+  await walk(cells[0].x, cells[0].z, true);
   for (const cell of cells) await walk(cell.x, cell.z);
   const harvested = await current();
   console.log('Harvested', harvested.produce, harvested.plots[0].cells.map(c => c.stage));
   assert(harvested.produce.tomato >= 20);
   await walk(0, 0);
-  await walk(0.9, 2.3);
+  await walk(1.5, 2.9);
   assert.equal((await current()).produce.tomato, 0);
-  await walk(1.45, 3.1);
+  await walk(2.05, 3.7);
   await page.waitForFunction(() => {
     const text = document.querySelector('[data-wallet]')?.textContent;
     return Number(text) >= 40;
   }, undefined, { timeout: 35_000 });
   await walk(0, 0, true);
   const earned = (await current()).wallet;
-  await walk(2.8, -2.8);
-  await page.waitForFunction(() => document.querySelector('.field-count')?.textContent?.includes('2 fields'));
+  await walk(3.2, -3.2);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('pocket-farm:v1')).purchased === 1);
   const purchased = await current();
   assert.equal(purchased.plots.length, 2);
-  assert.equal(purchased.wallet, earned - 40);
+  // The purchase costs 40; completing the "buy the field" goal may pay its reward back in the same moment.
+  assert(purchased.wallet <= earned - 30, `charged ${earned} → ${purchased.wallet}`);
+  assert(purchased.goal >= 3, `goals completed: ${purchased.goal}`);
   await page.reload(); await page.locator('[data-ready="true"]').waitFor();
   const resumed = await current();
-  assert.equal(resumed.plots.length, 2); assert.equal(resumed.wallet, purchased.wallet);
+  assert.equal(resumed.plots.length, 2); assert.equal(resumed.purchased, 1); assert.equal(resumed.wallet, purchased.wallet);
   report.push('Seeds → planting → growth → harvest → delivery → customer sales → cash → first land purchase, then reload without duplicate spending.');
   await page.screenshot({ path: 'test-results/farm-expanded-390.png' });
 

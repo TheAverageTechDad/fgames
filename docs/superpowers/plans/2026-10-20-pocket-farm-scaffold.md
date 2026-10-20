@@ -84,3 +84,15 @@ The user asked to continue from the Codex scaffold and to aim for the reference 
 - Rendering: Neutral tone mapping, baked grass/paver/soil textures, rounded geometry, merged static world, cached crop templates, instanced stacks/coins/shelf, and shader precompilation behind the loading card.
 
 Verification for this session is recorded in `docs/verification/farm-scaffold.md`.
+
+## Session 3 rulings (20 October 2026, after the first phone playtest)
+
+Fixes from the recording: the back button, title and wallet sat under iOS 26's blurred status-bar strip (the page reported no top inset), so the farm keeps its top controls at least 52px down on iOS; the pause dialog was pinned top-left because Tailwind's reset removes the dialog's automatic margin; the "customers paid" hint stuck forever because shoppers pay continuously, so it now only leads at 20 coins.
+
+- Stakes (user's choice): goals plus patience. `currentGoal` walks an 11-step track (harvest, serve, buy, sell, reach stars…) then repeats a growing "serve N shoppers" goal; each pays a coin reward with a banner. The front shopper's patience (22 s) only drains while the shelf has nothing they will take; running out sends them off and costs 0.6 stars, serving gains 0.12. Stars start at 3, shorten shopper arrivals, and tip 1 coin at four stars and 2 at five. Shoppers only start coming after the first delivery, so the opening minute has no pressure.
+- Progression: purchases run in order — cucumber field $40, bigger basket $60 (24 → 36), strawberry patch $120, biggest basket $200 (48) — with one price tile showing at a time.
+- Space and pace: the farm grew from ±4.6 to ±6.4 with fields further apart. She runs at 3.6 and slows to 55% with a full basket; the step rate, bounce and lean follow.
+- Feel: Catcha's soft instanced dust puffs (`juice.ts`) behind her feet, on harvests, plants and purchases; squash and stretch on starting, stopping and picking up.
+- Life: Catcha's two boys run between play spots and sometimes chase each other; blurred bird silhouettes cross high above with faint ground shadows; hand-built shoppers (eight looks: men, women and children, varied hair, skin and clothes) replace the recoloured dad.
+- Time and weather: a five-minute outdoor day in Catcha's keyframe style (morning, midday, golden hour, dusk, moonlit night, dawn). Lamp posts, house windows and lamp pools glow at night with fireflies; night stays bright enough to play. A short light shower passes every few minutes. `?time=0.75` and `?rain` start at night or in the rain for checking.
+- Saves stay at `pocket-farm:v1`; new fields default for older saves (purchases are inferred from the fields owned).

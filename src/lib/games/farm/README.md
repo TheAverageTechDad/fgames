@@ -3,11 +3,12 @@
 Working title for the portrait farming game. Launch from the arcade or `/farm`.
 
 - `FarmGame.svelte`: portrait shell, wallet, compact task card, feedback, pause/settings, loading/errors, and lifecycle.
-- `model.ts`: independent simulation: layout, collisions, crops, inventory, the customer queue, shop exchanges, the first land unlock, and the next-goal guide.
-- `storage.ts`: versioned `pocket-farm:v1` save and validation. No offline growth. Customers are not saved.
-- `scene.ts`: disposable Three.js scene: isometric follow camera, characters, plants, carry stack, shoppers, cash pile, guide arrow, and transfer effects.
+- `model.ts`: independent simulation: layout, collisions, crops, inventory, load-based speed, the customer queue and patience, star rating, purchases, the goal track, and the next-step guide.
+- `storage.ts`: versioned `pocket-farm:v1` save and validation, defaulting fields older saves lack. No offline growth. Customers are not saved.
+- `juice.ts`: Catcha's soft dust puffs and the outdoor time-of-day keyframes.
+- `scene.ts`: disposable Three.js scene: isometric follow camera, the farmer's squash and dust, plants, carry stack, shoppers, children, birds, day/night, rain, cash pile, guide arrow, and transfer effects. `?time=0.75` starts at night, `?rain` starts a shower.
 - `world.ts`: the static farm (ground, stone paths, balustrade, hedges, house, trees, ground tiles), merged into a few draw calls.
-- `props.ts`: reusable local meshes and baked canvas textures for soil, crops, stands, market, hedges, trees, bushes and tiles.
+- `props.ts`: reusable local meshes and baked canvas textures for soil, crops, stands, market, hedges, trees, bushes, lamps, tiles and the hand-built shoppers.
 - `assets.ts`: shared local GLB references. Does not import or initialise Catcha.
 - `input.ts`: floating one-thumb stick, mouse drag, arrows/WASD (screen directions), input cancellation and cleanup.
 - `audio.ts`: gesture-unlocked sound effects with slight pitch variation; haptics through the shared Catcha module (works on iOS Safari's switch fallback).
@@ -16,14 +17,16 @@ Start: `pnpm dev`. Verify: `pnpm check`, `pnpm test`, `pnpm build`, then `FGAMES
 
 ## Layout and look
 
-The farm is laid out on world axes and drawn by an orthographic camera at 45°, like the reference: the stone cross reads as two diagonals, the tomato field sits at the top, the market at the bottom, the farmhouse on the left and the purchasable field on the right. The camera follows her and is clamped to the farm. Tall props stay clear of the tiles behind them because a height of `h` hides `h` units of ground further up the screen.
+The farm is laid out on world axes and drawn by an orthographic camera at 45°, like the reference: the stone cross reads as two diagonals, tomatoes at the top, cucumbers on the right, strawberries on the left with the farmhouse in their corner, and the market at the bottom, with room between them to run. The camera follows her and is clamped to the farm. Tall props stay clear of the tiles behind them because a height of `h` hides `h` units of ground further up the screen.
 
 Ground tiles (SEEDS, SELL, the price tile) are painted flat and unlit; everything else uses Neutral tone mapping, a hemisphere fill and one shadowing sun that follows the camera.
 
-## Loop
+## Loop and stakes
 
-Seed stands give free seeds, only as many as there are empty spots. She plants and harvests by walking through the soil. Produce and seeds stack visibly in her arms. At SELL the stack moves onto the counter. Up to three shoppers queue along the counter; the front one shows what they want, takes it one item at a time and pays per item onto the coin pile, so a reload never loses or duplicates goods. Walking over the coins banks them. Standing on the golden tile for 0.8 s buys the cucumber field and its seed stand.
+Seed stands give free seeds, one per empty spot. She plants and harvests by walking through the soil; produce stacks in her arms and slows her down. At SELL the stack moves onto the counter. Once the shop has opened, up to three shoppers queue; the front one shows what they want with a patience ring, takes it one item at a time and pays per item onto the coin pile. If the shelf has nothing for them their patience runs out and they leave unhappy, lowering the star rating; happy shoppers raise it, and more stars bring more shoppers and tips. Walking over the coins banks them.
+
+Purchases come one at a time on golden tiles: cucumber field, bigger basket, strawberry patch, biggest basket. The goal track (shown as the level in the task card) pays coin rewards. Nothing is ever lost and there is no game over.
 
 ## Next
 
-Crop reassignment, capacity and equipment upgrades, more connected expansion sections, workers, purpose-made shopper models, richer Blender props and farming animations, and final sound/voice production.
+Crop reassignment, more crops and land after the strawberry patch, workers, richer Blender props and farming animations, and final sound/voice production.

@@ -11,12 +11,12 @@ export function createFarmAudio(state: FarmState) {
   return {
     play(event: FarmEvent) {
       // Shared Catcha haptics: Vibration API on Android, the switch fallback on iOS Safari.
-      const pattern: Partial<Record<FarmEvent['type'], HapticPattern>> = { harvest: 'tick', delivery: 'tick', cash: 'land', purchase: 'celebrate' };
+      const pattern: Partial<Record<FarmEvent['type'], HapticPattern>> = { harvest: 'tick', delivery: 'tick', cash: 'land', purchase: 'celebrate', goal: 'celebrate', unhappy: 'sad' };
       if (state.haptics && !document.hidden && pattern[event.type]) haptic(pattern[event.type]);
       if (state.muted || !context || context.state !== 'running' || performance.now() - lastSound < 65) return;
       lastSound = performance.now();
-      const pitches = { seed: 480, plant: 330, harvest: 660, delivery: 440, sale: 740, served: 988, cash: 880, purchase: 1046 };
-      const notes = event.type === 'purchase' ? [1, 1.25, 1.5, 2] : event.type === 'cash' || event.type === 'served' ? [1, 1.5] : [1];
+      const pitches = { seed: 480, plant: 330, harvest: 660, delivery: 440, sale: 740, served: 988, unhappy: 220, cash: 880, purchase: 1046, goal: 784 };
+      const notes = event.type === 'goal' ? [1, 1.25, 1.5, 2, 2.5] : event.type === 'unhappy' ? [1, 0.8] : event.type === 'purchase' ? [1, 1.25, 1.5, 2] : event.type === 'cash' || event.type === 'served' ? [1, 1.5] : [1];
       const detune = 0.96 + Math.random() * 0.08;
       notes.forEach((pitch, i) => {
         const oscillator = context!.createOscillator(), gain = context!.createGain(), t = context!.currentTime + i * 0.075;
