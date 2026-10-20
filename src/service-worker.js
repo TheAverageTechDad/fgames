@@ -3,37 +3,51 @@ import { version } from '$app/env';
 
 const CACHE_NAME = `fgames-cache-${version}`;
 
-// Combine build chunks and static assets (icons, vehicles, images)
-const ASSETS_TO_CACHE = [
-	'/',
-	...immutable,
-	...assets.filter((file) => !file.startsWith('/.DS_Store')),
-	...prerendered
-];
+function getPath(entry) {
+	if (!entry) return null;
+	const p = typeof entry === 'string' ? entry : entry.path;
+	if (!p || typeof p !== 'string') return null;
+	return p.startsWith('/') ? p : `/${p}`;
+}
+
+const rawList = ['/', ...immutable, ...assets, ...prerendered];
+const ASSETS_TO_CACHE = Array.from(
+	new Set(
+		rawList
+			.map(getPath)
+			.filter((p) => p && !p.includes('.DS_Store'))
+	)
+);
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(
-		caches
-			.open(CACHE_NAME)
-			.then((cache) => cache.addAll(ASSETS_TO_CACHE))
-			.then(() => self.skipWaiting())
+		(async () => {
+			const cache = await caches.open(CACHE_NAME);
+			await Promise.allSettled(
+				ASSETS_TO_CACHE.map((url) =>
+					cache.add(url).catch((err) => {
+						console.warn('[SW] Could not precache:', url, err);
+					})
+				)
+			);
+			await self.skipWaiting();
+		})()
 	);
 });
 
 self.addEventListener('activate', (event) => {
 	event.waitUntil(
-		caches
-			.keys()
-			.then((keys) => {
-				return Promise.all(
-					keys.map((key) => {
-						if (key !== CACHE_NAME) {
-							return caches.delete(key);
-						}
-					})
-				);
-			})
-			.then(() => self.clients.claim())
+		(async () => {
+			const keys = await caches.keys();
+			await Promise.all(
+				keys.map((key) => {
+					if (key !== CACHE_NAME) {
+						return caches.delete(key);
+					}
+				})
+			);
+			await self.clients.claim();
+		})()
 	);
 });
 
@@ -47,10 +61,10 @@ self.addEventListener('fetch', (event) => {
 	if (url.origin !== location.origin) return;
 
 	event.respondWith(
-		caches.match(request).then((cachedResponse) => {
+		(async () => {
+			const cachedResponse = await caches.match(request);
 			if (cachedResponse) {
-				// Cache hit: return cached asset immediately
-				// If navigating, also refresh in background
+				// Revalidate in background for page navigation
 				if (request.mode === 'navigate') {
 					fetch(request)
 						.then((networkResponse) => {
@@ -63,30 +77,29 @@ self.addEventListener('fetch', (event) => {
 				return cachedResponse;
 			}
 
-			// Not in cache: fetch from network and store in cache
-			return fetch(request)
-				.then((networkResponse) => {
-					if (networkResponse && networkResponse.status === 200) {
-						const responseToCache = networkResponse.clone();
-						caches.open(CACHE_NAME).then((cache) => {
-							cache.put(request, responseToCache);
-						});
-					}
-					return networkResponse;
-				})
-				.catch(async () => {
-					// Offline fallback for navigation requests
-					if (request.mode === 'navigate') {
-						const cache = await caches.open(CACHE_NAME);
-						const rootCached = await cache.match('/');
-						if (rootCached) return rootCached;
-					}
-					return new Response('Offline: Game assets are cached and available offline.', {
-						status: 503,
-						statusText: 'Service Unavailable',
-						headers: new Headers({ 'Content-Type': 'text/plain' })
-					});
+			// If not in cache, fetch from network
+			try {
+				const networkResponse = await fetch(request);
+				if (networkResponse && networkResponse.status === 200) {
+					const responseToCache = networkResponse.clone();
+					const cache = await caches.open(CACHE_NAME);
+					cache.put(request, responseToCache);
+				}
+				return networkResponse;
+			} catch {
+				// If network fails (offline), return index.html for navigation requests
+				if (request.mode === 'navigate') {
+					const cache = await caches.open(CACHE_NAME);
+					const fallback = await cache.match('/');
+					if (fallback) return fallback;
+				}
+
+				return new Response('Offline: Game assets are cached and available offline.', {
+					status: 503,
+					statusText: 'Service Unavailable',
+					headers: new Headers({ 'Content-Type': 'text/plain' })
 				});
-		})
+			}
+		})()
 	);
 });
