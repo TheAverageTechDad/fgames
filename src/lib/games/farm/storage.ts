@@ -1,4 +1,4 @@
-import { createFarm, empty, makePlot, capacity, seedCapacity, total, BOUNDS, DECOR, FIELDS, GROW, HELPER_LOAD, HELPER_PRICES, NEST_SIZE, PRODUCTS, PURCHASES, UPGRADES, YARD,
+import { createFarm, empty, makePlot, capacity, seedCapacity, total, onLand, DECOR, FIELDS, GROW, HELPER_LOAD, HELPER_PRICES, HIVE_SIZE, NEST_SIZE, PRODUCTS, PURCHASES, UPGRADES,
   type DecorId, type FarmState, type Inventory, type UpgradeId } from './model';
 export const SAVE_KEY = 'pocket-farm:v1';
 type Reader = Pick<Storage, 'getItem'>;
@@ -24,8 +24,6 @@ const optional = (v: unknown, fallback: number, max: number, integer = true) => 
   if (!number(v, max, integer)) fail('Invalid value');
   return v as number;
 };
-const inside = (p: { x: number; z: number }, yard: boolean) => Number.isFinite(p?.x) && Number.isFinite(p?.z) && Math.abs(p.z) <= BOUNDS &&
-  p.x >= -BOUNDS && (p.x <= BOUNDS || yard && p.x <= YARD.maxX && p.z >= YARD.minZ && p.z <= YARD.maxZ);
 export function readFarm(storage: Reader): FarmState {
   try {
     const raw = storage.getItem(SAVE_KEY);
@@ -36,13 +34,14 @@ export function readFarm(storage: Reader): FarmState {
     const fresh = createFarm();
     // Saves from before the purchase track only bought the cucumber field.
     fresh.purchased = optional(s.purchased, s.plots.length - 1, PURCHASES.length);
-    const owned = PURCHASES.slice(0, fresh.purchased), yard = owned.some(p => p.kind === 'coop');
-    if (!s.player || !inside(s.player, yard)) return createFarm();
+    const owned = PURCHASES.slice(0, fresh.purchased), yard = owned.some(p => p.kind === 'coop'), orchard = owned.some(p => p.kind === 'orchard');
+    const inside = (p: { x: number; z: number }) => !!p && onLand(p, yard, orchard);
+    if (!inside(s.player)) return createFarm();
     const fields = [0, ...owned.flatMap(p => p.field ?? [])];
     if (fields.length !== s.plots.length) return createFarm();
     fresh.plots = s.plots.map((plot, i) => {
       const canonical = makePlot(fields[i]);
-      if (plot.id !== canonical.id || plot.crop !== canonical.crop || !Array.isArray(plot.cells) || plot.cells.length !== 9) fail('Invalid plot');
+      if (plot.id !== canonical.id || plot.crop !== canonical.crop || !Array.isArray(plot.cells) || plot.cells.length !== canonical.cells.length) fail('Invalid plot');
       canonical.cells.forEach((cell, j) => {
         const saved = plot.cells[j];
         if (!saved || !['empty', 'growing', 'ripe'].includes(saved.stage) || !number(saved.age, GROW[canonical.crop], false)) fail('Invalid crop');
@@ -61,13 +60,17 @@ export function readFarm(storage: Reader): FarmState {
     fresh.stock = inventory(s.stock, BIG);
     if (s.helpers !== undefined) {
       if (!Array.isArray(s.helpers) || s.helpers.length > HELPER_PRICES.length) fail('Invalid helpers');
-      fresh.helpers = s.helpers.map(h => { if (!inside(h, yard)) fail('Invalid helper'); return { x: h.x, z: h.z, carry: inventory(h.carry, HELPER_LOAD + 3) }; });
+      fresh.helpers = s.helpers.map(h => { if (!inside(h)) fail('Invalid helper'); return { x: h.x, z: h.z, carry: inventory(h.carry, HELPER_LOAD + 3) }; });
     }
     if (s.nests !== undefined) {
       if (!Array.isArray(s.nests) || s.nests.length !== fresh.nests.length || s.nests.some(n => !number(n, NEST_SIZE))) fail('Invalid nests');
       fresh.nests = [...s.nests];
     }
-    fresh.wallet = s.wallet; fresh.cash = s.cash; fresh.sold = s.sold;
+    if (s.hives !== undefined) {
+      if (!Array.isArray(s.hives) || s.hives.length !== fresh.hives.length || s.hives.some(n => !number(n, HIVE_SIZE))) fail('Invalid hives');
+      fresh.hives = [...s.hives];
+    }
+    fresh.wallet = s.wallet; fresh.cash = s.cash; fresh.sold = s.sold; fresh.standCash = optional(s.standCash, 0, BIG);
     fresh.rating = optional(s.rating, 3, 5, false);
     if (fresh.rating < 1) fail('Invalid rating');
     fresh.goal = optional(s.goal, 0, 10_000);

@@ -158,6 +158,8 @@ export function createFarmAudio(state: FarmState) {
     goal: () => { [783.99, 987.77, 1174.66, 1567.98].forEach((f, i) => bell(f, { at: i * 0.1, gain: 0.03, decay: 1.5 })); coin(3136, 0.4, 0.015); },
     // Eggs: a soft wooden tock with a little rise.
     egg: () => { const step = ladder('egg'); tone(note(587.33, step), { gain: 0.035, decay: 0.16, wet: 0.3 }); noise(0.025, { freq: 1300, q: 2, gain: 0.02 }); },
+    // Honey: a soft, round glug.
+    honey: () => { tone(330 * vary(), { gain: 0.035, decay: 0.18, glide: 1.6, wet: 0.3 }); tone(note(523.25, ladder('honey')), { at: 0.06, gain: 0.025, decay: 0.3, wet: 0.4 }); },
     upgrade: () => { noise(0.3, { freq: 600, q: 0.8, gain: 0.03, sweep: 4 }); [659.25, 880, 1318.5].forEach((f, i) => bell(f, { at: 0.2 + i * 0.09, gain: 0.03 })); }
   };
   return {

@@ -40,7 +40,7 @@ describe('farm saves', () => {
     const loaded = readFarm(memory(JSON.stringify(old)));
     expect(loaded.plots).toHaveLength(2);
     expect(loaded.purchased).toBe(1);
-    expect(loaded.produce).toEqual({ tomato: 2, cucumber: 3, strawberry: 0, egg: 0 });
+    expect(loaded.produce).toEqual({ tomato: 2, cucumber: 3, strawberry: 0, egg: 0, apple: 0, honey: 0 });
     expect(loaded.music).toBe(true);
     expect(loaded.rating).toBe(3);
     expect(loaded.goal).toBe(0);
@@ -51,7 +51,7 @@ describe('farm saves', () => {
     buyUpgrade(s, 'pouch'); buyDecor(s, 'arch'); hireHelper(s); s.nests = [2, 0, 4]; s.player = { x: 9, z: -1 };
     saveFarm(store, s);
     const loaded = readFarm(store);
-    expect(loaded.purchased).toBe(5); expect(loaded.upgrades.pouch).toBe(1); expect(loaded.decor).toEqual(['arch']);
+    expect(loaded.purchased).toBe(7); expect(loaded.upgrades.pouch).toBe(1); expect(loaded.decor).toEqual(['arch']);
     expect(loaded.helpers).toHaveLength(1); expect(loaded.nests).toEqual([2, 0, 4]); expect(loaded.player.x).toBe(9);
   });
   it('rejects unknown decorations and impossible upgrade levels', () => {

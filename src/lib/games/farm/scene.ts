@@ -6,8 +6,8 @@ import { buildFarmWorld, groundTile, LAMPS } from './world';
 import { createPuffs, createSky } from './juice';
 import { createFarmInput } from './input';
 import { createFarmAudio } from './audio';
-import { stepFarm, farmGoal, nextPurchase, speed, total, distance, hasCoop, boardOpen, buyUpgrade, buyDecor, hireHelper,
-  BOUNDS, PRODUCTS, FIELDS, GROW, SPOTS, NESTS, YARD, DECOR, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
+import { stepFarm, farmGoal, nextPurchase, speed, total, distance, hasCoop, hasOrchard, hasHives, stallFor, boardOpen, buyUpgrade, buyDecor, hireHelper,
+  BOUNDS, PRODUCTS, FIELDS, GROW, SPOTS, NESTS, HIVES, STALLS, YARD, ORCHARD, DECOR, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
   type FarmState, type FarmEvent, type Cell, type Crop, type Product, type Point, type DecorId, type UpgradeId } from './model';
 export type ShopAction = { kind: 'upgrade'; id: UpgradeId } | { kind: 'decor'; id: DecorId } | { kind: 'helper' };
 
@@ -34,9 +34,12 @@ const VIEW = new THREE.Vector3(1, 1.5, 1).normalize();
 const ISO = Math.SQRT1_2;
 const DAY_SECONDS = 300;
 // Shoppers queue along the counter, arriving from the right and leaving down the lane at the bottom.
-const SHOPPER_SLOT = (i: number) => new THREE.Vector3(SPOTS.counter.x + 0.25 + i * 0.72, 0, SPOTS.counter.z + 0.9);
-const SHOPPER_SPAWN = new THREE.Vector3(12, 0, SPOTS.counter.z + 0.9);
-const SHOPPER_EXIT = new THREE.Vector3(SPOTS.counter.x + 0.25, 0, 12);
+// The orchard stand's queue runs west along its counter; its shoppers walk up the stone path from the south.
+const SHOPPER_SLOT = (i: number, stall = 0) => stall
+  ? new THREE.Vector3(SPOTS.standCounter.x + 0.25 - i * 0.72, 0, SPOTS.standCounter.z + 0.9)
+  : new THREE.Vector3(SPOTS.counter.x + 0.25 + i * 0.72, 0, SPOTS.counter.z + 0.9);
+const SHOPPER_SPAWN = [new THREE.Vector3(12, 0, SPOTS.counter.z + 0.9), new THREE.Vector3(0.3, 0, 16)];
+const SHOPPER_EXIT = [new THREE.Vector3(SPOTS.counter.x + 0.25, 0, 12), new THREE.Vector3(-0.3, 0, 16)];
 // Where the children play: points on the paths and lawns, clear of the fields.
 const PLAYGROUND: Point[] = [{ x: 0, z: 0 }, { x: -5.5, z: 0 }, { x: 5.5, z: 0 }, { x: 0, z: -5.5 }, { x: 0, z: 5.5 }, { x: -1.4, z: 5.2 },
   { x: 4.0, z: 5.7 }, { x: -5.6, z: 3.4 }, { x: 0.3, z: -3 }, { x: -3, z: 0.2 }, { x: 4.8, z: 0.5 }, { x: 1.2, z: 4.6 }];
@@ -62,7 +65,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const camera = new THREE.OrthographicCamera(-3, 3, 6, -6, 0.1, 100);
   const focus = new THREE.Vector3(), aim = new THREE.Vector3(), reach = BOUNDS - 2.6;
   // The player sits a little above centre, clear of the bottom task card.
-  const focusTarget = () => aim.set(Math.max(-reach, Math.min(hasCoop(state) ? YARD.maxX - 2.4 : reach, state.player.x)) + 0.55, 0, Math.max(-reach, Math.min(reach + 0.4, state.player.z)) + 0.55);
+  const focusTarget = () => aim.set(Math.max(-reach, Math.min(hasCoop(state) ? YARD.maxX - 2.4 : reach, state.player.x)) + 0.55, 0, Math.max(-reach, Math.min(hasOrchard(state) ? ORCHARD.maxZ - 2.6 : reach + 0.4, state.player.z)) + 0.55);
   focus.copy(focusTarget());
   const resize = () => {
     const { width, height } = host.getBoundingClientRect();
@@ -79,7 +82,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
 
   // Fields, their plants, seed stands and SEEDS tiles; more open as they are bought.
   const fieldRoot = new THREE.Group(); scene.add(fieldRoot);
-  const plants = new Map<string, { cell: Cell; crop: Crop; group: THREE.Group; leaves: THREE.Object3D; fruit: THREE.Object3D; stage: Cell['stage']; changed: number }>();
+  const plants = new Map<string, { cell: Cell; crop: Crop; trees: boolean; group: THREE.Group; leaves: THREE.Object3D; fruit: THREE.Object3D; stage: Cell['stage']; changed: number }>();
   const beds: { group: THREE.Group; born: number }[] = [];
   let renderedPlots = 0, time = 0;
   function addPlots(animate: boolean) {
@@ -87,17 +90,21 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       // The bed pops in around its own centre, so its contents sit in an offset inner group.
       const field = FIELDS[plot.id], bed = new THREE.Group(); bed.position.set(field.x, 0, field.z); fieldRoot.add(bed);
       const inner = new THREE.Group(); inner.position.set(-field.x, 0, -field.z); bed.add(inner);
-      props.fieldBed(inner, field.x, field.z);
+      const trees = !!field.trees;
+      if (!trees) props.fieldBed(inner, field.x, field.z);
       for (const cell of plot.cells) {
-        const plant = props.crop(plot.crop); plant.group.position.set(cell.x, 0.17, cell.z); plant.group.rotation.y = (cell.x * 7 + cell.z * 3) % Math.PI; inner.add(plant.group);
-        plants.set(cell.id, { cell, crop: plot.crop, ...plant, stage: cell.stage, changed: -1 });
+        const plant = props.crop(plot.crop); plant.group.position.set(cell.x, trees ? 0 : 0.17, cell.z); plant.group.rotation.y = (cell.x * 7 + cell.z * 3) % Math.PI; inner.add(plant.group);
+        if (trees) plant.group.add(shadowDisc(0.6));
+        plants.set(cell.id, { cell, crop: plot.crop, trees, ...plant, stage: cell.stage, changed: -1 });
       }
       // Stands face away from their field, towards the path.
-      const stand = props.seedStand(plot.crop); stand.position.set(field.stand.x, 0, field.stand.z); stand.rotation.y = field.stand.z < field.z ? Math.PI : 0;
-      inner.add(stand);
-      groundTile(props, inner, field.tile.x, field.tile.z, 1.3, 0.8, (c, w, h) => {
-        tile(c, w, h, { dash: [2.2, 1.4] }); cropIcon(c, plot.crop, w * 0.24, h * 0.52, h * 0.2); tileText(c, 'SEEDS', w * 0.6, h * 0.53, h * 0.38);
-      });
+      if (field.stand && field.tile) {
+        const stand = props.seedStand(plot.crop); stand.position.set(field.stand.x, 0, field.stand.z); stand.rotation.y = field.stand.z < field.z ? Math.PI : 0;
+        inner.add(stand);
+        groundTile(props, inner, field.tile.x, field.tile.z, 1.3, 0.8, (c, w, h) => {
+          tile(c, w, h, { dash: [2.2, 1.4] }); cropIcon(c, plot.crop, w * 0.24, h * 0.52, h * 0.2); tileText(c, 'SEEDS', w * 0.6, h * 0.53, h * 0.38);
+        });
+      }
       beds.push({ group: bed, born: animate ? time : -10 });
     }
     renderedPlots = state.plots.length;
@@ -116,11 +123,20 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const next = nextPurchase(state);
     ring.visible = !!next;
     if (!next) return;
-    const field = next.field !== undefined ? FIELDS[next.field] : null, size = field ? 2.6 : 1.3;
+    const field = next.kind === 'field' ? FIELDS[next.field!] : null, size = field ? 2.6 : 1.3;
     if (field) props.rbox(offer, COLORS.lawn, next.at.x, 0.01, next.at.z, 2.95, 0.04, 2.95, 0.02);
     groundTile(props, offer, next.at.x, next.at.z, size, size, (c, w, h) => {
       tile(c, w, h, { fill: '#e9f7c955', radius: 0.14 });
-      if (field) {
+      if (next.kind === 'coop' || next.kind === 'hives') {
+        // A little house: the coop is red with an egg, the hive is cream with a honey jar.
+        c.fillStyle = next.kind === 'coop' ? '#b8453a' : '#fff3dc'; c.fillRect(w * 0.32, h * 0.27, w * 0.36, h * 0.22);
+        c.fillStyle = next.kind === 'coop' ? '#6e4a36' : '#c9553f'; c.beginPath(); c.moveTo(w * 0.27, h * 0.29); c.lineTo(w * 0.5, h * 0.15); c.lineTo(w * 0.73, h * 0.29); c.fill();
+        cropIcon(c, next.kind === 'coop' ? 'egg' : 'honey', w * 0.5, h * 0.4, h * 0.06);
+      } else if (next.kind === 'orchard') {
+        c.fillStyle = '#8a5a35'; c.fillRect(w * 0.47, h * 0.3, w * 0.06, h * 0.2);
+        c.fillStyle = '#4e8f37'; c.beginPath(); c.arc(w * 0.5, h * 0.27, h * 0.14, 0, Math.PI * 2); c.fill();
+        for (const [dx, dy] of [[-0.07, -0.02], [0.06, 0.02], [0, -0.09]]) cropIcon(c, 'apple', w * (0.5 + dx), h * (0.27 + dy), h * 0.03);
+      } else if (field) {
         c.fillStyle = '#ffffffcc'; c.beginPath(); c.roundRect(w * 0.27, h * 0.2, w * 0.46, h * 0.3, h * 0.04); c.fill();
         for (let i = 0; i < 3; i++) { c.fillStyle = '#7b4a2d'; c.fillRect(w * 0.31, h * (0.25 + i * 0.08), w * 0.38, h * 0.04); }
         cropIcon(c, field.crop, w * 0.66, h * 0.24, h * 0.06);
@@ -140,30 +156,31 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const instanced = (geometry: THREE.BufferGeometry, color: string, count: number, parent: THREE.Object3D) => {
     const m = new THREE.InstancedMesh(geometry, props.material(color), count); m.castShadow = true; m.count = 0; m.frustumCulled = false; parent.add(m); return m;
   };
-  const SHAPE: Record<Product | 'seed', [number, number, number]> = { tomato: [0.1, 0.095, 0.1], cucumber: [0.07, 0.065, 0.19], strawberry: [0.075, 0.085, 0.075], egg: [0.065, 0.085, 0.065], seed: [0.1, 0.08, 0.09] };
+  const SHAPE: Record<Product | 'seed', [number, number, number]> = { tomato: [0.1, 0.095, 0.1], cucumber: [0.07, 0.065, 0.19], strawberry: [0.075, 0.085, 0.075], egg: [0.065, 0.085, 0.065], apple: [0.1, 0.1, 0.1], honey: [0.08, 0.1, 0.08], seed: [0.1, 0.08, 0.09] };
   const shelf = Object.fromEntries(PRODUCTS.map(c => [c, instanced(sphere, COLORS[c], 9, scene)])) as Record<Product, THREE.InstancedMesh>;
-  const coins = instanced(coinGeometry, COLORS.coin, 36, scene);
+  const coins = instanced(coinGeometry, COLORS.coin, 72, scene);
   const matrix = new THREE.Matrix4(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), euler = new THREE.Euler();
   const place = (m: THREE.InstancedMesh, i: number, x: number, y: number, z: number, [sx, sy, sz]: [number, number, number], ry = 0) => {
     m.setMatrixAt(i, matrix.compose(position.set(x, y, z), quaternion.setFromEuler(euler.set(0, ry, 0)), scale.set(sx, sy, sz)));
   };
-  let shelfKey = '', cashKey = -1, stackKey = '';
+  let shelfKey = '', cashKey = '', stackKey = '';
   function updateShelfAndCash() {
     const key = PRODUCTS.map(c => state.stock[c]).join(':');
     if (key !== shelfKey) {
       shelfKey = key;
-      PRODUCTS.forEach((crop, c) => {
-        const m = shelf[crop], n = Math.min(9, state.stock[crop]); m.count = n;
-        for (let i = 0; i < n; i++) place(m, i, SPOTS.counter.x + SHELF_X[c] + (i % 3 - 1) * 0.12, 1.1 + Math.floor(i / 3) * 0.08, SPOTS.counter.z + (Math.floor(i / 3) % 2 - 0.5) * 0.1,
+      PRODUCTS.forEach(crop => {
+        // Each product sits in its own crate on the counter of the stall that sells it.
+        const stall = STALLS[stallFor(crop)], c = stall.accepts.indexOf(crop), m = shelf[crop], n = Math.min(9, state.stock[crop]); m.count = n;
+        for (let i = 0; i < n; i++) place(m, i, stall.counter.x + SHELF_X[c] + (i % 3 - 1) * 0.12, 1.1 + Math.floor(i / 3) * 0.08, stall.counter.z + (Math.floor(i / 3) % 2 - 0.5) * 0.1,
           SHAPE[crop].map(v => v * 0.85) as [number, number, number], crop === 'cucumber' ? 0 : i);
         m.instanceMatrix.needsUpdate = true;
       });
     }
-    const n = Math.min(36, Math.ceil(state.cash / 2));
-    if (n !== cashKey) {
-      cashKey = n; coins.count = n;
-      for (let i = 0; i < n; i++) { const s = i % 6; place(coins, i, SPOTS.cash.x + (s % 3 - 1) * 0.26, 0.03 + Math.floor(i / 6) * 0.047, SPOTS.cash.z + (Math.floor(s / 3) - 0.5) * 0.26, [1, 1, 1], i * 0.7); }
-      coins.instanceMatrix.needsUpdate = true;
+    const piles = [state.cash, state.standCash].map(c => Math.min(36, Math.ceil(c / 2))), key2 = piles.join(':');
+    if (key2 !== cashKey) {
+      cashKey = key2; let n = 0;
+      piles.forEach((count, p) => { const at = STALLS[p].cash; for (let i = 0; i < count; i++) { const s = i % 6; place(coins, n++, at.x + (s % 3 - 1) * 0.26, 0.03 + Math.floor(i / 6) * 0.047, at.z + (Math.floor(s / 3) - 0.5) * 0.26, [1, 1, 1], i * 0.7); } });
+      coins.count = n; coins.instanceMatrix.needsUpdate = true;
     }
   }
   groundTile(props, scene, SPOTS.cash.x, SPOTS.cash.z, 1.0, 0.8, (c, w, h) => tile(c, w, h, { fill: '#ffffff26', stroke: '#ffffff99', radius: 0.2 }));
@@ -189,13 +206,15 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     layer('strawberry', state.produce.strawberry, 0.15);
     layer('cucumber', state.produce.cucumber, 0.12);
     layer('egg', state.produce.egg, 0.14);
+    layer('apple', state.produce.apple, 0.18);
+    layer('honey', state.produce.honey, 0.18);
     stackHeight = y;
   }
   const stackTop = () => stack.localToWorld(new THREE.Vector3(0, stackHeight + 0.1, 0));
-  const shadowDisc = (radius: number) => {
+  function shadowDisc(radius: number) {
     const m = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), new THREE.MeshBasicMaterial({ color: '#2f4a22', transparent: true, opacity: 0.2, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = 0.04; return m;
-  };
+  }
   const farmerShadow = shadowDisc(0.34); scene.add(farmerShadow);
 
   // Guide: a bobbing arrow over the next goal and a chevron at her feet pointing to it.
@@ -253,7 +272,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   ] as const;
   const shoppers = new Map<number, Shopper>(), spare: Shopper[][] = LOOKS.map(() => []);
   const bubbleTextures: THREE.Texture[] = [];
-  function makeShopper(id: number): Shopper {
+  function makeShopper(id: number, stall: number): Shopper {
     const look = id % LOOKS.length;
     const shopper = spare[look].pop() ?? (() => {
       const group = props.person({ ...LOOKS[look], seed: id }), joints: THREE.Object3D[] = [];
@@ -272,7 +291,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       return made;
     })();
     Object.assign(shopper, { id, leaving: 0, key: '', happy: true, frontAt: 0 }); shopper.bubble.visible = false; shopper.group.userData.look = look;
-    shopper.group.position.copy(SHOPPER_SPAWN); shopper.group.visible = true; scene.add(shopper.group); shoppers.set(id, shopper);
+    shopper.group.userData.stall = stall;
+    shopper.group.position.copy(SHOPPER_SPAWN[stall]); shopper.group.visible = true; scene.add(shopper.group); shoppers.set(id, shopper);
     return shopper;
   }
   const grumpy = new Set<number>();
@@ -287,9 +307,11 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       const words = pick(shopper.happy ? SAY.thanks : SAY.grumpy, shopper.id);
       shopper.draw(`bye:${words}`, c => { phrase(c, words, 124, 86); tileText(c, shopper.happy ? '♥' : '…', 166, 58, 40, shopper.happy ? '#ff8fa8' : '#ffb28a'); });
     }
-    state.customers.forEach((c, i) => {
-      const shopper = shoppers.get(c.id) ?? makeShopper(c.id), slot = SHOPPER_SLOT(i), g = shopper.group.position;
-      const goal = c.wait > 0 ? SHOPPER_SPAWN.clone().lerp(slot, 1 - c.wait / ARRIVE_SECONDS) : slot;
+    const places = STALLS.map(() => 0);
+    state.customers.forEach(c => {
+      const i = places[c.stall]++;
+      const shopper = shoppers.get(c.id) ?? makeShopper(c.id, c.stall), slot = SHOPPER_SLOT(i, c.stall), g = shopper.group.position;
+      const goal = c.wait > 0 ? SHOPPER_SPAWN[c.stall].clone().lerp(slot, 1 - c.wait / ARRIVE_SECONDS) : slot;
       walkTo(shopper, goal, 7, dt);
       const front = i === 0 && c.wait === 0 && Math.hypot(g.x - slot.x, g.z - slot.z) < 0.1;
       shopper.bubble.visible = front;
@@ -312,9 +334,10 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       if (front || shopper.walk < 0.02) shopper.group.rotation.y = turn(shopper.group.rotation.y, Math.PI, dt * 10);
     });
     for (const shopper of shoppers.values()) if (shopper.leaving) {
-      walkTo(shopper, SHOPPER_EXIT, shopper.happy ? 2.2 : 3, dt);
+      const exit = SHOPPER_EXIT[shopper.group.userData.stall as number];
+      walkTo(shopper, exit, shopper.happy ? 2.2 : 3, dt);
       shopper.bubble.visible = time - shopper.leaving < 1.2;
-      if (shopper.group.position.distanceTo(SHOPPER_EXIT) < 0.1) { shopper.group.removeFromParent(); shoppers.delete(shopper.id); spare[shopper.group.userData.look].push(shopper); }
+      if (shopper.group.position.distanceTo(exit) < 0.1) { shopper.group.removeFromParent(); shoppers.delete(shopper.id); spare[shopper.group.userData.look].push(shopper); }
     }
   }
   // Walk animation shared by shoppers and children: legs and arms swing, a bob, a little squash on each step.
@@ -536,16 +559,59 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       }
     }
   }
-  // The stall is rebuilt as its upgrade level rises.
-  let stall: THREE.Group | null = null, stallLevel = -1, stallBorn = -10;
+  // The stalls are rebuilt as the Fancy stall level rises; the orchard stand appears with the orchard.
+  const stalls: (THREE.Group | null)[] = [null, null];
+  let stallKey = '', stallBorn = -10;
   function syncStall(animate: boolean) {
-    if (state.upgrades.stall === stallLevel) return;
-    stallLevel = state.upgrades.stall;
-    if (stall) { stall.removeFromParent(); stall.traverse(o => { if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) { o.material.map?.dispose(); o.material.dispose(); } }); }
-    stall = props.market(stallLevel); stall.position.set(SPOTS.counter.x, 0, SPOTS.counter.z); scene.add(stall);
-    stallBorn = animate ? time : -10;
+    const key = `${state.upgrades.stall}:${hasOrchard(state)}`;
+    if (key === stallKey) return;
+    stallKey = key; stallBorn = animate ? time : -10;
+    STALLS.forEach((spot, i) => {
+      stalls[i]?.removeFromParent();
+      stalls[i]?.traverse(o => { if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) { o.material.map?.dispose(); o.material.dispose(); } });
+      stalls[i] = null;
+      if (i === 1 && !hasOrchard(state)) return;
+      const stall = props.market(state.upgrades.stall, i ? '#5f9a52' : COLORS.tomato); stall.position.set(spot.counter.x, 0, spot.counter.z); scene.add(stall);
+      stalls[i] = stall;
+    });
   }
   syncStall(false);
+
+  // The orchard meadow: a fence, the stand's SELL tile and coin pad. The trees themselves are a plot.
+  const orchardRoot = new THREE.Group(); scene.add(orchardRoot);
+  let orchardBuilt = false;
+  function addOrchard() {
+    if (orchardBuilt || !hasOrchard(state)) return;
+    orchardBuilt = true;
+    const [x0, x1, z0, z1] = [-6.7, 0.95, 6.75, 11.3];
+    props.fence(orchardRoot, x0, z1, x1, z1); props.fence(orchardRoot, x0, z0 + 0.1, x0, z1); props.fence(orchardRoot, x1, 8.9, x1, z1);
+    props.rbox(orchardRoot, '#93c858', -3, 0.008, 9.6, 6.6, 0.01, 4.2, 0.02);
+    groundTile(props, orchardRoot, SPOTS.stand.x, SPOTS.stand.z, 1.2, 0.8, (c, w, h) => { tile(c, w, h, { dash: [2.2, 1.4] }); tileText(c, 'SELL', w / 2, h * 0.53, h * 0.44); });
+    groundTile(props, orchardRoot, SPOTS.standCash.x, SPOTS.standCash.z, 1.0, 0.8, (c, w, h) => tile(c, w, h, { fill: '#ffffff26', stroke: '#ffffff99', radius: 0.2 }));
+    for (const [x, z] of [[-6.1, 7.2], [-0.4, 10.8], [-6.2, 10.9]]) { const b = props.bush(0.38, x * 3 + z); b.position.set(x, 0, z); orchardRoot.add(b); }
+  }
+  // Beehives with jars of honey in front and a few bees looping round each.
+  const hiveRoot = new THREE.Group(); scene.add(hiveRoot);
+  const jars = instanced(sphere, COLORS.honey, HIVES.length * 3, scene), bees = instanced(sphere, '#2a2218', HIVES.length * 4, scene);
+  let hivesBuilt = false, jarKey = '';
+  function addHives() {
+    if (hivesBuilt || !hasHives(state)) return;
+    hivesBuilt = true;
+    for (const h of HIVES) { const hive = props.beehive(); hive.position.set(h.x, 0, h.z); hive.rotation.y = Math.PI / 4; hiveRoot.add(hive); }
+  }
+  function updateHives() {
+    if (!hivesBuilt) return;
+    const key = state.hives.join(':');
+    if (key !== jarKey) {
+      jarKey = key; let n = 0;
+      HIVES.forEach((h, i) => { for (let k = 0; k < state.hives[i]; k++) place(jars, n++, h.x + (k - 1) * 0.15 + 0.15, 0.1, h.z + 0.38, SHAPE.honey, 0); });
+      jars.count = n; jars.instanceMatrix.needsUpdate = true;
+    }
+    bees.count = HIVES.length * 4;
+    HIVES.forEach((h, i) => { for (let k = 0; k < 4; k++) { const a = time * (2 + k * 0.4) + k * 1.6 + i; place(bees, i * 4 + k, h.x + Math.cos(a) * 0.45, 0.8 + Math.sin(a * 2.3) * 0.2, h.z + Math.sin(a) * 0.45, [0.03, 0.03, 0.03]); } });
+    bees.instanceMatrix.needsUpdate = true;
+  }
+  addOrchard(); addHives();
   addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
   let squash = 1, lean = 0, wasMoving = false, stepPhase = 0, dustClock = 0, dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.06);
@@ -602,23 +668,26 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     if (event.type === 'harvest') { fly(item(event.crop!), v3(event.at, 0.4), stackTop, event.amount, { gap: 0.07 }); pulse(event.at, '#c8f07a', 0.5); dust(event.at.x, event.at.z, 4, 0.2, '#e6f5c0'); squash = 0.84; }
     if (event.type === 'plant' || event.type === 'harvest') { actionTime = 0.32; faceCell = event.at; }
     if (event.type === 'delivery') {
-      fly(item('tomato'), stackTop(), () => v3(SPOTS.counter, 1.15), Math.min(8, event.amount), { gap: 0.05, lift: 0.5 });
-      pulse(SPOTS.market, '#ffffff', 0.6); squash = 1.15;
+      const stall = STALLS[event.stall ?? 0];
+      fly(item(stall.accepts[0]), stackTop(), () => v3(stall.counter, 1.15), Math.min(8, event.amount), { gap: 0.05, lift: 0.5 });
+      pulse(stall.sell, '#ffffff', 0.6); squash = 1.15;
     }
     if (event.type === 'sale') {
-      fly(item(event.crop!), v3(SPOTS.counter, 1.15), () => SHOPPER_SLOT(0).setY(1.0), 1, { duration: 0.3, lift: 0.3 });
-      fly(item('coin'), SHOPPER_SLOT(0).setY(1.0), () => v3(SPOTS.cash, 0.3), 1, { delay: 0.25, duration: 0.4, lift: 0.5 });
+      const s = event.stall ?? 0;
+      fly(item(event.crop!), v3(STALLS[s].counter, 1.15), () => SHOPPER_SLOT(0, s).setY(1.0), 1, { duration: 0.3, lift: 0.3 });
+      fly(item('coin'), SHOPPER_SLOT(0, s).setY(1.0), () => v3(STALLS[s].cash, 0.3), 1, { delay: 0.25, duration: 0.4, lift: 0.5 });
     }
     if (event.type === 'unhappy') {
-      const s = SHOPPER_SLOT(0); dust(s.x, s.z, 6, 0.3, '#9aa0a0');
+      const s = SHOPPER_SLOT(0, event.stall ?? 0); dust(s.x, s.z, 6, 0.3, '#9aa0a0');
       for (const id of shoppers.keys()) if (!state.customers.some(c => c.id === id) && !shoppers.get(id)!.leaving) grumpy.add(id);
     }
-    if (event.type === 'cash') { fly(item('coin'), v3(SPOTS.cash, 0.2), () => farmer.position.clone().setY(1.0), Math.min(10, Math.ceil(event.amount / 2)), { gap: 0.035, duration: 0.35 }); pulse(SPOTS.cash, '#ffe07a', 0.7); }
+    if (event.type === 'cash') { fly(item('coin'), v3(event.at, 0.2), () => farmer.position.clone().setY(1.0), Math.min(10, Math.ceil(event.amount / 2)), { gap: 0.035, duration: 0.35 }); pulse(event.at, '#ffe07a', 0.7); }
     if (event.type === 'purchase') { addPlots(true); updateOffer(); callbacks.save(); pulse(event.at, '#ffe07a', 2.2); burst(v3(event.at, 0.3)); dust(event.at.x, event.at.z, 14, 1.2); }
+    if (event.type === 'honey') { fly(item('honey'), v3(event.at, 0.8), stackTop, event.amount, { gap: 0.08 }); pulse(event.at, '#ffd27a', 0.5); squash = 0.86; }
     if (event.type === 'egg') { fly(item('egg'), v3(event.at, 0.35), stackTop, event.amount, { gap: 0.06 }); pulse(event.at, '#fff2c2', 0.45); squash = 0.86; }
     if (event.type === 'helper') dust(event.at.x, event.at.z, 2, 0.15, '#e6f5c0');
     if (event.type === 'upgrade') { burst(v3(event.at, 0.6), 30); pulse(event.at, '#ffe07a', 1.4); dust(event.at.x, event.at.z, 10, 0.6); }
-    if (event.type === 'purchase' && !yardBuilt) addYard();
+    if (event.type === 'purchase') { addYard(); addOrchard(); addHives(); syncStall(true); }
     if (event.type === 'goal') { burst(farmer.position.clone().setY(1.6), 30); pulse(state.player, '#ffe07a', 1.2); squash = 1.25; callbacks.save(); }
     if (event.type === 'cash' || event.type === 'delivery') callbacks.save();
     const point = new THREE.Vector3(event.at.x, 0.8, event.at.z).project(camera);
@@ -673,10 +742,11 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       if (cell.stage !== plant.stage) { plant.stage = cell.stage; plant.changed = time; }
       const since = time - plant.changed;
       group.visible = cell.stage !== 'empty';
-      const growth = cell.stage === 'ripe' ? 1 : 0.25 + cell.age / GROW[crop] * 0.75;
-      leaves.scale.setScalar(growth * (cell.stage === 'growing' && since < 0.4 ? pop(since / 0.4) : 1));
+      const growth = plant.trees ? 1 : cell.stage === 'ripe' ? 1 : 0.25 + cell.age / GROW[crop] * 0.75;
+      if (plant.trees) group.visible = true;
+      leaves.scale.setScalar(growth * (!plant.trees && cell.stage === 'growing' && since < 0.4 ? pop(since / 0.4) : 1));
       fruit.visible = cell.stage === 'ripe'; fruit.scale.setScalar(cell.stage === 'ripe' ? pop(Math.min(1, since / 0.45)) : 0.01);
-      group.rotation.z = Math.sin(time * 1.8 + cell.x * 3) * (cell.stage === 'ripe' ? 0.05 : 0.025);
+      group.rotation.z = Math.sin(time * 1.8 + cell.x * 3) * (cell.stage === 'ripe' ? 0.05 : 0.025) * (plant.trees ? 0.25 : 1);
     }
     for (const bed of beds) bed.group.scale.setScalar(bed.born < 0 ? 1 : pop(Math.min(1, (time - bed.born) / 0.6)));
     updateOffer();
@@ -691,7 +761,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     }
     updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
     boardRoot.visible = boardOpen(state);
-    if (stall && stallBorn >= 0) stall.scale.setScalar(pop(Math.min(1, (time - stallBorn) / 0.6)));
+    if (stallBorn >= 0) for (const st of stalls) st?.scale.setScalar(pop(Math.min(1, (time - stallBorn) / 0.6)));
+    updateHives();
     for (const [id, d] of decorations) {
       if (d.born >= 0) d.group.scale.setScalar(pop(Math.min(1, (time - d.born) / 0.6)));
       if (id === 'windmill') (d.group.userData.sails as THREE.Group).rotation.z += dt * 0.7;

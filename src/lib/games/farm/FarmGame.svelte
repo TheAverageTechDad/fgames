@@ -32,10 +32,11 @@
   function save() { if (!saveFarm(store, farm)) saveWarning = true; }
   function event(e: FarmEvent, target: { x: number; y: number }) {
     const bought = PURCHASES[farm.purchased - 1];
-    const messages = { seed: `+${e.amount} seeds`, plant: '', served: '', sale: '', harvest: `+${e.amount} ${e.crop === 'tomato' ? 'tomatoes' : e.crop === 'cucumber' ? 'cucumbers' : 'strawberries'}`,
+    const messages = { seed: `+${e.amount} seeds`, plant: '', served: '', sale: '', harvest: `+${e.amount} ${{ tomato: 'tomatoes', cucumber: 'cucumbers', strawberry: 'strawberries', apple: 'apples' }[e.crop as string] ?? ''}`,
       delivery: `${e.amount} fresh picks delivered`, cash: `+$${e.amount}`, unhappy: 'A shopper left without their order',
-      purchase: bought?.kind === 'basket' ? `Bigger basket! Carry ${capacity(farm)}` : `New field! ${farm.plots.at(-1)?.crop === 'strawberry' ? 'Strawberries' : 'Cucumbers'} unlocked`,
-      goal: `Goal complete! +$${e.amount}`, egg: `+${e.amount} ${e.amount === 1 ? 'egg' : 'eggs'}`, helper: '',
+      purchase: { basket: `Bigger basket! Carry ${capacity(farm)}`, coop: 'The chicken coop is open!', orchard: 'The orchard and its stand are open!', hives: 'The bees have moved in!',
+        field: `New field! ${farm.plots.at(-1)?.crop === 'strawberry' ? 'Strawberries' : 'Cucumbers'} unlocked` }[bought?.kind ?? 'field'],
+      goal: `Goal complete! +$${e.amount}`, egg: `+${e.amount} ${e.amount === 1 ? 'egg' : 'eggs'}`, honey: `+${e.amount} ${e.amount === 1 ? 'jar' : 'jars'} of honey`, helper: '',
       upgrade: e.id === 'helper' ? 'A farmhand joined the farm!' : e.id && e.id in DECOR ? `${DECOR[e.id as DecorId].name} added!` : e.id ? `${UPGRADES[e.id as UpgradeId].name} level ${farm.upgrades[e.id as UpgradeId]}!` : '' };
     // A goal banner stays up a little longer and is not cut short by ordinary pickups.
     if (messages[e.type] && (!toastBig || e.type === 'goal')) {
@@ -74,7 +75,8 @@
         engine = createFarmScene(host, farm, { update: () => { hud = snapshot(); }, event, save });
         await engine.ready;
         if (!cancelled) { loading = false; host.dataset.ready = 'true'; }
-      } catch {
+      } catch (err) {
+        console.error('Pocket Farm failed to load', err);
         engine?.destroy();
         if (!cancelled) { loading = false; error = 'Your farm couldn’t load. Try opening it again.'; }
       }

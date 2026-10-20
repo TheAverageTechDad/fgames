@@ -25,8 +25,8 @@ Ground tiles (SEEDS, SELL, the price tile) are painted flat and unlit; everythin
 
 Seed stands give free seeds, one per empty spot. She plants and harvests by walking through the soil; produce stacks in her arms and slows her down. At SELL the stack moves onto the counter. Once the shop has opened, up to three shoppers queue; the front one shows what they want with a patience ring, takes it one item at a time and pays per item onto the coin pile. If the shelf has nothing for them their patience runs out and they leave unhappy, lowering the star rating; happy shoppers raise it, and more stars bring more shoppers and tips. Walking over the coins banks them.
 
-Purchases come one at a time on golden tiles: cucumber field, bigger basket, strawberry patch, biggest basket, chicken coop. The SHOP tile by the farmhouse sells upgrades, farmhands and decorations. The goal track (shown as the level in the task card) pays coin rewards. Nothing is ever lost and there is no game over.
+Purchases come one at a time on golden tiles: cucumber field, bigger basket, strawberry patch, biggest basket, chicken coop, orchard (with its own stand for apples and honey), beehives. The SHOP tile by the farmhouse sells upgrades, farmhands and decorations. The goal track (shown as the level in the task card) pays coin rewards. Nothing is ever lost and there is no game over.
 
 ## Next
 
-Crop reassignment, a beehive and more land, richer Blender props and farming animations, and the user's voice clips.
+Crop reassignment, more land and products, richer Blender props and farming animations, and the user's voice clips.

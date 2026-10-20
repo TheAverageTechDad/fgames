@@ -109,3 +109,11 @@ Fixes from the recording: the back button, title and wallet sat under iOS 26's b
 - Planting was fine before and keeps its original sound and loudness (scaled for the quieter bus).
 - Fourth playtest: the shimmer on the SHOP sign and fountain came from the shadow camera sliding with the view by fractions of a texel; it now moves in whole shadow-map texels (and the sign plate and fountain water sit a little proud of their backing). The scarecrow moved from the far corner to beside the tomato field. Sprinklers now show: one head per level on each field's corners, spinning and misting in turns.
 - The Fancy stall now shows each level: fresh green paint and bunting, then flower boxes and lanterns, then a FARM FRESH sign and side baskets. The stall left the merged static world so it can be rebuilt. Farmhands also collect eggs once the coop is open, going in and out of the yard by its gate.
+
+## Session 5 rulings (20 October 2026): a second stand and more to farm
+
+- New land past the bottom-left hedge, south of the farmhouse, reached down the stone path: the orchard ($600, after the coop) with six apple trees that refill on their own (14 s, no seed) and an orchard stand with its own queue, coin pile and patience; then beehives ($900) with three hives that fill with honey jars (one every 7 s, up to 3 each). Apples sell for 6, honey for 10.
+- The two stalls split the goods: the market takes the fields' crops and eggs, the orchard stand takes apples and honey. Stocking a stall moves only what it sells, so a mixed load is split across both. Fancy stall levels dress and price both stalls.
+- Customers carry a stall index; each stall has its own arrival and serving clock. Farmhands also pick apples and gather honey, go through the yard and orchard entrances, and take each load to the stall that sells it.
+- Four goals join the track (open the orchard, sell 20 apples, keep bees, sell 10 jars). Saves keep `pocket-farm:v1`; the new fields default for older saves.
+- The load-error screen now logs its cause to the console.

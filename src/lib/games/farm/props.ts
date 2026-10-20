@@ -10,7 +10,7 @@ export function seeded(seed: number) {
 export const COLORS = {
   grass: '#79b545', lawn: '#86c04f', hedge: '#9cc43c', hedgeDark: '#7fa830', foliage: '#4e8f37', foliageLight: '#6fad45',
   cypress: '#3f7d3a', soil: '#7b4a2d', ridge: '#8f5836', paver: '#ddd3be', stone: '#efe5cb', wood: '#b9824a', woodDark: '#8a5a35',
-  tomato: '#e5463a', cucumber: '#3f8a35', strawberry: '#e8344f', egg: '#fbf1dc', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
+  tomato: '#e5463a', cucumber: '#3f8a35', strawberry: '#e8344f', egg: '#fbf1dc', apple: '#d8402f', honey: '#f0a32a', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
 };
 type Draw = (c: CanvasRenderingContext2D, w: number, h: number) => void;
 // Crate positions along the counter, one per crop, shared with the scene's shelf display.
@@ -186,7 +186,15 @@ export function createFarmProps() {
   }
   function buildCrop(kind: Crop) {
     const leaves = new THREE.Group(), fruit = new THREE.Group();
-    if (kind === 'tomato') {
+    if (kind === 'apple') {
+      // An apple tree: the canopy stays, the apples come and go.
+      cylinder(leaves, COLORS.woodDark, 0, 0.5, 0, 0.1, 1.0);
+      for (const [x, y, z, r, c] of [[0, 1.45, 0, 0.62, COLORS.foliage], [-0.32, 1.3, 0.2, 0.42, COLORS.foliageLight], [0.3, 1.35, -0.18, 0.44, COLORS.foliageLight], [0.05, 1.8, 0.05, 0.4, '#5d9c3e']] as const) ball(leaves, c, x, y, z, r);
+      for (let i = 0; i < 9; i++) {
+        const a = i * 0.7, h = 1.15 + (i % 3) * 0.28, d = 0.52 + (i % 2) * 0.12;
+        ball(fruit, i % 4 ? COLORS.apple : '#e6c13a', Math.cos(a) * d, h, Math.sin(a) * d, 0.085);
+      }
+    } else if (kind === 'tomato') {
       cylinder(leaves, '#c8a06b', 0.12, 0.33, -0.08, 0.018, 0.66);
       cylinder(leaves, '#3f7a35', 0, 0.2, 0, 0.03, 0.4);
       for (let i = 0; i < 5; i++) {
@@ -247,15 +255,16 @@ export function createFarmProps() {
   }
   // The stall dresses up with each Fancy stall level: fresh paint and bunting, then flower boxes and lanterns,
   // then a FARM FRESH sign on top and baskets of produce either side.
-  function market(level = 0) {
-    const g = new THREE.Group(), body = level ? '#5f9a70' : COLORS.woodDark, slat = level ? '#fff3dc' : '#9d6a3e';
+  // `awning` sets the stripe colour: tomato red at the market, leaf green at the orchard stand.
+  function market(level = 0, awning = COLORS.tomato) {
+    const g = new THREE.Group(), body = level ? (awning === COLORS.tomato ? '#5f9a70' : '#b8743e') : COLORS.woodDark, slat = level ? '#fff3dc' : '#9d6a3e';
     rbox(g, body, 0, 0.36, 0, 1.9, 0.72, 0.8, 0.05);
     for (let i = 0; i < 5; i++) box(g, slat, -0.76 + i * 0.38, 0.36, 0.405, 0.04, 0.62, 0.01);
     rbox(g, '#d9a865', 0, 0.75, 0, 2.02, 0.08, 0.9, 0.03);
     for (const x of [-0.92, 0.92]) rbox(g, COLORS.woodDark, x, 0.95, -0.36, 0.08, 1.9, 0.08, 0.03);
     for (let i = 0; i < 8; i++) {
-      const stripe = box(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.82, -0.2, 0.25, 0.06, 0.7); stripe.rotation.x = 0.32;
-      rbox(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.66, 0.13, 0.25, 0.16, 0.04, 0.02);
+      const stripe = box(g, i % 2 ? '#fff3dc' : awning, -0.875 + i * 0.25, 1.82, -0.2, 0.25, 0.06, 0.7); stripe.rotation.x = 0.32;
+      rbox(g, i % 2 ? '#fff3dc' : awning, -0.875 + i * 0.25, 1.66, 0.13, 0.25, 0.16, 0.04, 0.02);
     }
     for (const x of SHELF_X) crate(g, x, 0.79, 0, 0.42);
     rbox(g, '#6b8fb0', 0.8, 0.9, -0.3, 0.22, 0.18, 0.16, 0.04);
@@ -363,6 +372,15 @@ export function createFarmProps() {
     g.userData.arm = arm;
     return g;
   }
+  // A beehive: stacked painted boxes on legs with a little roof; bees are drawn by the scene.
+  function beehive() {
+    const g = new THREE.Group();
+    for (const [x, z] of [[-0.18, -0.15], [0.18, -0.15], [-0.18, 0.15], [0.18, 0.15]]) rbox(g, COLORS.woodDark, x, 0.1, z, 0.05, 0.2, 0.05, 0.01);
+    for (let i = 0; i < 3; i++) rbox(g, i % 2 ? '#f3e2b0' : '#fff3dc', 0, 0.3 + i * 0.2, 0, 0.5, 0.19, 0.44, 0.03);
+    const roof = rbox(g, '#c9553f', 0, 0.94, 0, 0.6, 0.08, 0.54, 0.03); roof.rotation.x = 0.06;
+    rbox(g, '#3a2a1e', 0, 0.25, 0.225, 0.2, 0.04, 0.02, 0.01);
+    return g;
+  }
   function coop() {
     const g = new THREE.Group();
     rbox(g, '#b8453a', 0, 0.62, 0, 2.0, 1.0, 1.0, 0.05);
@@ -445,7 +463,7 @@ export function createFarmProps() {
     return g;
   }
   return {
-    sprinkler, fence, coop, nestBox, hen, signboard, decoration,
+    beehive, sprinkler, fence, coop, nestBox, hen, signboard, decoration,
     glow, person, lamp, material, box, rbox, ball, cylinder, surface, decal, label, canvasTexture, hedge, balustrade, cypress, roundTree, bush, crate, crop, fieldBed, seedStand, market, house,
     dispose() { geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   };
@@ -472,10 +490,12 @@ export function cropIcon(c: CanvasRenderingContext2D, crop: Product, x: number, 
   if (crop === 'tomato') { c.fillStyle = '#e5463a'; c.arc(x, y, r, 0, Math.PI * 2); }
   else if (crop === 'cucumber') { c.fillStyle = '#3f8a35'; c.ellipse(x, y, r * 0.55, r * 1.1, 0.6, 0, Math.PI * 2); }
   else if (crop === 'egg') { c.fillStyle = '#fbf1dc'; c.ellipse(x, y + r * 0.05, r * 0.72, r * 0.95, 0, 0, Math.PI * 2); }
+  else if (crop === 'apple') { c.fillStyle = '#d8402f'; c.arc(x - r * 0.3, y, r * 0.75, 0, Math.PI * 2); c.arc(x + r * 0.3, y, r * 0.75, 0, Math.PI * 2); }
+  else if (crop === 'honey') { c.fillStyle = '#f0a32a'; c.roundRect(x - r * 0.75, y - r * 0.6, r * 1.5, r * 1.5, r * 0.3); c.fill(); c.beginPath(); c.fillStyle = '#c9553f'; c.roundRect(x - r * 0.85, y - r * 0.95, r * 1.7, r * 0.45, r * 0.15); }
   else { c.fillStyle = '#e8344f'; c.moveTo(x, y + r * 1.05); c.bezierCurveTo(x - r * 1.3, y - r * 0.1, x - r * 0.7, y - r * 0.95, x, y - r * 0.7); c.bezierCurveTo(x + r * 0.7, y - r * 0.95, x + r * 1.3, y - r * 0.1, x, y + r * 1.05); }
   c.fill();
   if (crop === 'strawberry') { c.fillStyle = '#ffe9a0'; for (const [dx, dy] of [[-0.3, -0.2], [0.3, -0.2], [0, 0.15], [-0.25, 0.4], [0.25, 0.4]]) { c.beginPath(); c.arc(x + dx * r, y + dy * r, r * 0.07, 0, Math.PI * 2); c.fill(); } }
   c.fillStyle = '#ffffff55'; c.beginPath(); c.ellipse(x - r * 0.3, y - r * 0.35, r * 0.25, r * 0.15, -0.6, 0, Math.PI * 2); c.fill();
-  if (crop === 'egg') return;
+  if (crop === 'egg' || crop === 'honey') return;
   c.fillStyle = '#4f9a3c'; c.beginPath(); c.ellipse(x + (crop === 'cucumber' ? r * 0.45 : 0), y - r * (crop === 'cucumber' ? 0.85 : 0.9), r * 0.35, r * 0.16, 0.3, 0, Math.PI * 2); c.fill();
 }

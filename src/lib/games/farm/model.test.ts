@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFarm, stepFarm, purchaseNext, buyUpgrade, buyDecor, hireHelper, farmGoal, currentGoal, capacity, speed, priceOf, growTime, hasCoop,
+import { createFarm, stepFarm, purchaseNext, hasHives, HIVES, ORCHARD, buyUpgrade, buyDecor, hireHelper, farmGoal, currentGoal, capacity, speed, priceOf, growTime, hasCoop,
   BASE_CAPACITY, FIELDS, GROW, LAY_SECONDS, NESTS, PATIENCE_SECONDS, PRICES, PURCHASES, RUN_SPEED, SPOTS, YARD } from './model';
 
 const stay = { x: 0, z: 0 };
@@ -12,13 +12,13 @@ function visit(s: ReturnType<typeof createFarm>, point: { x: number; z: number }
 describe('Pocket Farm loop', () => {
   it('supplies free seeds for the empty spots only and plants the assigned crop', () => {
     const s = createFarm();
-    visit(s, FIELDS[0].tile);
+    visit(s, FIELDS[0].tile!);
     expect(s.seeds.tomato).toBe(9);
     const cell = s.plots[0].cells[0];
     visit(s, cell);
     expect(cell.stage).toBe('growing');
     expect(s.seeds.tomato).toBe(8);
-    visit(s, FIELDS[0].tile);
+    visit(s, FIELDS[0].tile!);
     expect(s.seeds.tomato).toBe(8);
   });
   it('grows crops while active, collects them, and leaves ripe crops when full', () => {
@@ -62,18 +62,18 @@ describe('Pocket Farm loop', () => {
   it('sends an unserved shopper away unhappy and lowers the rating; serving raises it', () => {
     const s = createFarm();
     s.sold = 1; s.player = { ...away };
-    s.customers = [{ id: 1, crop: 'tomato', want: 1, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
+    s.customers = [{ id: 1, stall: 0, crop: 'tomato', want: 1, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
     const events = stepFarm(s, PATIENCE_SECONDS + 0.1, stay);
     expect(events.some(e => e.type === 'unhappy')).toBe(true);
     expect(s.rating).toBeCloseTo(2.4);
-    s.customers = [{ id: 2, crop: 'tomato', want: 1, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
+    s.customers = [{ id: 2, stall: 0, crop: 'tomato', want: 1, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
     s.stock.tomato = 1;
     stepFarm(s, 0.3, stay);
     expect(s.rating).toBeCloseTo(2.52);
   });
   it('lets an empty-handed shopper switch to produce that is in stock', () => {
     const s = createFarm();
-    s.customers = [{ id: 1, crop: 'cucumber', want: 2, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
+    s.customers = [{ id: 1, stall: 0, crop: 'cucumber', want: 2, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
     s.stock.tomato = 2; s.player = { ...away };
     stepFarm(s, 0.6, stay);
     expect(s.stock.tomato).toBe(0);
@@ -82,11 +82,11 @@ describe('Pocket Farm loop', () => {
   it('buys each purchase once, in order: field, basket, field, basket', () => {
     const s = createFarm();
     expect(purchaseNext(s)).toBe(false);
-    s.wallet = 1000;
-    for (const p of PURCHASES) expect(purchaseNext(s)).toBe(true);
+    s.wallet = 10_000;
+    for (const p of PURCHASES) expect(purchaseNext(s), p.kind).toBe(true);
     expect(purchaseNext(s)).toBe(false);
-    expect(s.wallet).toBe(1000 - PURCHASES.reduce((a, p) => a + p.price, 0));
-    expect(s.plots.map(p => p.crop)).toEqual(['tomato', 'cucumber', 'strawberry']);
+    expect(s.wallet).toBe(10_000 - PURCHASES.reduce((a, p) => a + p.price, 0));
+    expect(s.plots.map(p => p.crop)).toEqual(['tomato', 'cucumber', 'strawberry', 'apple']);
     expect(capacity(s)).toBe(BASE_CAPACITY + 24);
     expect(hasCoop(s)).toBe(true);
   });
@@ -118,14 +118,14 @@ describe('Pocket Farm loop', () => {
     s.seeds.tomato = 2;
     expect(s.plots[0].cells).toContainEqual(expect.objectContaining(farmGoal(s).at));
     s.cash = 45;
-    expect(farmGoal(s).at).toEqual(SPOTS.cash);
+    expect(farmGoal(s).at).toMatchObject(SPOTS.cash);
   });
   it('walks around solid props, and a seed stand only once its field exists', () => {
     const s = createFarm();
     s.player = { x: SPOTS.counter.x, z: SPOTS.counter.z + 0.9 };
     for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
     expect(s.player.z).toBeGreaterThan(SPOTS.counter.z);
-    const stand = FIELDS[1].stand;
+    const stand = FIELDS[1].stand!;
     s.player = { x: stand.x, z: stand.z + 0.9 };
     for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
     expect(s.player.z).toBeLessThan(stand.z);
@@ -184,11 +184,44 @@ describe('Pocket Farm loop', () => {
   });
   it('farmhands fetch eggs from the coop through the gate and stock them', () => {
     const s = createFarm();
-    s.wallet = 100_000; while (purchaseNext(s));
+    s.wallet = 100_000; for (let i = 0; i < 5; i++) purchaseNext(s);
     hireHelper(s); s.nests = [4, 4, 4]; s.player = { x: 0, z: -6 };
     for (let i = 0; i < 600; i++) stepFarm(s, 0.05, stay);
     expect(s.stats.harvested.egg).toBeGreaterThan(0);
     expect(s.stock.egg + s.stats.sold.egg).toBeGreaterThan(0);
+  });
+  it('the orchard sells apples and honey at its own stand, while the market keeps the rest', () => {
+    const s = createFarm();
+    s.wallet = 100_000; while (purchaseNext(s));
+    expect(hasHives(s)).toBe(true);
+    const tree = s.plots[3].cells[0];
+    expect(tree.stage).toBe('ripe');
+    s.player = { x: tree.x, z: tree.z };
+    stepFarm(s, 0.2, stay);
+    expect(s.produce.apple).toBe(3);
+    expect(tree.stage).toBe('growing');
+    s.produce.tomato = 2;
+    s.player = { ...SPOTS.market }; stepFarm(s, 0.2, stay);
+    expect(s.produce.apple).toBe(3); expect(s.stock.tomato).toBe(2);
+    s.player = { ...SPOTS.stand }; stepFarm(s, 0.2, stay);
+    expect(s.produce.apple).toBe(0); expect(s.stock.apple).toBe(3);
+    s.player = { x: 0, z: -6 };
+    for (let i = 0; i < 200; i++) stepFarm(s, 0.05, stay);
+    expect(s.stats.sold.apple).toBeGreaterThan(0);
+    expect(s.standCash).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) stepFarm(s, 0.1, stay);
+    expect(s.hives.some(h => h > 0)).toBe(true);
+    s.player = { ...HIVES[0] }; stepFarm(s, 0.2, stay);
+  });
+  it('keeps her off the orchard until it is bought, then lets her in by the path', () => {
+    const s = createFarm();
+    s.player = { x: 0, z: 6.2 };
+    for (let i = 0; i < 30; i++) stepFarm(s, 0.05, { x: 0, z: 1 });
+    expect(s.player.z).toBeLessThanOrEqual(6.4);
+    s.wallet = 100_000; while (purchaseNext(s));
+    for (let i = 0; i < 30; i++) stepFarm(s, 0.05, { x: 0, z: 1 });
+    expect(s.player.z).toBeGreaterThan(7);
+    expect(s.player.z).toBeLessThanOrEqual(ORCHARD.maxZ);
   });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();
