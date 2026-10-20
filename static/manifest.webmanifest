@@ -1,0 +1,37 @@
+{
+  "name": "Offline Games - Nuts & Bolts & Escape",
+  "short_name": "Offline Games",
+  "description": "Play 3D Nuts & Bolts screw sorting and Escape car slider puzzle offline anytime without WiFi.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#181226",
+  "theme_color": "#181226",
+  "orientation": "portrait",
+  "categories": ["games", "puzzle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

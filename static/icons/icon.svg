@@ -1,0 +1,136 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'>
+    <defs>
+      <!-- Background Gradient -->
+      <radialGradient id='bgGrad' cx='50%' cy='35%' r='65%'>
+        <stop offset='0%' stop-color='#3b2568'/>
+        <stop offset='60%' stop-color='#1e1338'/>
+        <stop offset='100%' stop-color='#0f091c'/>
+      </radialGradient>
+
+      <!-- Gold Nut Gradients -->
+      <linearGradient id='goldNutTop' x1='0%' y1='0%' x2='100%' y2='100%'>
+        <stop offset='0%' stop-color='#fde047'/>
+        <stop offset='50%' stop-color='#eab308'/>
+        <stop offset='100%' stop-color='#ca8a04'/>
+      </linearGradient>
+      <linearGradient id='goldNutSide' x1='0%' y1='0%' x2='0%' y2='100%'>
+        <stop offset='0%' stop-color='#ca8a04'/>
+        <stop offset='100%' stop-color='#854d0e'/>
+      </linearGradient>
+
+      <!-- Silver Screw Gradients -->
+      <linearGradient id='silverShaft' x1='0%' y1='0%' x2='100%' y2='0%'>
+        <stop offset='0%' stop-color='#94a3b8'/>
+        <stop offset='30%' stop-color='#f8fafc'/>
+        <stop offset='70%' stop-color='#cbd5e1'/>
+        <stop offset='100%' stop-color='#64748b'/>
+      </linearGradient>
+
+      <!-- Red Car Gradients -->
+      <linearGradient id='redCar' x1='0%' y1='0%' x2='100%' y2='50%'>
+        <stop offset='0%' stop-color='#ef4444'/>
+        <stop offset='50%' stop-color='#dc2626'/>
+        <stop offset='100%' stop-color='#991b1b'/>
+      </linearGradient>
+      <linearGradient id='windowGrad' x1='0%' y1='0%' x2='0%' y2='100%'>
+        <stop offset='0%' stop-color='#38bdf8'/>
+        <stop offset='100%' stop-color='#0284c7'/>
+      </linearGradient>
+
+      <!-- Drop Shadows -->
+      <filter id='shadow' x='-20%' y='-20%' width='140%' height='140%'>
+        <feDropShadow dx='0' dy='12' stdDeviation='10' flood-color='#000000' flood-opacity='0.65'/>
+      </filter>
+      <filter id='glow' x='-20%' y='-20%' width='140%' height='140%'>
+        <feGaussianBlur stdDeviation='6' result='blur'/>
+        <feComposite in='SourceGraphic' in2='blur' operator='over'/>
+      </filter>
+    </defs>
+
+    <!-- Outer Squircle / Circle for Icon -->
+    <rect x='0' y='0' width='512' height='512' rx='112' fill='url(#bgGrad)'/>
+    
+
+    <!-- Outer Border Glow -->
+    <rect x='6' y='6' width='500' height='500' rx='106' fill='none' stroke='#f59e0b' stroke-width='4' stroke-opacity='0.4'/>
+
+    <!-- Background Sparkles / Dots -->
+    <circle cx='100' cy='110' r='4' fill='#fef08a' opacity='0.7'/>
+    <circle cx='410' cy='120' r='6' fill='#fef08a' opacity='0.8'/>
+    <circle cx='420' cy='340' r='3' fill='#93c5fd' opacity='0.6'/>
+    <circle cx='90' cy='360' r='4' fill='#93c5fd' opacity='0.6'/>
+    <path d='M390 100 L395 115 L410 120 L395 125 L390 140 L385 125 L370 120 L385 115 Z' fill='#fde047' filter='url(#glow)'/>
+
+    <!-- Centered Composition: 3D Bolt, Nut & Escape Truck -->
+    <g filter='url(#shadow)'>
+      <!-- Vertical Screw Bolt -->
+      <g transform='translate(256, 175)'>
+        <!-- Top rounded dome cap -->
+        <path d='M-24 -45 C-24 -68 24 -68 24 -45 Z' fill='url(#silverShaft)' stroke='#e2e8f0' stroke-width='1.5'/>
+        <!-- Threaded Shaft -->
+        <rect x='-22' y='-45' width='44' height='150' fill='url(#silverShaft)'/>
+        <!-- Thread Ridges -->
+        <line x1='-24' y1='-30' x2='24' y2='-25' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+        <line x1='-24' y1='-10' x2='24' y2='-5' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+        <line x1='-24' y1='10' x2='24' y2='15' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+        <line x1='-24' y1='30' x2='24' y2='35' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+        <line x1='-24' y1='50' x2='24' y2='55' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+        <line x1='-24' y1='70' x2='24' y2='75' stroke='#ffffff' stroke-width='3.5' stroke-linecap='round'/>
+
+        <!-- Base Pedestal Washer -->
+        <ellipse cx='0' cy='105' rx='75' ry='24' fill='url(#silverShaft)' stroke='#475569' stroke-width='2'/>
+      </g>
+
+      <!-- Golden 3D Hex Nut (Hovering mid-bolt) -->
+      <g transform='translate(256, 195)'>
+        <!-- Nut Side Bevels -->
+        <path d='M-85 -10 L-85 24 L-44 54 L44 54 L85 24 L85 -10 Z' fill='url(#goldNutSide)'/>
+        <!-- Nut Front Vertical Facet -->
+        <path d='M-44 20 L44 20 L44 54 L-44 54 Z' fill='#a16207'/>
+        <path d='M-85 -10 L-44 20 L-44 54 L-85 24 Z' fill='#854d0e'/>
+        <path d='M44 20 L85 -10 L85 24 L44 54 Z' fill='#713f12'/>
+
+        <!-- Nut Top Face (Hexagon with hole) -->
+        <path d='M0 -56 L76 -20 L76 16 L0 52 L-76 16 L-76 -20 Z' fill='url(#goldNutTop)' stroke='#fef08a' stroke-width='2'/>
+        <!-- Center Hole -->
+        <ellipse cx='0' cy='-2' rx='32' ry='16' fill='#1e1338' stroke='#ca8a04' stroke-width='3'/>
+        <!-- Embossed star on front face -->
+        <path d='M0 26 L3 33 L10 33 L5 37 L7 44 L0 40 L-7 44 L-5 37 L-10 33 L-3 33 Z' fill='#fef08a'/>
+      </g>
+    </g>
+
+    <!-- Red Escape Truck (Zooming to the right across bottom) -->
+    <g transform='translate(256, 365)' filter='url(#shadow)'>
+      <!-- Shadow under car -->
+      <ellipse cx='0' cy='46' rx='130' ry='16' fill='#000000' opacity='0.55'/>
+
+      <!-- Car Body -->
+      <rect x='-110' y='-32' width='220' height='74' rx='22' fill='url(#redCar)' stroke='#fca5a5' stroke-width='2.5'/>
+
+      <!-- Windshield & Windows -->
+      <rect x='28' y='-24' width='48' height='58' rx='10' fill='url(#windowGrad)' stroke='#e0f2fe' stroke-width='2'/>
+      <rect x='-40' y='-24' width='56' height='58' rx='8' fill='#1e293b' opacity='0.75'/>
+
+      <!-- Chevron Arrow on Cargo Box -->
+      <path d='M-78 -16 L-56 5 L-78 26 L-62 26 L-40 5 L-62 -16 Z' fill='#ffffff' filter='url(#glow)'/>
+
+      <!-- Headlights (Glowing Yellow) -->
+      <ellipse cx='108' cy='-14' rx='6' ry='10' fill='#fef08a' filter='url(#glow)'/>
+      <ellipse cx='108' cy='24' rx='6' ry='10' fill='#fef08a' filter='url(#glow)'/>
+
+      <!-- Front Grille / Bumper -->
+      <rect x='104' y='-6' width='10' height='22' rx='4' fill='#334155'/>
+
+      <!-- Wheels (Top and Bottom) -->
+      <rect x='-75' y='-42' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
+      <rect x='48' y='-42' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
+      <rect x='-75' y='40' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
+      <rect x='48' y='40' width='36' height='12' rx='4' fill='#0f172a' stroke='#475569' stroke-width='1.5'/>
+    </g>
+
+    <!-- Bottom Badge Ribbon: OFFLINE GAMES -->
+    <g transform='translate(256, 452)' filter='url(#shadow)'>
+      <rect x='-115' y='-16' width='230' height='32' rx='16' fill='#0f172a' stroke='#f59e0b' stroke-width='2'/>
+      <text x='0' y='6' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='13' letter-spacing='2.5' fill='#fde047'>OFFLINE GAMES</text>
+    </g>
+  </svg>
