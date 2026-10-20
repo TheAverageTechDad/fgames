@@ -6,8 +6,10 @@ import { buildFarmWorld, groundTile, LAMPS } from './world';
 import { createPuffs, createSky } from './juice';
 import { createFarmInput } from './input';
 import { createFarmAudio } from './audio';
-import { stepFarm, farmGoal, nextPurchase, speed, total, distance, BOUNDS, CROPS, FIELDS, GROW, SPOTS, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
-  type FarmState, type FarmEvent, type Cell, type Crop, type Point } from './model';
+import { stepFarm, farmGoal, nextPurchase, speed, total, distance, hasCoop, boardOpen, buyUpgrade, buyDecor, hireHelper,
+  BOUNDS, PRODUCTS, FIELDS, GROW, SPOTS, NESTS, YARD, DECOR, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
+  type FarmState, type FarmEvent, type Cell, type Crop, type Product, type Point, type DecorId, type UpgradeId } from './model';
+export type ShopAction = { kind: 'upgrade'; id: UpgradeId } | { kind: 'decor'; id: DecorId } | { kind: 'helper' };
 
 type Callbacks = {
   update: () => void;
@@ -16,7 +18,16 @@ type Callbacks = {
 };
 type Flight = { mesh: THREE.Object3D; from: THREE.Vector3; to: () => THREE.Vector3; delay: number; age: number; duration: number; lift: number };
 type Walker = { group: THREE.Group; joints: THREE.Object3D[]; phase: number; walk: number; squash: number };
-type Shopper = Walker & { id: number; bubble: THREE.Sprite; draw: (key: string, paint: (c: CanvasRenderingContext2D) => void) => void; key: string; leaving: number; happy: boolean };
+type Shopper = Walker & { id: number; bubble: THREE.Sprite; draw: (key: string, paint: (c: CanvasRenderingContext2D) => void) => void; key: string; leaving: number; happy: boolean; frontAt: number };
+// What shoppers say: a greeting as they reach the counter, a nudge when kept waiting, a thank-you or a sigh as they go.
+const SAY = {
+  hello: ['Hello!', 'Ooh, fresh!', 'Smells lovely!', 'Morning!', 'What a farm!', 'Yum, yum!', 'Hi there!'],
+  order: ['Just one, please', 'Two, please!', 'Three, please!'],
+  waiting: ['Hello?', 'Still waiting…', 'Any more?', 'Hmm…', 'Tick tock…'],
+  thanks: ['Thank you!', 'Delicious!', 'See you soon!', 'So fresh!', 'Lovely!', 'Yum!', 'Perfect!'],
+  grumpy: ['Never mind…', 'Maybe later', 'Hmph!', 'Oh well…']
+};
+const pick = (list: string[], id: number, salt = 0) => list[(id * 7 + salt * 3) % list.length];
 
 // 45° isometric view from the (+x, +z) corner: world (-x, -z) is screen up.
 const VIEW = new THREE.Vector3(1, 1.5, 1).normalize();
@@ -28,7 +39,7 @@ const SHOPPER_SPAWN = new THREE.Vector3(12, 0, SPOTS.counter.z + 0.9);
 const SHOPPER_EXIT = new THREE.Vector3(SPOTS.counter.x + 0.25, 0, 12);
 // Where the children play: points on the paths and lawns, clear of the fields.
 const PLAYGROUND: Point[] = [{ x: 0, z: 0 }, { x: -5.5, z: 0 }, { x: 5.5, z: 0 }, { x: 0, z: -5.5 }, { x: 0, z: 5.5 }, { x: -1.4, z: 5.2 },
-  { x: 5.4, z: 5.4 }, { x: -5.6, z: 3.4 }, { x: 0.3, z: -3 }, { x: -3, z: 0.2 }, { x: 4.8, z: 0.5 }, { x: 1.2, z: 4.6 }];
+  { x: 4.0, z: 5.7 }, { x: -5.6, z: 3.4 }, { x: 0.3, z: -3 }, { x: -3, z: 0.2 }, { x: 4.8, z: 0.5 }, { x: 1.2, z: 4.6 }];
 const ease = (t: number) => 1 - (1 - t) ** 3;
 const pop = (t: number) => t >= 1 ? 1 : 1 + Math.sin(t * Math.PI) * 0.25 * (1 - t) + (ease(t) - 1);
 const turn = (from: number, to: number, k: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * Math.min(1, k);
@@ -50,7 +61,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const camera = new THREE.OrthographicCamera(-3, 3, 6, -6, 0.1, 100);
   const focus = new THREE.Vector3(), aim = new THREE.Vector3(), reach = BOUNDS - 2.6;
   // The player sits a little above centre, clear of the bottom task card.
-  const focusTarget = () => aim.set(Math.max(-reach, Math.min(reach, state.player.x)) + 0.55, 0, Math.max(-reach, Math.min(reach + 0.4, state.player.z)) + 0.55);
+  const focusTarget = () => aim.set(Math.max(-reach, Math.min(hasCoop(state) ? YARD.maxX - 2.4 : reach, state.player.x)) + 0.55, 0, Math.max(-reach, Math.min(reach + 0.4, state.player.z)) + 0.55);
   focus.copy(focusTarget());
   const resize = () => {
     const { width, height } = host.getBoundingClientRect();
@@ -128,8 +139,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const instanced = (geometry: THREE.BufferGeometry, color: string, count: number, parent: THREE.Object3D) => {
     const m = new THREE.InstancedMesh(geometry, props.material(color), count); m.castShadow = true; m.count = 0; m.frustumCulled = false; parent.add(m); return m;
   };
-  const SHAPE: Record<Crop | 'seed', [number, number, number]> = { tomato: [0.1, 0.095, 0.1], cucumber: [0.07, 0.065, 0.19], strawberry: [0.075, 0.085, 0.075], seed: [0.1, 0.08, 0.09] };
-  const shelf = Object.fromEntries(CROPS.map(c => [c, instanced(sphere, COLORS[c], 9, scene)])) as Record<Crop, THREE.InstancedMesh>;
+  const SHAPE: Record<Product | 'seed', [number, number, number]> = { tomato: [0.1, 0.095, 0.1], cucumber: [0.07, 0.065, 0.19], strawberry: [0.075, 0.085, 0.075], egg: [0.065, 0.085, 0.065], seed: [0.1, 0.08, 0.09] };
+  const shelf = Object.fromEntries(PRODUCTS.map(c => [c, instanced(sphere, COLORS[c], 9, scene)])) as Record<Product, THREE.InstancedMesh>;
   const coins = instanced(coinGeometry, COLORS.coin, 36, scene);
   const matrix = new THREE.Matrix4(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3(), position = new THREE.Vector3(), euler = new THREE.Euler();
   const place = (m: THREE.InstancedMesh, i: number, x: number, y: number, z: number, [sx, sy, sz]: [number, number, number], ry = 0) => {
@@ -137,12 +148,12 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   };
   let shelfKey = '', cashKey = -1, stackKey = '';
   function updateShelfAndCash() {
-    const key = CROPS.map(c => state.stock[c]).join(':');
+    const key = PRODUCTS.map(c => state.stock[c]).join(':');
     if (key !== shelfKey) {
       shelfKey = key;
-      CROPS.forEach((crop, c) => {
+      PRODUCTS.forEach((crop, c) => {
         const m = shelf[crop], n = Math.min(9, state.stock[crop]); m.count = n;
-        for (let i = 0; i < n; i++) place(m, i, SPOTS.counter.x + SHELF_X[c] + (i % 3 - 1) * 0.13, 1.1 + Math.floor(i / 3) * 0.08, SPOTS.counter.z + (Math.floor(i / 3) % 2 - 0.5) * 0.1,
+        for (let i = 0; i < n; i++) place(m, i, SPOTS.counter.x + SHELF_X[c] + (i % 3 - 1) * 0.12, 1.1 + Math.floor(i / 3) * 0.08, SPOTS.counter.z + (Math.floor(i / 3) % 2 - 0.5) * 0.1,
           SHAPE[crop].map(v => v * 0.85) as [number, number, number], crop === 'cucumber' ? 0 : i);
         m.instanceMatrix.needsUpdate = true;
       });
@@ -159,15 +170,15 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const farmer = new THREE.Group(); farmer.position.set(state.player.x, 0, state.player.z); scene.add(farmer);
   const body = new THREE.Group(); farmer.add(body);
   const stack = new THREE.Group(); stack.position.set(0, 0.78, 0.36); body.add(stack);
-  const carried = { seed: instanced(sphere, COLORS.burlap, 12, stack), ...Object.fromEntries(CROPS.map(c => [c, instanced(sphere, COLORS[c], 48, stack)])) } as Record<Crop | 'seed', THREE.InstancedMesh>;
+  const carried = { seed: instanced(sphere, COLORS.burlap, 24, stack), ...Object.fromEntries(PRODUCTS.map(c => [c, instanced(sphere, COLORS[c], 48, stack)])) } as Record<Product | 'seed', THREE.InstancedMesh>;
   let stackHeight = 0;
   function updateStack() {
-    const key = `${total(state.seeds)}:${CROPS.map(c => state.produce[c]).join(':')}`;
+    const key = `${total(state.seeds)}:${PRODUCTS.map(c => state.produce[c]).join(':')}`;
     if (key === stackKey) return;
     stackKey = key;
     // Two columns: seed bags at the bottom, then the harvest piled on top.
     let y = 0;
-    const layer = (kind: Crop | 'seed', n: number, h: number) => {
+    const layer = (kind: Product | 'seed', n: number, h: number) => {
       const m = carried[kind]; m.count = n;
       for (let i = 0; i < n; i++) place(m, i, (i % 2 - 0.5) * 0.21, y + Math.floor(i / 2) * h + h / 2, ((i * 7) % 3 - 1) * 0.015, SHAPE[kind], kind === 'cucumber' ? 0 : i * 0.9);
       y += Math.ceil(n / 2) * h; m.instanceMatrix.needsUpdate = true;
@@ -176,6 +187,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     layer('tomato', state.produce.tomato, 0.17);
     layer('strawberry', state.produce.strawberry, 0.15);
     layer('cucumber', state.produce.cucumber, 0.12);
+    layer('egg', state.produce.egg, 0.14);
     stackHeight = y;
   }
   const stackTop = () => stack.localToWorld(new THREE.Vector3(0, stackHeight + 0.1, 0));
@@ -205,7 +217,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   function fly(make: () => THREE.Object3D, from: THREE.Vector3, to: () => THREE.Vector3, count: number, { delay = 0, gap = 0.06, duration = 0.45, lift = 0.7 } = {}) {
     for (let i = 0; i < count; i++) { const mesh = make(); mesh.visible = false; effectRoot.add(mesh); flights.push({ mesh, from: from.clone(), to, delay: delay + i * gap, age: 0, duration, lift }); }
   }
-  const item = (kind: Crop | 'seed' | 'coin') => () => {
+  const item = (kind: Product | 'seed' | 'coin') => () => {
     if (kind === 'coin') { const m = new THREE.Mesh(coinGeometry, props.material(COLORS.coin)); m.rotation.x = Math.PI / 2; return m; }
     const m = new THREE.Mesh(sphere, props.material(kind === 'seed' ? COLORS.burlap : COLORS[kind])); m.scale.set(...SHAPE[kind]); return m;
   };
@@ -249,7 +261,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 200; bubbleCanvas.height = 132;
       const context = bubbleCanvas.getContext('2d')!, texture = new THREE.CanvasTexture(bubbleCanvas); texture.colorSpace = THREE.SRGBColorSpace; bubbleTextures.push(texture);
       const bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false, toneMapped: false })); bubble.scale.set(0.72, 0.475, 1); bubble.position.y = LOOKS[look].height + 0.5; group.add(bubble);
-      const made: Shopper = { id, group, joints, bubble, key: '', leaving: 0, happy: true, phase: rand() * 6, walk: 0, squash: 1, draw: (key, paint) => {
+      const made: Shopper = { id, group, joints, bubble, key: '', leaving: 0, happy: true, frontAt: 0, phase: rand() * 6, walk: 0, squash: 1, draw: (key, paint) => {
         if (key === made.key) return;
         made.key = key; context.clearRect(0, 0, 200, 132);
         context.fillStyle = '#284034'; context.beginPath(); context.roundRect(8, 8, 184, 96, 30); context.fill();
@@ -258,16 +270,21 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       } };
       return made;
     })();
-    Object.assign(shopper, { id, leaving: 0, key: '', happy: true }); shopper.bubble.visible = false; shopper.group.userData.look = look;
+    Object.assign(shopper, { id, leaving: 0, key: '', happy: true, frontAt: 0 }); shopper.bubble.visible = false; shopper.group.userData.look = look;
     shopper.group.position.copy(SHOPPER_SPAWN); shopper.group.visible = true; scene.add(shopper.group); shoppers.set(id, shopper);
     return shopper;
   }
   const grumpy = new Set<number>();
+  // A short line of speech, shrunk to fit the bubble.
+  function phrase(c: CanvasRenderingContext2D, text: string, width = 168, cx = 100) {
+    tileText(c, text, cx, 58, Math.min(40, width / (text.length * 0.5)));
+  }
   function updateShoppers(dt: number) {
     const live = new Set(state.customers.map(c => c.id));
     for (const shopper of shoppers.values()) if (!live.has(shopper.id) && !shopper.leaving) {
       shopper.leaving = time; shopper.happy = !grumpy.delete(shopper.id); shopper.bubble.visible = true;
-      shopper.draw(shopper.happy ? 'love' : 'cross', c => tileText(c, shopper.happy ? '♥' : '✕', 100, 60, 62, shopper.happy ? '#ff8fa8' : '#ff9a6a'));
+      const words = pick(shopper.happy ? SAY.thanks : SAY.grumpy, shopper.id);
+      shopper.draw(`bye:${words}`, c => { phrase(c, words, 124, 86); tileText(c, shopper.happy ? '♥' : '…', 166, 58, 40, shopper.happy ? '#ff8fa8' : '#ffb28a'); });
     }
     state.customers.forEach((c, i) => {
       const shopper = shoppers.get(c.id) ?? makeShopper(c.id), slot = SHOPPER_SLOT(i), g = shopper.group.position;
@@ -275,17 +292,22 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       walkTo(shopper, goal, 7, dt);
       const front = i === 0 && c.wait === 0 && Math.hypot(g.x - slot.x, g.z - slot.z) < 0.1;
       shopper.bubble.visible = front;
-      if (front) {
+      if (front && !shopper.frontAt) shopper.frontAt = time;
+      const since = time - shopper.frontAt, left = c.patience / PATIENCE_SECONDS;
+      // Speech first, then the order: a greeting on arrival, and a nudge every few seconds once they're impatient.
+      const talk = front && c.got === 0 && (since < 1.5 ? (shopper.id % 2 ? pick(SAY.hello, c.id) : SAY.order[c.want - 1]) : left < 0.35 && since % 3 < 1.2 ? pick(SAY.waiting, c.id, Math.floor(since / 3)) : '');
+      if (front && talk) shopper.draw(`say:${talk}`, ctx => phrase(ctx, talk));
+      else if (front) {
         // The ring round the order drains as their patience does: green, then amber, then red.
-        const left = c.patience / PATIENCE_SECONDS, step = Math.ceil(left * 12) / 12, colour = step > 0.5 ? '#9be15d' : step > 0.25 ? '#ffc23f' : '#ff6a5a';
+        const step = Math.ceil(left * 12) / 12, colour = step > 0.5 ? '#9be15d' : step > 0.25 ? '#ffc23f' : '#ff6a5a';
         shopper.draw(`${c.crop}:${c.want - c.got}:${step}`, ctx => {
           ctx.lineWidth = 7; ctx.strokeStyle = '#ffffff22'; ctx.beginPath(); ctx.arc(62, 56, 32, 0, Math.PI * 2); ctx.stroke();
           ctx.strokeStyle = colour; ctx.beginPath(); ctx.arc(62, 56, 32, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * step); ctx.stroke();
           cropIcon(ctx, c.crop, 62, 58, 20); tileText(ctx, String(c.want - c.got), 140, 60, 58);
         });
-        // Getting impatient: a little foot-tap bounce.
-        if (left < 0.25) g.y = Math.abs(Math.sin(time * 14)) * 0.05;
       }
+      // Getting impatient: a little foot-tap bounce.
+      if (front && left < 0.25) g.y = Math.abs(Math.sin(time * 14)) * 0.05;
       if (front || shopper.walk < 0.02) shopper.group.rotation.y = turn(shopper.group.rotation.y, Math.PI, dt * 10);
     });
     for (const shopper of shoppers.values()) if (shopper.leaving) {
@@ -340,6 +362,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const up = frame ? -14 : 12;
     c.beginPath(); c.moveTo(14, 32 + up); c.quadraticCurveTo(40, 28, 64, 36); c.quadraticCurveTo(88, 28, 114, 32 + up); c.quadraticCurveTo(88, 40, 64, 44); c.quadraticCurveTo(40, 40, 14, 32 + up); c.fill();
   }));
+  const sunOffset = new THREE.Vector3(0, 12, 7);
   const birds: { sprite: THREE.Sprite; shade: THREE.Mesh; velocity: THREE.Vector3; flap: number }[] = [];
   let nextFlock = 6;
   function updateBirds(dt: number, night: number) {
@@ -349,18 +372,20 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       const dir = new THREE.Vector3(1, 0, -1).normalize().multiplyScalar(Math.random() < 0.5 ? 1 : -1), side = new THREE.Vector3(-dir.z, 0, dir.x);
       const start = focus.clone().addScaledVector(dir, -14).addScaledVector(side, (Math.random() - 0.5) * 6);
       for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: birdFrames[0], transparent: true, opacity: 0.55, depthWrite: false, depthTest: false }));
-        sprite.scale.set(0.9, 0.45, 1); sprite.renderOrder = 6;
-        sprite.position.copy(start).addScaledVector(dir, -i * 0.8).addScaledVector(side, (i % 2 ? 1 : -1) * i * 0.5).setY(9 + Math.random());
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: birdFrames[0], transparent: true, opacity: 0.8, depthWrite: false, depthTest: false }));
+        sprite.scale.set(0.8, 0.4, 1); sprite.renderOrder = 6;
+        sprite.position.copy(start).addScaledVector(dir, -i * 0.8).addScaledVector(side, (i % 2 ? 1 : -1) * i * 0.5).setY(3.2 + Math.random() * 0.6);
         const shade = new THREE.Mesh(pulseGeometry, new THREE.MeshBasicMaterial({ color: '#203020', transparent: true, opacity: 0.08, depthWrite: false }));
         shade.scale.setScalar(0.25); effectRoot.add(sprite, shade);
-        birds.push({ sprite, shade, velocity: dir.clone().multiplyScalar(3.4 + Math.random() * 0.4), flap: Math.random() * 6 });
+        birds.push({ sprite, shade, velocity: dir.clone().multiplyScalar(2 + Math.random() * 0.3), flap: Math.random() * 6 });
       }
     }
     for (let i = birds.length - 1; i >= 0; i--) {
-      const b = birds[i]; b.sprite.position.addScaledVector(b.velocity, dt); b.flap += dt * 9;
+      const b = birds[i]; b.sprite.position.addScaledVector(b.velocity, dt); b.flap += dt * 7;
+      // The shadow falls straight away from the sun, so it sits under the bird on screen.
+      const lift = b.sprite.position.y / 12;
       b.sprite.material.map = birdFrames[Math.sin(b.flap) > 0 ? 0 : 1];
-      b.shade.position.set(b.sprite.position.x + 3, 0.06, b.sprite.position.z - 3);
+      b.shade.position.set(b.sprite.position.x - sunOffset.x * lift, 0.06, b.sprite.position.z - sunOffset.z * lift);
       if (b.sprite.position.distanceTo(focus) > 24) { b.sprite.removeFromParent(); b.shade.removeFromParent(); b.sprite.material.dispose(); (b.shade.material as THREE.Material).dispose(); birds.splice(i, 1); }
     }
   }
@@ -399,6 +424,93 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     return strength;
   }
 
+
+  // The coop yard: a paddock past the hedge with the coop, nest boxes and hens pottering about.
+  const yard = new THREE.Group(); scene.add(yard);
+  const eggs = instanced(sphere, COLORS.egg, NESTS.length * 4, scene);
+  const hens: { group: THREE.Group; target: THREE.Vector3; rest: number; phase: number }[] = [];
+  let yardBuilt = false, eggKey = '';
+  function addYard() {
+    if (yardBuilt || !hasCoop(state)) return;
+    yardBuilt = true;
+    const [x0, x1, z0, z1] = [7.0, 10.95, -4.55, 1.5];
+    props.fence(yard, x0, z0, x1, z0); props.fence(yard, x1, z0, x1, z1); props.fence(yard, x0, z1, x1, z1);
+    props.fence(yard, x0, z0, x0, -0.85); props.fence(yard, x0, 0.85, x0, z1);
+    props.rbox(yard, '#e6d397', 9.4, 0.012, -2.4, 3.3, 0.02, 1.2, 0.02);
+    props.surface(yard, 'paver', 8.15, 0.02, 0, 2.3, 1.2, 2);
+    const coop = props.coop(); coop.position.set(SPOTS.coop.x, 0, SPOTS.coop.z); yard.add(coop);
+    for (const nest of NESTS) { const box = props.nestBox(); box.position.set(nest.x, 0, nest.z); yard.add(box); }
+    for (let i = 0; i < 5; i++) {
+      const group = props.hen(i); group.position.set(8 + i * 0.6, 0, -0.8 - (i % 2)); group.add(shadowDisc(0.16)); yard.add(group);
+      hens.push({ group, target: group.position.clone(), rest: rand() * 2, phase: rand() * 6 });
+    }
+  }
+  function updateYard(dt: number) {
+    if (!yardBuilt) return;
+    const key = state.nests.join(':');
+    if (key !== eggKey) {
+      eggKey = key; let n = 0;
+      NESTS.forEach((nest, i) => { for (let k = 0; k < state.nests[i]; k++) place(eggs, n++, nest.x + (k % 2 - 0.5) * 0.14, 0.3 + Math.floor(k / 2) * 0.06, nest.z + (Math.floor(k / 2) - 0.5) * 0.1, SHAPE.egg, k); });
+      eggs.count = n; eggs.instanceMatrix.needsUpdate = true;
+    }
+    for (const hen of hens) {
+      const p = hen.group.position, body = hen.group.userData.body as THREE.Group;
+      if (hen.rest > 0) { hen.rest -= dt; body.rotation.x = Math.max(0, Math.sin(time * 9 + hen.phase)) * 0.5; continue; }
+      const d = p.distanceTo(hen.target);
+      if (d < 0.05) { hen.rest = 0.8 + Math.random() * 2.5; hen.target.set(7.5 + Math.random() * 3, 0, -1.6 + Math.random() * 2.8); continue; }
+      p.addScaledVector(hen.target.clone().sub(p).normalize(), Math.min(d, dt * 0.9));
+      hen.group.rotation.y = turn(hen.group.rotation.y, Math.atan2(hen.target.x - p.x, hen.target.z - p.z), dt * 8);
+      body.rotation.x = 0; p.y = Math.abs(Math.sin(time * 16 + hen.phase)) * 0.03;
+    }
+  }
+
+  // The board by the farmhouse door opens the shop sheet once the first field is bought.
+  const boardRoot = new THREE.Group(); scene.add(boardRoot);
+  const sign = props.signboard(); sign.position.set(SPOTS.board.x + 0.35, 0, SPOTS.board.z - 0.85); sign.rotation.y = Math.PI / 4; boardRoot.add(sign);
+  groundTile(props, boardRoot, SPOTS.board.x, SPOTS.board.z, 1.2, 1.0, (c, w, h) => { tile(c, w, h, { fill: '#fff3c855', dash: [2.2, 1.4] }); coinIcon(c, w * 0.24, h * 0.52, h * 0.15); tileText(c, 'SHOP', w * 0.6, h * 0.53, h * 0.34); });
+
+  // Decorations appear where they belong when bought; the windmill turns and the fountain splashes.
+  const decorations = new Map<DecorId, { group: THREE.Group; born: number }>();
+  const FACING: Record<DecorId, number> = { arch: 0, scarecrow: Math.PI / 4, benches: -Math.PI / 4, fountain: 0, windmill: Math.PI / 4 };
+  function syncDecor(animate: boolean) {
+    for (const id of state.decor) if (!decorations.has(id)) {
+      const group = props.decoration(id); group.position.set(DECOR[id].at.x, 0, DECOR[id].at.z); group.rotation.y = FACING[id]; scene.add(group);
+      decorations.set(id, { group, born: animate ? time : -10 });
+    }
+  }
+
+  // Farmhands in straw hats, carrying a crate that fills as they pick.
+  const HAND_LOOKS = [{ height: 1.45, skin: '#8a5a3c', shirt: '#5d8f4a', legs: '#3f5f8a', hair: '#2a1d16', style: 'hat' as const, seed: 3 },
+    { height: 1.4, skin: '#f0c6a0', shirt: '#c9704a', legs: '#3f5f8a', hair: '#7a4a2a', style: 'hat' as const, seed: 4 }];
+  const farmhands: (Walker & { items: THREE.InstancedMesh; last: THREE.Vector3; key: number })[] = [];
+  function syncHelpers() {
+    while (farmhands.length < state.helpers.length) {
+      const group = props.person(HAND_LOOKS[farmhands.length % 2]), joints: THREE.Object3D[] = [];
+      group.traverse(o => { if (/^(arm-|leg-)/.test(o.name)) joints.push(o); });
+      const box = props.crate(group, 0, 0.62, 0.3, 0.42), items = instanced(sphere, COLORS.tomato, 9, box);
+      group.add(shadowDisc(0.26)); const h = state.helpers[farmhands.length]; group.position.set(h.x, 0, h.z); scene.add(group);
+      farmhands.push({ group, joints, phase: 0, walk: 0, squash: 1, items, last: group.position.clone(), key: -1 });
+      dust(h.x, h.z, 10, 0.5);
+    }
+  }
+  function updateHelpers(dt: number) {
+    farmhands.forEach((hand, i) => {
+      const h = state.helpers[i], g = hand.group.position, dx = h.x - g.x, dz = h.z - g.z, moving = Math.hypot(dx, dz) > 0.002;
+      g.x = h.x; g.z = h.z;
+      if (moving) hand.group.rotation.y = turn(hand.group.rotation.y, Math.atan2(dx, dz), dt * 12);
+      animateWalker(hand, moving, 10, dt);
+      hand.joints.forEach(j => { if (j.name.startsWith('arm')) j.rotation.x = -1.1; });
+      const load = total(h.carry);
+      if (load !== hand.key) {
+        hand.key = load; hand.items.count = Math.min(9, load);
+        const crop = PRODUCTS.find(c => h.carry[c] > 0) ?? 'tomato';
+        hand.items.material = props.material(COLORS[crop]);
+        for (let k = 0; k < hand.items.count; k++) place(hand.items, k, (k % 3 - 1) * 0.11, 0.3 + Math.floor(k / 3) * 0.07, (Math.floor(k / 3) % 2 - 0.5) * 0.08, SHAPE[crop], k);
+        hand.items.instanceMatrix.needsUpdate = true;
+      }
+    });
+  }
+  addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
   let squash = 1, lean = 0, wasMoving = false, stepPhase = 0, dustClock = 0, dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.06);
   // ?time=0.7 starts at that point of the day (0 morning … 0.72 night), like Catcha's ?season=.
@@ -433,12 +545,12 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const model = fit(mother.scene, 1.65); body.add(model);
     model.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) joints.push(o); });
     girls.forEach((girl, i) => {
-      const group = new THREE.Group(), kid = fit(girl.scene, i ? 0.95 : 1.15), kidJoints: THREE.Object3D[] = [];
+      const group = new THREE.Group(), kid = fit(girl.scene, i ? 0.8 : 1.15), kidJoints: THREE.Object3D[] = [];
       kid.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) kidJoints.push(o); });
       group.add(kid, shadowDisc(0.24)); group.position.set(PLAYGROUND[i + 1].x, 0, PLAYGROUND[i + 1].z); scene.add(group);
       kids.push({ group, joints: kidJoints, phase: i, walk: 0, squash: 1, target: PLAYGROUND[i + 4], rest: i, chase: false, jump: 0 });
     });
-    updateStack(); updateShelfAndCash();
+    updateStack(); updateShelfAndCash(); syncHelpers();
     camera.position.copy(focus).addScaledVector(VIEW, 30); camera.lookAt(focus);
   // Keep the loading card up until shaders are ready, so the farm appears in one piece.
   }).then(() => disposed ? undefined : renderer.compileAsync(scene, camera)).then(() => {
@@ -467,6 +579,10 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     }
     if (event.type === 'cash') { fly(item('coin'), v3(SPOTS.cash, 0.2), () => farmer.position.clone().setY(1.0), Math.min(10, Math.ceil(event.amount / 2)), { gap: 0.035, duration: 0.35 }); pulse(SPOTS.cash, '#ffe07a', 0.7); }
     if (event.type === 'purchase') { addPlots(true); updateOffer(); callbacks.save(); pulse(event.at, '#ffe07a', 2.2); burst(v3(event.at, 0.3)); dust(event.at.x, event.at.z, 14, 1.2); }
+    if (event.type === 'egg') { fly(item('egg'), v3(event.at, 0.35), stackTop, event.amount, { gap: 0.06 }); pulse(event.at, '#fff2c2', 0.45); squash = 0.86; }
+    if (event.type === 'helper') dust(event.at.x, event.at.z, 2, 0.15, '#e6f5c0');
+    if (event.type === 'upgrade') { burst(v3(event.at, 0.6), 30); pulse(event.at, '#ffe07a', 1.4); dust(event.at.x, event.at.z, 10, 0.6); }
+    if (event.type === 'purchase' && !yardBuilt) addYard();
     if (event.type === 'goal') { burst(farmer.position.clone().setY(1.6), 30); pulse(state.player, '#ffe07a', 1.2); squash = 1.25; callbacks.save(); }
     if (event.type === 'cash' || event.type === 'delivery') callbacks.save();
     const point = new THREE.Vector3(event.at.x, 0.8, event.at.z).project(camera);
@@ -537,10 +653,16 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       }
       offer.position.y = state.wallet >= next.price ? Math.abs(Math.sin(time * 3)) * 0.015 : 0;
     }
-    updateShoppers(dt); updateKids(dt);
+    updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt);
+    boardRoot.visible = boardOpen(state);
+    for (const [id, d] of decorations) {
+      if (d.born >= 0) d.group.scale.setScalar(pop(Math.min(1, (time - d.born) / 0.6)));
+      if (id === 'windmill') (d.group.userData.sails as THREE.Group).rotation.z += dt * 0.7;
+      if (id === 'fountain' && Math.random() < dt * 10) puffs.spawn(DECOR.fountain.at.x + (Math.random() - 0.5) * 0.2, 1.0, DECOR.fountain.at.z + (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 1.2, 0.8, (Math.random() - 0.5) * 1.2, 0.5, 0.22, '#d8f2ff');
+    }
     // Time of day loops every few minutes; a shower greys the light a little.
     dayClock += dt;
-    const day = sky.set(dayClock / DAY_SECONDS), wet = updateRain(dt);
+    const day = sky.set(dayClock / DAY_SECONDS), wet = updateRain(dt); sunOffset.copy(day.sun);
     hemi.intensity *= 1 - wet * 0.25; sun.intensity *= 1 - wet * 0.6;
     props.glow.emissiveIntensity = day.glow * 1.6; poolMaterial.opacity = day.glow * 0.45; fireflyMaterial.opacity = day.glow * 0.9;
     fireflies.forEach(f => {
@@ -587,7 +709,18 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   frame = requestAnimationFrame(animate);
   return {
     ready,
-    setPaused(value: boolean) { paused = value; input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
+    setPaused(value: boolean) { paused = value; input.setEnabled(!value); audio.refresh(value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
+    /** Mute and music switches changed. */
+    refreshAudio() { audio.refresh(); },
+    /** Buy from the board's sheet; false (and nothing spent) when it can't be bought. */
+    shop(action: ShopAction) {
+      const ok = action.kind === 'upgrade' ? buyUpgrade(state, action.id) : action.kind === 'decor' ? buyDecor(state, action.id) : hireHelper(state);
+      if (!ok) return false;
+      syncDecor(true); syncHelpers();
+      feedback({ type: 'upgrade', at: action.kind === 'decor' ? DECOR[action.id].at : SPOTS.board, amount: 0, id: action.kind === 'helper' ? 'helper' : action.id });
+      callbacks.save(); callbacks.update();
+      return true;
+    },
     destroy() {
       if (disposed) return;
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy(); audio.destroy();

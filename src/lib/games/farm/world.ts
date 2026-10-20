@@ -29,6 +29,8 @@ export function buildFarmWorld(props: FarmProps, root: THREE.Object3D) {
   surface(root, 'paver', 2.6, 0.022, 2.95, 3.7, 2.7, 2);
   surface(root, 'paver', SPOTS.counter.x + 0.25, 0.019, 8.3, 1.2, 8, 2);
   surface(root, 'paver', 8.3, 0.018, 3.5, 7.8, 1.2, 2);
+  // The path carries on through the hedge towards where the coop yard opens.
+  surface(root, 'paver', EDGE + 1.1, 0.02, 0, 2.2, 1.5, 2);
   // Stone balustrade along the far edges, low hedges along the near ones so nothing hides the farm.
   for (const [a, b] of [[-EDGE, -0.9], [0.9, EDGE]]) { balustrade(root, a, -EDGE, b, -EDGE); balustrade(root, -EDGE, a, -EDGE, b); }
   hedgeRun(props, root, 'x', EDGE, [[-0.9, 0.9], [2.6, 3.9]]);
@@ -37,7 +39,7 @@ export function buildFarmWorld(props: FarmProps, root: THREE.Object3D) {
   for (const at of LAMPS) { const lamp = props.lamp(); lamp.position.set(at.x, 0, at.z); root.add(lamp); }
   const rand = seeded(42);
   const place = (o: THREE.Object3D, x: number, z: number) => { o.position.set(x, 0, z); o.rotation.y = rand() * Math.PI * 2; root.add(o); };
-  for (const [x, z, r] of [[-1.3, 5.6, 0.4], [-5.9, 2.0, 0.42], [-1.3, 4.2, 0.36], [5.6, 1.2, 0.36], [5.2, 5.6, 0.42], [-6.0, 6.0, 0.3], [1.5, 5.8, 0.38], [5.9, -0.2, 0.32], [-0.6, -5.9, 0.34], [0.6, -5.9, 0.34]])
+  for (const [x, z, r] of [[-1.3, 5.6, 0.4], [-5.9, 2.0, 0.42], [-1.3, 4.2, 0.36], [5.6, 1.2, 0.36], [-6.0, 6.0, 0.3], [5.9, -0.2, 0.32], [-0.6, -5.9, 0.34], [0.6, -5.9, 0.34]])
     place(bush(r, x * 7 + z), x, z);
   // A tree line behind the balustrade gives the farm a horizon at the top of the screen.
   for (let i = 0; i < 16; i++) {

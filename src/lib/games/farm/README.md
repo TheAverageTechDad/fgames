@@ -11,7 +11,7 @@ Working title for the portrait farming game. Launch from the arcade or `/farm`.
 - `props.ts`: reusable local meshes and baked canvas textures for soil, crops, stands, market, hedges, trees, bushes, lamps, tiles and the hand-built shoppers.
 - `assets.ts`: shared local GLB references. Does not import or initialise Catcha.
 - `input.ts`: floating one-thumb stick, mouse drag, arrows/WASD (screen directions), input cancellation and cleanup.
-- `audio.ts`: gesture-unlocked sound effects with slight pitch variation; haptics through the shared Catcha module (works on iOS Safari's switch fallback).
+- `audio.ts`: gesture-unlocked sound design (transients, plucks, bells, coin clinks, ladders, soft reverb), the looping soundtrack, and haptics through the shared Catcha module.
 
 Start: `pnpm dev`. Verify: `pnpm check`, `pnpm test`, `pnpm build`, then `FGAMES_URL=<preview url> node scripts/farm-smoke.mjs`.
 
@@ -25,8 +25,8 @@ Ground tiles (SEEDS, SELL, the price tile) are painted flat and unlit; everythin
 
 Seed stands give free seeds, one per empty spot. She plants and harvests by walking through the soil; produce stacks in her arms and slows her down. At SELL the stack moves onto the counter. Once the shop has opened, up to three shoppers queue; the front one shows what they want with a patience ring, takes it one item at a time and pays per item onto the coin pile. If the shelf has nothing for them their patience runs out and they leave unhappy, lowering the star rating; happy shoppers raise it, and more stars bring more shoppers and tips. Walking over the coins banks them.
 
-Purchases come one at a time on golden tiles: cucumber field, bigger basket, strawberry patch, biggest basket. The goal track (shown as the level in the task card) pays coin rewards. Nothing is ever lost and there is no game over.
+Purchases come one at a time on golden tiles: cucumber field, bigger basket, strawberry patch, biggest basket, chicken coop. The SHOP tile by the farmhouse sells upgrades, farmhands and decorations. The goal track (shown as the level in the task card) pays coin rewards. Nothing is ever lost and there is no game over.
 
 ## Next
 
-Crop reassignment, more crops and land after the strawberry patch, workers, richer Blender props and farming animations, and final sound/voice production.
+Crop reassignment, a beehive and more land, richer Blender props and farming animations, and the user's voice clips.

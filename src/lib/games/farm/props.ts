@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { Crop } from './model';
+import type { Crop, Product } from './model';
 
 // Seeded so the farm dresses itself the same way on every visit.
 export function seeded(seed: number) {
@@ -10,11 +10,11 @@ export function seeded(seed: number) {
 export const COLORS = {
   grass: '#79b545', lawn: '#86c04f', hedge: '#9cc43c', hedgeDark: '#7fa830', foliage: '#4e8f37', foliageLight: '#6fad45',
   cypress: '#3f7d3a', soil: '#7b4a2d', ridge: '#8f5836', paver: '#ddd3be', stone: '#efe5cb', wood: '#b9824a', woodDark: '#8a5a35',
-  tomato: '#e5463a', cucumber: '#3f8a35', strawberry: '#e8344f', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
+  tomato: '#e5463a', cucumber: '#3f8a35', strawberry: '#e8344f', egg: '#fbf1dc', leaf: '#4f9a3c', burlap: '#d9bd8c', coin: '#f5c043', roof: '#c9553f', cream: '#fff6df'
 };
 type Draw = (c: CanvasRenderingContext2D, w: number, h: number) => void;
 // Crate positions along the counter, one per crop, shared with the scene's shelf display.
-export const SHELF_X = [-0.62, -0.08, 0.44];
+export const SHELF_X = [-0.69, -0.23, 0.23, 0.69];
 // Collapse every mesh under `root` into one mesh per material: hundreds of props become a few draw calls.
 // Returns the merged geometries so the caller can dispose them.
 export function mergeByMaterial(root: THREE.Object3D) {
@@ -255,8 +255,8 @@ export function createFarmProps() {
       const stripe = box(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.82, -0.2, 0.25, 0.06, 0.7); stripe.rotation.x = 0.32;
       rbox(g, i % 2 ? '#fff3dc' : COLORS.tomato, -0.875 + i * 0.25, 1.66, 0.13, 0.25, 0.16, 0.04, 0.02);
     }
-    for (const x of SHELF_X) crate(g, x, 0.79, 0, 0.48);
-    rbox(g, '#6b8fb0', 0.86, 0.88, 0.12, 0.2, 0.16, 0.2, 0.04);
+    for (const x of SHELF_X) crate(g, x, 0.79, 0, 0.42);
+    rbox(g, '#6b8fb0', 0.8, 0.9, -0.3, 0.22, 0.18, 0.16, 0.04);
     return g;
   }
   function house() {
@@ -277,7 +277,7 @@ export function createFarmProps() {
   }
   // A chibi shopper or child built from rounded shapes. Limb pivots are named like the Catcha
   // models (arm-left, leg-right…) so the same walk code swings them.
-  type Look = { height: number; skin: string; shirt: string; legs: string; hair: string; style: 'short' | 'bun' | 'long' | 'cap' | 'curly' | 'pony'; dress?: boolean; seed: number };
+  type Look = { height: number; skin: string; shirt: string; legs: string; hair: string; style: 'short' | 'bun' | 'long' | 'cap' | 'curly' | 'pony' | 'hat'; dress?: boolean; seed: number };
   function person(look: Look) {
     const root = new THREE.Group(), k = look.height / 1.45, body = new THREE.Group(); root.add(body); body.scale.setScalar(k);
     const limb = (name: string, x: number, y: number, color: string, end: string, length: number, width: number) => {
@@ -299,7 +299,10 @@ export function createFarmProps() {
     }
     ball(head, '#7a3b30', 0, -0.1, 0.235, 0.04, 0.015, 0.015);
     const hair = (x: number, y: number, z: number, sx: number, sy = sx, sz = sx) => ball(head, look.hair, x, y, z, sx, sy, sz);
-    if (look.style === 'cap') {
+    if (look.style === 'hat') {
+      hair(0, 0.02, -0.03, 0.27, 0.22, 0.27);
+      cylinder(head, '#e8c46a', 0, 0.16, 0, 0.42, 0.03); cylinder(head, '#d9b257', 0, 0.25, 0, 0.2, 0.17); cylinder(head, '#c0503a', 0, 0.2, 0, 0.205, 0.05);
+    } else if (look.style === 'cap') {
       mesh(head, geometry('cap', () => new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2)), material(look.hair), 0, 0.04, 0, 0.29, 0.24, 0.28);
       const brim = cylinder(head, look.hair, 0, 0.07, 0.2, 0.17, 0.025); brim.scale.z = 0.12; brim.rotation.x = 0.15;
     } else {
@@ -321,7 +324,94 @@ export function createFarmProps() {
     mesh(g, geometry('lampTop', () => new THREE.ConeGeometry(0.17, 0.14, 4)), material('#3d4a3f'), 0, 2.0, 0).rotation.y = Math.PI / 4;
     return g;
   }
+  function fence(p: THREE.Object3D, ax: number, az: number, bx: number, bz: number) {
+    const length = Math.hypot(bx - ax, bz - az), along = bx !== ax, posts = Math.max(1, Math.round(length / 1.1));
+    for (let i = 0; i <= posts; i++) rbox(p, '#a8754a', ax + (bx - ax) * i / posts, 0.35, az + (bz - az) * i / posts, 0.12, 0.7, 0.12, 0.03);
+    for (const y of [0.3, 0.55]) rbox(p, '#c48f5c', (ax + bx) / 2, y, (az + bz) / 2, along ? length : 0.06, 0.08, along ? 0.06 : length, 0.02);
+  }
+  function coop() {
+    const g = new THREE.Group();
+    rbox(g, '#b8453a', 0, 0.62, 0, 2.0, 1.0, 1.0, 0.05);
+    for (const side of [-1, 1]) { const roof = rbox(g, '#6e4a36', 0, 1.33, side * 0.32, 2.2, 0.1, 0.78, 0.04); roof.rotation.x = side * 0.62; }
+    rbox(g, '#fff3dc', 0, 0.14, 0, 2.1, 0.14, 1.06, 0.04);
+    rbox(g, '#fff3dc', -0.55, 0.6, 0.52, 0.42, 0.6, 0.04, 0.02); rbox(g, '#6e4a36', -0.55, 0.55, 0.535, 0.32, 0.48, 0.03, 0.02);
+    const ramp = rbox(g, '#c48f5c', -0.55, 0.15, 0.85, 0.32, 0.04, 0.6, 0.02); ramp.rotation.x = 0.45;
+    for (const x of [0.25, 0.75]) { rbox(g, '#fff3dc', x, 0.85, 0.52, 0.3, 0.3, 0.03, 0.02); rbox(g, '#9fd0e3', x, 0.85, 0.535, 0.22, 0.22, 0.02, 0.01).material = glow; }
+    return g;
+  }
+  function nestBox() {
+    const g = new THREE.Group();
+    rbox(g, '#a8754a', 0, 0.12, 0, 0.55, 0.24, 0.45, 0.04);
+    ball(g, '#e9c66e', 0, 0.24, 0, 0.24, 0.07, 0.19);
+    return g;
+  }
+  function hen(seed = 1) {
+    const g = new THREE.Group(), body = new THREE.Group(), r = seeded(seed + 5), white = r() > 0.35;
+    g.add(body);
+    ball(body, white ? '#fbf6ec' : '#b8743e', 0, 0.22, 0, 0.17, 0.15, 0.2);
+    ball(body, white ? '#f1e9da' : '#9a5a2e', 0, 0.3, -0.16, 0.08, 0.12, 0.06);
+    ball(body, white ? '#fbf6ec' : '#b8743e', 0, 0.38, 0.13, 0.1);
+    ball(body, '#e2463a', 0, 0.49, 0.13, 0.035, 0.05, 0.06);
+    ball(body, '#f3b23a', 0, 0.37, 0.24, 0.035, 0.025, 0.05);
+    for (const side of [-1, 1]) ball(body, '#1e1a18', side * 0.06, 0.4, 0.2, 0.018);
+    for (const side of [-1, 1]) cylinder(g, '#f3b23a', side * 0.06, 0.05, 0, 0.015, 0.1);
+    g.userData.body = body;
+    return g;
+  }
+  function signboard() {
+    const g = new THREE.Group();
+    for (const x of [-0.45, 0.45]) rbox(g, COLORS.woodDark, x, 0.55, 0, 0.08, 1.1, 0.08, 0.02);
+    rbox(g, COLORS.wood, 0, 0.95, 0, 1.15, 0.55, 0.07, 0.03);
+    const plate = new THREE.Mesh(geometry('plane-v', () => new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: canvasTexture(256, 112, (c, w, h) => {
+      c.fillStyle = '#fff3d6'; c.beginPath(); c.roundRect(6, 6, w - 12, h - 12, 18); c.fill();
+      c.font = '48px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#5a3a20'; c.fillText('Upgrades', w / 2, h / 2 + 3);
+    }), toneMapped: false }));
+    materials.set(`sign${materials.size}`, plate.material as THREE.Material);
+    plate.scale.set(1.0, 0.44, 1); plate.position.set(0, 0.95, 0.04); g.add(plate);
+    return g;
+  }
+  // Decorations: each returns its group; the windmill also hands back its sails to turn.
+  function decoration(id: 'arch' | 'scarecrow' | 'benches' | 'fountain' | 'windmill') {
+    const g = new THREE.Group(), r = seeded(id.length * 31);
+    if (id === 'arch') {
+      for (const x of [-0.9, 0.9]) rbox(g, '#f3ead2', x, 0.9, 0, 0.12, 1.8, 0.12, 0.03);
+      for (let i = 0; i <= 14; i++) {
+        const a = Math.PI * i / 14, x = Math.cos(a) * 0.9, y = 1.8 + Math.sin(a) * 0.55;
+        ball(g, COLORS.foliage, x, y, 0, 0.13); ball(g, ['#f6a5b5', '#fff2c2', '#e8344f'][i % 3], x + (r() - 0.5) * 0.1, y + 0.05, 0.1, 0.07);
+      }
+    } else if (id === 'scarecrow') {
+      cylinder(g, COLORS.woodDark, 0, 0.8, 0, 0.04, 1.6); rbox(g, COLORS.woodDark, 0, 1.2, 0, 1.0, 0.06, 0.06, 0.02);
+      rbox(g, '#5a7fb0', 0, 1.1, 0, 0.42, 0.45, 0.22, 0.08); ball(g, COLORS.burlap, 0, 1.52, 0, 0.17);
+      cylinder(g, '#e8c46a', 0, 1.66, 0, 0.3, 0.03); cylinder(g, '#d9b257', 0, 1.74, 0, 0.14, 0.14);
+      for (const side of [-1, 1]) ball(g, '#e8c46a', side * 0.52, 1.18, 0, 0.07, 0.05, 0.05);
+    } else if (id === 'benches') {
+      for (const x of [-0.75, 0.75]) {
+        const b = new THREE.Group(); b.position.x = x; g.add(b);
+        rbox(b, '#a8754a', 0, 0.42, 0, 1.0, 0.06, 0.36, 0.02); rbox(b, '#a8754a', 0, 0.68, -0.16, 1.0, 0.24, 0.05, 0.02);
+        for (const lx of [-0.42, 0.42]) rbox(b, '#3d4a3f', lx, 0.2, 0, 0.06, 0.4, 0.34, 0.02);
+      }
+      ball(g, COLORS.foliage, 0, 0.3, -0.05, 0.25); ball(g, '#f6a5b5', 0, 0.5, 0.05, 0.08);
+    } else if (id === 'fountain') {
+      cylinder(g, COLORS.stone, 0, 0.15, 0, 0.62, 0.3); cylinder(g, '#8fd0e8', 0, 0.29, 0, 0.54, 0.02);
+      cylinder(g, COLORS.stone, 0, 0.55, 0, 0.1, 0.6); cylinder(g, COLORS.stone, 0, 0.85, 0, 0.3, 0.1); cylinder(g, '#8fd0e8', 0, 0.9, 0, 0.25, 0.02);
+      ball(g, '#cdeefa', 0, 1.0, 0, 0.08, 0.14, 0.08);
+    } else {
+      const h = 4.2;
+      mesh(g, geometry('tower', () => new THREE.CylinderGeometry(0.55, 1.0, 1, 16)), material('#f3ead2'), 0, h / 2, 0, 1, h, 1);
+      mesh(g, geometry('towerCap', () => new THREE.ConeGeometry(0.72, 0.9, 16)), material(COLORS.roof), 0, h + 0.4, 0);
+      rbox(g, '#8a5a35', 0, 0.45, 0.95, 0.4, 0.8, 0.06, 0.03);
+      const sails = new THREE.Group(); sails.position.set(0, h - 0.1, 0.75); g.add(sails);
+      for (let i = 0; i < 4; i++) {
+        const arm = new THREE.Group(); arm.rotation.z = i * Math.PI / 2; sails.add(arm);
+        rbox(arm, '#8a5a35', 0, 1.1, 0, 0.08, 2.2, 0.05, 0.02); rbox(arm, '#fff6e6', 0.18, 1.35, 0.02, 0.32, 1.5, 0.02, 0.01);
+      }
+      ball(sails, '#6e4a36', 0, 0, 0.04, 0.12);
+      g.userData.sails = sails;
+    }
+    return g;
+  }
   return {
+    fence, coop, nestBox, hen, signboard, decoration,
     glow, person, lamp, material, box, rbox, ball, cylinder, surface, decal, label, canvasTexture, hedge, balustrade, cypress, roundTree, bush, crate, crop, fieldBed, seedStand, market, house,
     dispose() { geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   };
@@ -343,9 +433,15 @@ export function coinIcon(c: CanvasRenderingContext2D, x: number, y: number, r: n
   c.fillStyle = '#f7c74f'; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
   c.font = `${r * 1.3}px "Lilita One", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#9a661c'; c.fillText('$', x, y + r * 0.06);
 }
-export function cropIcon(c: CanvasRenderingContext2D, crop: Crop, x: number, y: number, r: number) {
-  c.fillStyle = crop === 'tomato' ? '#e5463a' : '#3f8a35';
-  c.beginPath(); if (crop === 'tomato') c.arc(x, y, r, 0, Math.PI * 2); else c.ellipse(x, y, r * 0.55, r * 1.1, 0.6, 0, Math.PI * 2); c.fill();
+export function cropIcon(c: CanvasRenderingContext2D, crop: Product, x: number, y: number, r: number) {
+  c.beginPath();
+  if (crop === 'tomato') { c.fillStyle = '#e5463a'; c.arc(x, y, r, 0, Math.PI * 2); }
+  else if (crop === 'cucumber') { c.fillStyle = '#3f8a35'; c.ellipse(x, y, r * 0.55, r * 1.1, 0.6, 0, Math.PI * 2); }
+  else if (crop === 'egg') { c.fillStyle = '#fbf1dc'; c.ellipse(x, y + r * 0.05, r * 0.72, r * 0.95, 0, 0, Math.PI * 2); }
+  else { c.fillStyle = '#e8344f'; c.moveTo(x, y + r * 1.05); c.bezierCurveTo(x - r * 1.3, y - r * 0.1, x - r * 0.7, y - r * 0.95, x, y - r * 0.7); c.bezierCurveTo(x + r * 0.7, y - r * 0.95, x + r * 1.3, y - r * 0.1, x, y + r * 1.05); }
+  c.fill();
+  if (crop === 'strawberry') { c.fillStyle = '#ffe9a0'; for (const [dx, dy] of [[-0.3, -0.2], [0.3, -0.2], [0, 0.15], [-0.25, 0.4], [0.25, 0.4]]) { c.beginPath(); c.arc(x + dx * r, y + dy * r, r * 0.07, 0, Math.PI * 2); c.fill(); } }
   c.fillStyle = '#ffffff55'; c.beginPath(); c.ellipse(x - r * 0.3, y - r * 0.35, r * 0.25, r * 0.15, -0.6, 0, Math.PI * 2); c.fill();
-  c.fillStyle = '#4f9a3c'; c.beginPath(); c.ellipse(x + (crop === 'tomato' ? 0 : r * 0.45), y - r * (crop === 'tomato' ? 0.9 : 0.85), r * 0.35, r * 0.16, 0.3, 0, Math.PI * 2); c.fill();
+  if (crop === 'egg') return;
+  c.fillStyle = '#4f9a3c'; c.beginPath(); c.ellipse(x + (crop === 'cucumber' ? r * 0.45 : 0), y - r * (crop === 'cucumber' ? 0.85 : 0.9), r * 0.35, r * 0.16, 0.3, 0, Math.PI * 2); c.fill();
 }

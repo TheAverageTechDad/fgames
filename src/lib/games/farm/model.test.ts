@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createFarm, stepFarm, purchaseNext, farmGoal, currentGoal, capacity, speed, BASE_CAPACITY, FIELDS, GROW, PATIENCE_SECONDS, PRICES, PURCHASES, RUN_SPEED, SPOTS } from './model';
+import { createFarm, stepFarm, purchaseNext, buyUpgrade, buyDecor, hireHelper, farmGoal, currentGoal, capacity, speed, priceOf, growTime, hasCoop,
+  BASE_CAPACITY, FIELDS, GROW, LAY_SECONDS, NESTS, PATIENCE_SECONDS, PRICES, PURCHASES, RUN_SPEED, SPOTS, YARD } from './model';
 
 const stay = { x: 0, z: 0 };
 const away = { x: 0, z: -6 };
@@ -87,6 +88,7 @@ describe('Pocket Farm loop', () => {
     expect(s.wallet).toBe(1000 - PURCHASES.reduce((a, p) => a + p.price, 0));
     expect(s.plots.map(p => p.crop)).toEqual(['tomato', 'cucumber', 'strawberry']);
     expect(capacity(s)).toBe(BASE_CAPACITY + 24);
+    expect(hasCoop(s)).toBe(true);
   });
   it('does not charge for merely crossing a purchase tile', () => {
     const s = createFarm();
@@ -115,7 +117,7 @@ describe('Pocket Farm loop', () => {
     expect(farmGoal(s).at).toEqual(FIELDS[0].tile);
     s.seeds.tomato = 2;
     expect(s.plots[0].cells).toContainEqual(expect.objectContaining(farmGoal(s).at));
-    s.cash = 25;
+    s.cash = 45;
     expect(farmGoal(s).at).toEqual(SPOTS.cash);
   });
   it('walks around solid props, and a seed stand only once its field exists', () => {
@@ -130,6 +132,55 @@ describe('Pocket Farm loop', () => {
     s.wallet = 40; purchaseNext(s); s.player = { x: stand.x, z: stand.z + 0.9 };
     for (let i = 0; i < 20; i++) stepFarm(s, 0.05, { x: 0, z: -1 });
     expect(s.player.z).toBeGreaterThan(stand.z);
+  });
+  it('lays eggs into the nests once the coop opens, and she collects them into her basket', () => {
+    const s = createFarm();
+    s.wallet = 10_000; while (purchaseNext(s));
+    s.player = { x: 0, z: -6 };
+    stepFarm(s, LAY_SECONDS * 5, stay);
+    expect(s.nests.reduce((a, b) => a + b, 0)).toBe(5);
+    s.player = { ...NESTS[0] };
+    const events = stepFarm(s, 0.2, stay);
+    expect(events.some(e => e.type === 'egg')).toBe(true);
+    expect(s.produce.egg).toBeGreaterThan(0);
+  });
+  it('lets her into the yard only after the coop is bought', () => {
+    const s = createFarm();
+    s.player = { x: 6.2, z: 0 };
+    for (let i = 0; i < 30; i++) stepFarm(s, 0.05, { x: 1, z: 0 });
+    expect(s.player.x).toBeLessThanOrEqual(6.4);
+    s.wallet = 10_000; while (purchaseNext(s));
+    for (let i = 0; i < 30; i++) stepFarm(s, 0.05, { x: 1, z: 0 });
+    expect(s.player.x).toBeGreaterThan(7);
+    expect(s.player.x).toBeLessThanOrEqual(YARD.maxX);
+  });
+  it('upgrades change growth, prices, speed and seed room, and stop at their top level', () => {
+    const s = createFarm();
+    s.wallet = 100_000;
+    expect(buyUpgrade(s, 'stall')).toBe(false);
+    purchaseNext(s);
+    expect(buyUpgrade(s, 'sprinkler')).toBe(true);
+    expect(growTime(s, 'tomato')).toBeCloseTo(GROW.tomato * 0.85);
+    expect(buyUpgrade(s, 'stall')).toBe(true);
+    expect(priceOf(s, 'tomato')).toBe(PRICES.tomato + 1);
+    expect(buyUpgrade(s, 'boots')).toBe(true);
+    expect(speed(s)).toBeCloseTo(RUN_SPEED * 1.1);
+    expect(buyUpgrade(s, 'pouch') && buyUpgrade(s, 'pouch')).toBe(true);
+    expect(buyUpgrade(s, 'pouch')).toBe(false);
+  });
+  it('decorations are bought once each; farmhands pick, replant and stock the stall', () => {
+    const s = createFarm();
+    s.wallet = 100_000; purchaseNext(s);
+    expect(buyDecor(s, 'fountain')).toBe(true);
+    expect(buyDecor(s, 'fountain')).toBe(false);
+    expect(hireHelper(s) && hireHelper(s)).toBe(true);
+    expect(hireHelper(s)).toBe(false);
+    for (const cell of s.plots[0].cells) { cell.stage = 'ripe'; cell.age = GROW.tomato; }
+    s.player = { x: 0, z: -6 };
+    for (let i = 0; i < 400; i++) stepFarm(s, 0.05, stay);
+    expect(s.stats.harvested.tomato).toBeGreaterThan(0);
+    expect(s.stock.tomato + s.stats.sold.tomato).toBeGreaterThan(0);
+    expect(s.plots[0].cells.some(c => c.stage !== 'empty')).toBe(true);
   });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();
