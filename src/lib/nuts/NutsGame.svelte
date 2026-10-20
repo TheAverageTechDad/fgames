@@ -38,6 +38,7 @@
 	// Game state
 	let bolts: NutItem[][] = $state([]);
 	let selectedBolt = $state<number | null>(null);
+	let nudge = $state<{ bolt: number; at: number } | null>(null);
 	let moveHistory: { from: number; to: number; count: number }[] = $state([]);
 	let hintsCount = $state(3);
 	let hintMove = $state<{ from: number; to: number } | null>(null);
@@ -88,9 +89,10 @@
 				sound.playTap();
 				return;
 			}
-			// If already complete, no need to touch
+			// A finished set is locked by its cap nut: wobble the cap so the tap is answered
 			if (clickedBolt.length === capacity && clickedBolt.every((c) => c.color === clickedBolt[0].color)) {
-				sound.playTap();
+				nudge = { bolt: index, at: performance.now() };
+				sound.playLocked();
 				return;
 			}
 			selectedBolt = index;
@@ -220,7 +222,7 @@
 <div class="game-screen nuts-screen">
  <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
  <main class="nuts-field" use:levelTransition={currentLevelId}>
-  <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
+  <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} {nudge} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
  </main>
  {#if guidedMove}<p class="guidance" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>{/if}
  {#if showBoltTip}<button class="bolt-tip" onclick={()=>{showBoltTip=false;try{localStorage.setItem('fgames_bolt_tip','true');}catch{}}}>+1 Bolt adds an empty bolt for this level. Tap to dismiss.</button>{/if}

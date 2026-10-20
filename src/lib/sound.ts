@@ -34,6 +34,7 @@ export const sound={
  playTap(){tone(notes[4],.045,0,.045);haptic('tick');},
  playUnscrew(){for(let i=0;i<4;i++)noise(.018,1600,.05,i*.035);},
  playScrewDown(){tone(notes[0],.07,0,.12);noise(.025,1000,.05);haptic('land');},
+ playLocked(){tone(notes[0]/2,.06,0,.07);haptic('tick');},
  playBoltComplete(){const base=Math.min(combo++,4);[0,2,4].forEach((n,i)=>tone(notes[base+n],.2,i*.065));haptic('combo');},
  resetCombo(){combo=0;},
  playCarSlide(){noise(.14,350,.07);},

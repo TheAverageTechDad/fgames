@@ -4,6 +4,7 @@ let shaftGeometryCache: THREE.BufferGeometry | null = null;
 
 let nutGeometryCache: THREE.BufferGeometry | null = null;
 let boltBaseGeometryCache: THREE.BufferGeometry | null = null;
+let capGeometryCache: THREE.BufferGeometry | null = null;
 
 /**
  * Creates the rounded beveled hexagonal nut geometry with center hole
@@ -140,4 +141,20 @@ export function createBoltMeshGroup(
     }
     group.add(new THREE.Mesh(shaftGeometryCache!,shaftMaterial));
     return group;
+}
+
+/**
+ * Acorn cap nut that locks a finished bolt: a short hex collar with a dome that covers the shaft tip.
+ * Origin is the collar's bottom face, so it sits straight on the top nut.
+ */
+export function getCapGeometry(): THREE.BufferGeometry {
+	if (capGeometryCache) return capGeometryCache;
+	const collar = new THREE.CylinderGeometry(0.58, 0.58, 0.34, 6).rotateY(Math.PI / 6).translate(0, 0.17, 0);
+	const dome = new THREE.SphereGeometry(0.42, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.34, 0);
+	const flatCollar = collar.toNonIndexed();
+	flatCollar.computeVertexNormals(); // crisp hex faces; the dome keeps its smooth normals
+	const smoothDome = dome.toNonIndexed();
+	capGeometryCache = mergeGeometries([flatCollar, smoothDome]);
+	[collar, dome, flatCollar, smoothDome].forEach((part) => part.dispose());
+	return capGeometryCache;
 }

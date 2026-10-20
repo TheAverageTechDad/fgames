@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import {getNutGeometry,createBoltMeshGroup} from './geometries';
+import {getNutGeometry,createBoltMeshGroup,getCapGeometry} from './geometries';
 import {getNutIconTexture,makeCanvas} from './textures';
 import {NUT_THEMES,type NutColor,type NutItem} from '../types';
 import {createGraphicsPolicy} from '#lib/feedback/graphics-settings.js';
-export interface SceneState {bolts:NutItem[][];selectedBolt:number|null;hintMove:{from:number;to:number}|null;isWon:boolean;capacity:number;guided:boolean;}
+export interface SceneState {bolts:NutItem[][];selectedBolt:number|null;hintMove:{from:number;to:number}|null;isWon:boolean;capacity:number;guided:boolean;nudge?:{bolt:number;at:number}|null;}
 export interface Viewport {width:number;height:number;dpr:number;}
 export interface SceneCallbacks {bolt:(index:number)=>void;settled:()=>void;targets:(targets:{x:number;y:number}[])=>void;ready:()=>void;}
 /** The existing Three scene runs unchanged in a worker, with a main-thread fallback. */
 export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,viewport:Viewport,state:SceneState,callbacks:SceneCallbacks){
  let {bolts,selectedBolt,hintMove,isWon,capacity,guided}=state;
+ let lastNudge=state.nudge?.at??0;
  const onBoltClick=callbacks.bolt,onSettled=callbacks.settled;
  const graphics=createGraphicsPolicy();
  let alive=true,ready=false;
@@ -24,7 +25,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 	// Constants for 3D layout (Scaled down & spaced out for clean, airy layout)
 	const NUT_HEIGHT = 0.50;
-	const NUT_BASE_Y = 0.22;
+	const NUT_BASE_Y = 0.42; // nut is .50 tall and centred: its bottom rests on the base hub (y .16)
 	const SHAFT_TOP_Y = 2.57;
 	const HOVER_Y_OFFSET = 3.25;
 
@@ -87,12 +88,19 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 	const nutInstances: Map<string, NutInstance> = new Map();
 	const boltMeshes: THREE.Group[] = [];
+	// One gold acorn nut per bolt: screwed on once that bolt's set is finished, so it reads as locked.
+	const caps: THREE.Mesh[] = [];
+	const capProgress: number[] = [];
+	const capWobble: number[] = [];
+	const CAP_DROP = 0.32;
+	const WOBBLE = 0.45;
 
 	// Materials (Clean matte finish for nuts, crisp metallic for screw shafts)
 	const nutMaterials: Map<NutColor, THREE.MeshStandardMaterial> = new Map();
 	let boltMaterial: THREE.MeshStandardMaterial;
 	let baseMaterial: THREE.MeshStandardMaterial;
 	let lockedBaseMaterial: THREE.MeshStandardMaterial;
+	let capMaterial: THREE.MeshStandardMaterial;
 	let hintSourceMarker: THREE.Group;
 	let hintTargetMarker: THREE.Group;
 
@@ -186,6 +194,14 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			roughness: 0.6
 		});
 
+		capMaterial = new THREE.MeshStandardMaterial({
+			color: new THREE.Color('#f5b82e'),
+			metalness: 0.75,
+			roughness: 0.3,
+			emissive: new THREE.Color('#5c3b00'),
+			emissiveIntensity: 0.25
+		});
+
 		// 3D Hint Source Marker (Pulsing Gold Torus Ring)
 		hintSourceMarker = new THREE.Group();
 		const srcRingGeom = new THREE.TorusGeometry(0.88, 0.045, 16, 32);
@@ -216,6 +232,8 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	function buildScene() {
 		boltMeshes.forEach((m) => scene.remove(m));
 		boltMeshes.length = 0;
+		caps.forEach((cap) => scene.remove(cap));
+		caps.length = capProgress.length = capWobble.length = 0;
 
 		const totalBolts = bolts.length;
 
@@ -246,6 +264,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 			scene.add(boltGroup);
 			boltMeshes.push(boltGroup);
+
+			const cap = new THREE.Mesh(getCapGeometry(), capMaterial);
+			cap.visible = false;
+			scene.add(cap);
+			caps.push(cap);
+			capProgress.push(0);
+			capWobble.push(0);
 		}
 
 		syncNuts();
@@ -568,6 +593,23 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			}
 		}
 
+		// Locking caps: drop and screw on once a finished bolt's nuts have all landed.
+		bolts.forEach((nuts, i) => {
+			const cap = caps[i];
+			if (!cap) return;
+			const finished = nuts.length === capacity && nuts.every((n) => n.color === nuts[0].color);
+			if (!finished) { cap.visible = false; capProgress[i] = 0; capWobble[i] = 0; return; }
+			if (!nuts.every((n) => nutInstances.get(n.id)?.anim.state === 'resting')) return;
+			const pos = getBoltPosition(i, totalBolts);
+			capProgress[i] = Math.min(1, capProgress[i] + delta / CAP_DROP);
+			const t = easeOutCubic(capProgress[i]);
+			capWobble[i] = Math.max(0, capWobble[i] - delta);
+			const w = capWobble[i] / WOBBLE;
+			cap.visible = true;
+			cap.position.set(pos.x, pos.y + NUT_BASE_Y + capacity * NUT_HEIGHT - NUT_HEIGHT / 2 + (1 - t) * 0.9, pos.z);
+			cap.rotation.set(0, (1 - t) * -Math.PI * 2, Math.sin(w * Math.PI * 6) * 0.14 * w);
+		});
+
 		// 3D Hint Indicators (Pulsing glowing rings above source and destination)
 		if (hintMove) {
 			const total = bolts.length;
@@ -626,7 +668,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
  initThree();buildScene();
  void renderer.compileAsync(scene,camera).then(()=>{if(alive)animate();});
  return {
-  update(next:SceneState){const oldLength=bolts.length;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(oldLength!==bolts.length)buildScene();else syncNuts();},
+  update(next:SceneState){const oldLength=bolts.length;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(next.nudge&&next.nudge.at!==lastNudge){lastNudge=next.nudge.at;capWobble[next.nudge.bolt]=WOBBLE;}if(oldLength!==bolts.length)buildScene();else syncNuts();},
   resize(next:Viewport){viewport=next;handleResize();},
   pointer:pointerDown,
   destroy(){alive=false;cancel(animationFrameId);scene.traverse(obj=>{if(obj instanceof THREE.Mesh){obj.geometry.dispose();const materials=Array.isArray(obj.material)?obj.material:[obj.material];for(const material of materials){if(material.map)material.map.dispose();material.dispose();}}});renderer.dispose();}
