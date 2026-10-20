@@ -13,9 +13,9 @@
 		onBack: () => void;
 	}
 
-	let { initialLevelId = 19, difficulty = 'medium', onBack }: Props = $props();
+	let { initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
 
-	let currentLevelId = $state(19);
+	let currentLevelId = $state(1);
 	let unlockedThrough = $state(1);
 
 	$effect(() => {

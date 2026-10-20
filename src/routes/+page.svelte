@@ -15,7 +15,7 @@
 	let selectedGame = $state<'nuts' | 'escape'>('nuts');
 	let currentDifficulty = $state<Difficulty>('medium');
 	let initialNutsLevel = $state<number>(1);
-	let initialEscapeLevel = $state<number>(19);
+	let initialEscapeLevel = $state<number>(1);
 	let showSettings = $state(false);
 
 	onMount(() => {
@@ -54,7 +54,7 @@
 				}
 			} else {
 				if (selectedGame === 'nuts') initialNutsLevel = 1;
-				else initialEscapeLevel = currentDifficulty === 'medium' ? 19 : 1;
+				else initialEscapeLevel = 1;
 			}
 		} catch {}
 

@@ -27,10 +27,10 @@ export const ESCAPE_LEVELS: EscapeLevel[] = [
 		]
 	},
 
-	// MEDIUM LEVELS (Level 19 is the EXACT layout from the user's video!)
+	// MEDIUM LEVELS
 	{
-		id: 19,
-		name: 'Level 19',
+		id: 1,
+		name: 'Level 1',
 		difficulty: 'medium',
 		minMoves: 6,
 		vehicles: [
@@ -48,8 +48,8 @@ export const ESCAPE_LEVELS: EscapeLevel[] = [
 		]
 	},
 	{
-		id: 20,
-		name: 'Level 20',
+		id: 2,
+		name: 'Level 2',
 		difficulty: 'medium',
 		minMoves: 5,
 		vehicles: [
@@ -66,8 +66,8 @@ export const ESCAPE_LEVELS: EscapeLevel[] = [
 
 	// HARD LEVELS
 	{
-		id: 30,
-		name: 'Level 30',
+		id: 1,
+		name: 'Level 1',
 		difficulty: 'hard',
 		minMoves: 16,
 		vehicles: [
@@ -86,8 +86,8 @@ export const ESCAPE_LEVELS: EscapeLevel[] = [
 
 	// EXTRA HARD LEVELS (Master Rush Hour puzzle)
 	{
-		id: 40,
-		name: 'Master 40',
+		id: 1,
+		name: 'Level 1',
 		difficulty: 'extra_hard',
 		minMoves: 28,
 		vehicles: [

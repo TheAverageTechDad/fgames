@@ -52,7 +52,7 @@
 	});
 
 	onMount(() => {
-		savedLevels.medium = gameType === 'escape' ? 19 : 1;
+		savedLevels.medium = 1;
 		try {
 			for (const d of difficulties) {
 				const key = `fgames_${gameType}_${d}_level`;
