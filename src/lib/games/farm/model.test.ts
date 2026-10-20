@@ -223,6 +223,16 @@ describe('Pocket Farm loop', () => {
     expect(s.player.z).toBeGreaterThan(7);
     expect(s.player.z).toBeLessThanOrEqual(ORCHARD.maxZ);
   });
+  it('two farmhands spread over different fields instead of crowding the nearest', () => {
+    const s = createFarm();
+    s.wallet = 100_000; for (let i = 0; i < 3; i++) purchaseNext(s);
+    hireHelper(s); hireHelper(s); s.wallet = 0;
+    for (const plot of s.plots) for (const cell of plot.cells) { cell.stage = 'ripe'; cell.age = GROW[plot.crop]; }
+    s.player = { x: 0, z: -6 };
+    for (let i = 0; i < 160; i++) stepFarm(s, 0.05, stay);
+    const crops = (['tomato', 'cucumber', 'strawberry'] as const).filter(c => s.stats.harvested[c] > 0);
+    expect(crops.length).toBeGreaterThanOrEqual(2);
+  });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();
     stepFarm(s, 1000, { x: 1, z: 1 });

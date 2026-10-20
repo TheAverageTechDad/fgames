@@ -117,3 +117,10 @@ Fixes from the recording: the back button, title and wallet sat under iOS 26's b
 - Customers carry a stall index; each stall has its own arrival and serving clock. Farmhands also pick apples and gather honey, go through the yard and orchard entrances, and take each load to the stall that sells it.
 - Four goals join the track (open the orchard, sell 20 apples, keep bees, sell 10 jars). Saves keep `pocket-farm:v1`; the new fields default for older saves.
 - The load-error screen now logs its cause to the console.
+
+## Session 6 rulings (21 October 2026): polish after the orchard playtest
+
+- Farmhands choose by area, not by nearest job: each field, the nests and the hives score by how much is waiting minus the walk, and an area another farmhand already took this moment scores lower, so they spread across the farm instead of all picking the strawberries beside the farmhouse.
+- The orchard is larger (x −8.4…0.75, z 6.4…12.8): six smaller trees spaced 1.55 × 1.65 apart on a mown meadow with apples on the outside of the canopy, the stand moved a little south, and the hives on their own gravel strip along the south fence, in front of the trees; the beehive tile sits where the hives will stand.
+- Each new area gets a short camera tour and a banner saying what to do there (coop, orchard, hives, fields and decorations). The camera now follows within the land she owns rather than the original square.
+- The benches face the camera (side-on they read as a tall post). "Coins are piling up!" only shows when a pile is at least 5% of the wallet, and ripe apples get their own hint.

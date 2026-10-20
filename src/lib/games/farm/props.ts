@@ -190,9 +190,10 @@ export function createFarmProps() {
       // An apple tree: the canopy stays, the apples come and go.
       cylinder(leaves, COLORS.woodDark, 0, 0.5, 0, 0.1, 1.0);
       for (const [x, y, z, r, c] of [[0, 1.45, 0, 0.62, COLORS.foliage], [-0.32, 1.3, 0.2, 0.42, COLORS.foliageLight], [0.3, 1.35, -0.18, 0.44, COLORS.foliageLight], [0.05, 1.8, 0.05, 0.4, '#5d9c3e']] as const) ball(leaves, c, x, y, z, r);
-      for (let i = 0; i < 9; i++) {
-        const a = i * 0.7, h = 1.15 + (i % 3) * 0.28, d = 0.52 + (i % 2) * 0.12;
-        ball(fruit, i % 4 ? COLORS.apple : '#e6c13a', Math.cos(a) * d, h, Math.sin(a) * d, 0.085);
+      // Apples sit on the outside of the canopy, big enough to read from the camera.
+      for (let i = 0; i < 10; i++) {
+        const a = i * 0.63, h = 1.15 + (i % 3) * 0.25, d = 0.6 + (i % 2) * 0.08;
+        ball(fruit, i % 5 ? COLORS.apple : '#e6c13a', Math.cos(a) * d, h, Math.sin(a) * d, 0.11);
       }
     } else if (kind === 'tomato') {
       cylinder(leaves, '#c8a06b', 0.12, 0.33, -0.08, 0.018, 0.66);

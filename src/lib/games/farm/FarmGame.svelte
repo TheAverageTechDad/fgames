@@ -34,14 +34,15 @@
     const bought = PURCHASES[farm.purchased - 1];
     const messages = { seed: `+${e.amount} seeds`, plant: '', served: '', sale: '', harvest: `+${e.amount} ${{ tomato: 'tomatoes', cucumber: 'cucumbers', strawberry: 'strawberries', apple: 'apples' }[e.crop as string] ?? ''}`,
       delivery: `${e.amount} fresh picks delivered`, cash: `+$${e.amount}`, unhappy: 'A shopper left without their order',
-      purchase: { basket: `Bigger basket! Carry ${capacity(farm)}`, coop: 'The chicken coop is open!', orchard: 'The orchard and its stand are open!', hives: 'The bees have moved in!',
+      purchase: { basket: `Bigger basket! Carry ${capacity(farm)}`, coop: 'Coop open! Collect eggs from the nests and sell them at the market',
+        orchard: 'Orchard open! Pick apples under the trees and sell them at the green stand', hives: 'The bees moved in! Collect honey jars and sell them at the green stand',
         field: `New field! ${farm.plots.at(-1)?.crop === 'strawberry' ? 'Strawberries' : 'Cucumbers'} unlocked` }[bought?.kind ?? 'field'],
       goal: `Goal complete! +$${e.amount}`, egg: `+${e.amount} ${e.amount === 1 ? 'egg' : 'eggs'}`, honey: `+${e.amount} ${e.amount === 1 ? 'jar' : 'jars'} of honey`, helper: '',
       upgrade: e.id === 'helper' ? 'A farmhand joined the farm!' : e.id && e.id in DECOR ? `${DECOR[e.id as DecorId].name} added!` : e.id ? `${UPGRADES[e.id as UpgradeId].name} level ${farm.upgrades[e.id as UpgradeId]}!` : '' };
     // A goal banner stays up a little longer and is not cut short by ordinary pickups.
     if (messages[e.type] && (!toastBig || e.type === 'goal')) {
       toast = messages[e.type]; toastBig = e.type === 'goal' || e.type === 'purchase' || e.type === 'upgrade'; toastId++; clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { toast = ''; toastBig = false; }, toastBig ? 2600 : 1600);
+      toastTimer = setTimeout(() => { toast = ''; toastBig = false; }, e.type === 'purchase' ? 3600 : toastBig ? 2600 : 1600);
     }
     if (e.type === 'purchase' || e.type === 'cash' || e.type === 'goal' || e.type === 'upgrade') {
       const r = wallet.getBoundingClientRect(), h = host.getBoundingClientRect();

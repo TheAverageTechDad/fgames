@@ -54,7 +54,7 @@ export const FIELDS: Field[] = [
   { crop: 'tomato', x: -3.2, z: -3.2, stand: { x: -2.8, z: -1.55 }, tile: { x: -3.8, z: -0.4 } },
   { crop: 'cucumber', x: 3.2, z: -3.2, stand: { x: 3.6, z: -1.55 }, tile: { x: 2.6, z: -0.4 } },
   { crop: 'strawberry', x: -2.9, z: 2.8, stand: { x: -3.3, z: 1.1 }, tile: { x: -2.3, z: 0.4 } },
-  { crop: 'apple', x: -4.2, z: 9.6, trees: true }
+  { crop: 'apple', x: -5.5, z: 9.25, trees: true }
 ];
 export const BOUNDS = 6.4;
 export const SPOTS = {
@@ -67,10 +67,10 @@ export const SPOTS = {
   coopTile: { x: 5.7, z: 0 },
   coop: { x: 9.4, z: -3.7 },
   orchardTile: { x: 0, z: 5.85 },
-  stand: { x: 0, z: 7.2 },
-  standCounter: { x: -1.55, z: 7.2 },
-  standCash: { x: 0.1, z: 8.4 },
-  hiveTile: { x: -1.5, z: 9.9 }
+  stand: { x: 0, z: 7.6 },
+  standCounter: { x: -1.55, z: 7.6 },
+  standCash: { x: 0.1, z: 8.8 },
+  hiveTile: { x: -5.3, z: 12.0 }
 };
 // Two places to sell: the market takes the fields' crops and eggs, the orchard stand takes apples and honey.
 export const STALLS: { sell: Point; counter: Point; cash: Point; accepts: readonly Product[] }[] = [
@@ -79,9 +79,10 @@ export const STALLS: { sell: Point; counter: Point; cash: Point; accepts: readon
 ];
 // The coop yard lies past the right-hand hedge; the orchard past the bottom-left one, south of the farmhouse.
 export const YARD = { minX: BOUNDS, maxX: 10.6, minZ: -4.2, maxZ: 1.2 };
-export const ORCHARD = { minX: -BOUNDS, maxX: 0.75, minZ: BOUNDS, maxZ: 11 };
+export const ORCHARD = { minX: -8.4, maxX: 0.75, minZ: BOUNDS, maxZ: 12.8 };
 export const NESTS: Point[] = [{ x: 8.6, z: -2.55 }, { x: 9.4, z: -2.55 }, { x: 10.2, z: -2.55 }];
-export const HIVES: Point[] = [{ x: -5.6, z: 7.6 }, { x: -4.6, z: 7.6 }, { x: -3.6, z: 7.6 }];
+// The apiary sits along the orchard's south fence, in front of the trees so it is never hidden.
+export const HIVES: Point[] = [{ x: -6.8, z: 12.0 }, { x: -5.3, z: 12.0 }, { x: -3.8, z: 12.0 }];
 // Bought one at a time; only the next one shows its price tile.
 export const PURCHASES: { kind: 'field' | 'basket' | 'coop' | 'orchard' | 'hives'; price: number; at: Point; field?: number }[] = [
   { kind: 'field', price: 40, at: FIELDS[1], field: 1 },
@@ -114,7 +115,7 @@ export const OBSTACLES: Box[] = [[SPOTS.counter.x, SPOTS.counter.z, 0.95, 0.42],
 const standBoxes = (s: FarmState): Box[] => s.plots.flatMap(plot => FIELDS[plot.id].stand ? [[FIELDS[plot.id].stand!.x, FIELDS[plot.id].stand!.z, 0.5, 0.22] as Box] : []);
 // Once the yard or orchard opens, the hedge beside its entrance becomes its wall.
 const YARD_WALLS: Box[] = [[6.65, -3.8, 0.17, 2.9], [6.65, 1.9, 0.17, 1.0], [SPOTS.coop.x, SPOTS.coop.z, 1.1, 0.55]];
-const ORCHARD_WALLS: Box[] = [[-3.78, 6.65, 2.87, 0.17], [SPOTS.standCounter.x, SPOTS.standCounter.z, 0.95, 0.42]];
+const ORCHARD_WALLS: Box[] = [[-3.78, 6.65, 2.87, 0.17], [-7.5, 6.65, 0.9, 0.17], [SPOTS.standCounter.x, SPOTS.standCounter.z, 0.95, 0.42]];
 
 export const total = (items: Inventory) => PRODUCTS.reduce((sum, p) => sum + (items[p] ?? 0), 0);
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -182,7 +183,7 @@ export function makePlot(id: number): Plot {
   const f = FIELDS[id];
   // Fields are 3×3 beds; the orchard is two rows of three trees, already in fruit when it opens.
   const cells = f.trees
-    ? Array.from({ length: 6 }, (_, i) => ({ id: `${id}-${i}`, x: f.x + ((i % 3) - 1) * 1.2, z: f.z + (Math.floor(i / 3) - 0.5) * 1.2, stage: 'ripe' as const, age: GROW[f.crop] }))
+    ? Array.from({ length: 6 }, (_, i) => ({ id: `${id}-${i}`, x: f.x + ((i % 3) - 1) * 1.55, z: f.z + (Math.floor(i / 3) - 0.5) * 1.65, stage: 'ripe' as const, age: GROW[f.crop] }))
     : Array.from({ length: 9 }, (_, i) => ({ id: `${id}-${i}`, x: f.x + ((i % 3) - 1) * 0.8, z: f.z + (Math.floor(i / 3) - 1) * 0.8, stage: 'empty' as const, age: 0 }));
   return { id, crop: f.crop, cells };
 }
@@ -401,7 +402,7 @@ const GATES = { yard: { x: 6.75, z: 0 }, orchard: { x: 0, z: 6.75 } } as const;
 const region = (p: Point) => p.x > 6.6 ? 'yard' : p.z > 6.6 ? 'orchard' : 'main';
 type Job = Point & ({ kind: 'cell'; cell: Cell; crop: Crop; trees: boolean } | { kind: 'store'; item: 'egg' | 'honey'; index: number } | { kind: 'stall'; stall: number } | { kind: 'rest' });
 function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'], at: Point, amount: number, crop?: Product, stall?: number) => void) {
-  const claimed = new Set<string>(), walls = solids(state, false);
+  const claimed = new Set<string>(), busy = new Set<string>(), walls = solids(state, false);
   state.helpers.forEach((h, index) => {
     const load = total(h.carry);
     const jobs: Job[] = [
@@ -410,8 +411,20 @@ function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'
       ...(hasHives(state) ? HIVES.flatMap((n, i) => state.hives[i] >= 1 && !claimed.has(`honey${i}`) ? [{ ...n, kind: 'store' as const, item: 'honey' as const, index: i }] : []) : [])
     ];
     const deliverTo = STALLS.findIndex(st => st.accepts.some(i => h.carry[i] > 0));
+    // Work goes where most is waiting: group jobs by area, weigh how much each holds against the walk,
+    // and steer clear of an area another farmhand is already working, so they spread over the whole farm.
+    const area = (j: Job) => j.kind === 'cell' ? `plot:${j.cell.id.split('-')[0]}` : j.kind === 'store' ? `store:${j.item}` : '';
+    const areas = new Map<string, Job[]>();
+    for (const j of jobs) areas.set(area(j), [...(areas.get(area(j)) ?? []), j]);
+    let best: Job | null = null, bestScore = -Infinity;
+    for (const [key, list] of areas) {
+      const closest = nearest(h, list)!, backlog = list.reduce((n, j) => n + (j.kind === 'cell' ? 3 : j.kind === 'store' ? (j.item === 'egg' ? state.nests : state.hives)[j.index] : 0), 0);
+      const score = backlog - distance(h, closest) * 0.6 - (busy.has(key) ? 6 : 0);
+      if (score > bestScore) { bestScore = score; best = closest; }
+    }
     const target: Job = load >= HELPER_LOAD || (load > 0 && !jobs.length) ? { ...STALLS[deliverTo].sell, kind: 'stall', stall: deliverTo }
-      : nearest(h, jobs) ?? { x: SPOTS.board.x + 0.8 + index * 0.6, z: SPOTS.board.z - 0.8, kind: 'rest' };
+      : best ?? { x: SPOTS.board.x + 0.8 + index * 0.6, z: SPOTS.board.z - 0.8, kind: 'rest' };
+    if (target.kind === 'cell' || target.kind === 'store') busy.add(area(target));
     if (target.kind === 'cell') claimed.add(target.cell.id);
     if (target.kind === 'store') claimed.add(`${target.item}${target.index}`);
     // Between areas by their entrance; one axis at a time, so they slide along a wall instead of sticking.
@@ -441,7 +454,8 @@ export function farmGoal(s: FarmState): { hint: string; at: Point | null } {
   const carried = STALLS.map((st, i) => ({ ...st.sell, i, has: st.accepts.some(k => s.produce[k] > 0) })).filter(st => st.has);
   const deliver = nearest(s.player, carried);
   const pile = [{ ...SPOTS.cash, coins: s.cash }, { ...SPOTS.standCash, coins: s.standCash }].sort((a, b) => b.coins - a.coins)[0];
-  if (pile.coins >= 40) return { hint: 'Coins are piling up! Walk over to collect.', at: pile };
+  // "Piling up" means a lot compared with what she already has, so it stops nagging a rich farm.
+  if (pile.coins >= Math.max(40, s.wallet * 0.05)) return { hint: 'Coins are piling up! Walk over to collect.', at: pile };
   if (next && s.wallet >= next.price) {
     const what = { field: 'a new field', basket: 'a bigger basket', coop: 'the chicken coop', orchard: 'the orchard', hives: 'beehives' }[next.kind];
     return { hint: `You can afford ${what}. Stand on the golden tile!`, at: next.at };
@@ -450,7 +464,8 @@ export function farmGoal(s: FarmState): { hint: string; at: Point | null } {
   const waiting = STALLS.findIndex((st, i) => { const f = s.customers.find(c => c.stall === i); return f && !f.wait && s.stock[f.crop] === 0 && st.accepts.some(k => s.produce[k] > 0); });
   if (waiting >= 0) return { hint: 'A shopper is waiting. Bring them what they need!', at: STALLS[waiting].sell };
   const ripe = ripeCells(s);
-  if (ripe.length) return { hint: 'Ready to pick! Walk through the ripe crops.', at: nearest(s.player, ripe) };
+  const pickNext = nearest(s.player, ripe);
+  if (pickNext) return { hint: s.plots.find(p => p.cells.includes(pickNext as Cell))?.crop === 'apple' ? 'Apples are ready! Walk under the trees to pick them.' : 'Ready to pick! Walk through the ripe crops.', at: pickNext };
   const nest = hasCoop(s) ? nearest(s.player, NESTS.filter((_, i) => s.nests[i] >= 2)) : null;
   if (nest) return { hint: 'The hens have laid! Collect the eggs.', at: nest };
   const hive = hasHives(s) ? nearest(s.player, HIVES.filter((_, i) => s.hives[i] >= 2)) : null;
