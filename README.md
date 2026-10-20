@@ -32,6 +32,7 @@ In another terminal, run browser verification against that production preview:
 ```sh
 pnpm exec playwright install chromium
 pnpm smoke
+node scripts/interaction-smoke.mjs
 ```
 
 `FGAMES_URL` changes the target URL. The smoke script checks fresh Level 1 starts and plays stored solutions in all eight combinations, then checks replay, navigation, hints, a small viewport and offline reloads. It records startup tasks in `test-results/smoke.json`; `FGAMES_STRICT_PERF=1` enforces the report's 50 ms startup task gate on both games.
