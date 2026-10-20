@@ -38,7 +38,7 @@ export const NUT_THEMES: Record<NutColor, NutTheme> = {
 		iconSvg: `<path d="M12 2L2 12l10 10 10-10L12 2z" fill="currentColor"/>`
 	},
 	pink: {
-		primary: '#d946ef',
+		primary: '#f472b6',
 		topFace: '#ec4899',
 		leftFace: '#be185d',
 		rightFace: '#9d174d',

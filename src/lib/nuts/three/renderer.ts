@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {getNutGeometry,createBoltMeshGroup,getCapGeometry} from './geometries';
 import {getNutIconTexture,makeCanvas} from './textures';
 import {NUT_THEMES,type NutColor,type NutItem} from '../types';
-import {createGraphicsPolicy} from '#lib/feedback/graphics-settings.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 export interface SceneState {bolts:NutItem[][];selectedBolt:number|null;hintMove:{from:number;to:number}|null;isWon:boolean;capacity:number;guided:boolean;nudge?:{bolt:number;at:number}|null;}
 export interface Viewport {width:number;height:number;dpr:number;}
 export interface SceneCallbacks {bolt:(index:number)=>void;settled:()=>void;targets:(targets:{x:number;y:number}[])=>void;ready:()=>void;}
@@ -11,7 +11,8 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
  let {bolts,selectedBolt,hintMove,isWon,capacity,guided}=state;
  let lastNudge=state.nudge?.at??0;
  const onBoltClick=callbacks.bolt,onSettled=callbacks.settled;
- const graphics=createGraphicsPolicy();
+ // ponytail: a static puzzle board is cheap, so it always renders at native resolution (up to 3x)
+ const pixelRatio=()=>Math.min(viewport.dpr||1,3);
  let alive=true,ready=false;
  const schedule=typeof requestAnimationFrame==='function'?requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(performance.now()),16) as unknown as number;
  const cancel=typeof cancelAnimationFrame==='function'?cancelAnimationFrame:clearTimeout;
@@ -86,7 +87,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	const WOBBLE = 0.45;
 
 	// Materials (Clean matte finish for nuts, crisp metallic for screw shafts)
-	const nutMaterials: Map<NutColor, THREE.MeshStandardMaterial> = new Map();
+	const nutMaterials: Map<NutColor, THREE.MeshPhysicalMaterial> = new Map();
 	let boltMaterial: THREE.MeshStandardMaterial;
 	let baseMaterial: THREE.MeshStandardMaterial;
 	let lockedBaseMaterial: THREE.MeshStandardMaterial;
@@ -94,14 +95,17 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	let hintSourceMarker: THREE.Group;
 	let hintTargetMarker: THREE.Group;
 
-	function getNutMaterial(color: NutColor): THREE.MeshStandardMaterial {
+	function getNutMaterial(color: NutColor): THREE.MeshPhysicalMaterial {
 		if (nutMaterials.has(color)) return nutMaterials.get(color)!;
 
 		const theme = NUT_THEMES[color];
-		const mat = new THREE.MeshStandardMaterial({
+		// glossy toy plastic: a clear coat over a saturated base, like the reference game's nuts
+		const mat = new THREE.MeshPhysicalMaterial({
 			color: new THREE.Color(theme.primary),
-			roughness: 0.62,
-			metalness: 0.04
+			roughness: 0.42,
+			metalness: 0,
+			clearcoat: 0.8,
+			clearcoatRoughness: 0.22
 		});
 		nutMaterials.set(color, mat);
 		return mat;
@@ -123,11 +127,17 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			powerPreference: 'default'
 		});
 		renderer.setSize(viewport.width, viewport.height, false);
-		renderer.setPixelRatio(graphics.dimensions(viewport.width,viewport.height,viewport.dpr).sceneRatio);
+		renderer.setPixelRatio(pixelRatio());
 		renderer.shadowMap.enabled = false;
 		renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-		renderer.toneMapping = THREE.ACESFilmicToneMapping;
-		renderer.toneMappingExposure = 1.22;
+		// Neutral keeps the nut colours saturated (ACES at 1.22 washed them out, as it did in Catcha)
+		renderer.toneMapping = THREE.NeutralToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		// reflections for the steel bolts and the nuts' clear coat
+		const pmrem = new THREE.PMREMGenerator(renderer);
+		scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+		scene.environmentIntensity = 0.7;
+		pmrem.dispose();
 
 		raycaster = new THREE.Raycaster();
 		pointer = new THREE.Vector2();
@@ -135,15 +145,15 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 		// Studio 3-Point + Hemisphere Lighting
 		// 1. Soft purple ambient bounce matching background
-		const ambient = new THREE.AmbientLight(new THREE.Color('#fff6e6'), 1.4);
+		const ambient = new THREE.AmbientLight(new THREE.Color('#fff6e6'), 0.25);
 		scene.add(ambient);
 
 		// 2. Hemisphere Light (Soft Sky White above, Slate/Ground below)
-		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7058, 1.6);
+		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7058, 0.45);
 		scene.add(hemiLight);
 
 		// 3. Main Key Light (Warm white, cast soft shadows)
-		const keyLight = new THREE.DirectionalLight(new THREE.Color('#ffffff'), 2.6);
+		const keyLight = new THREE.DirectionalLight(new THREE.Color('#ffffff'), 2.0);
 		keyLight.position.set(-6, 16, 12);
 		keyLight.castShadow = false;
 		keyLight.shadow.mapSize.width = 1024;
@@ -154,12 +164,12 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 		scene.add(keyLight);
 
 		// 4. Cool Specular Rim Light (Cyan/Blue back highlight)
-		const rimLight = new THREE.DirectionalLight(new THREE.Color('#93c5fd'), 2.2);
+		const rimLight = new THREE.DirectionalLight(new THREE.Color('#93c5fd'), 0.7);
 		rimLight.position.set(8, 12, -7);
 		scene.add(rimLight);
 
 		// 5. Direct Top Highlight
-		const topLight = new THREE.DirectionalLight(new THREE.Color('#f8fafc'), 1.8);
+		const topLight = new THREE.DirectionalLight(new THREE.Color('#f8fafc'), 0.9);
 		topLight.position.set(0, 16, 4);
 		scene.add(topLight);
 
@@ -474,6 +484,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	function handleResize() {
 		if (!renderer || !camera) return;
 		updateCameraFraming();
+		renderer.setPixelRatio(pixelRatio());
 		renderer.setSize(viewport.width, viewport.height, false);
 	}
 
@@ -490,7 +501,6 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 		const delta = Math.min(rawDelta, 0.05); // Cap to 50ms to prevent jumps if tab backgrounded
 		const time = clock.getElapsedTime();
 		const totalBolts = bolts.length;
-        if(graphics.sample(rawDelta*1000,true))renderer.setPixelRatio(graphics.dimensions(viewport.width,viewport.height,viewport.dpr).sceneRatio);
 
 		for (const inst of nutInstances.values()) {
 			const anim = inst.anim;

@@ -16,20 +16,19 @@ export function getNutIconTexture(color: NutColor): THREE.CanvasTexture<HTMLCanv
 		return textureCache.get(color)!;
 	}
 
-	const size = 128;
-	const canvas = makeCanvas(size,size);
-	canvas.width = size;
-	canvas.height = size;
+	// same 1.6:1 shape as the badge plane on the nut (a square texture stretched the icons sideways)
+	const width = 256, height = 160;
+	const canvas = makeCanvas(width,height);
 	const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
 	const theme = NUT_THEMES[color];
 
 	// Transparent background so the glossy physical material shines through
-	ctx.clearRect(0, 0, size, size);
+	ctx.clearRect(0, 0, width, height);
 
 	// Center icon symbol
 	ctx.save();
-	ctx.translate(size / 2, size / 2);
+	ctx.translate(width / 2, height / 2);
 
 	// Draw embossed symbol based on color
 	drawIcon(ctx, color);
@@ -39,6 +38,8 @@ export function getNutIconTexture(color: NutColor): THREE.CanvasTexture<HTMLCanv
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.wrapS = THREE.ClampToEdgeWrapping;
 	texture.wrapT = THREE.ClampToEdgeWrapping;
+	texture.colorSpace = THREE.SRGBColorSpace;
+	texture.anisotropy = 8;
 	textureCache.set(color, texture);
 	return texture;
 }
@@ -56,7 +57,7 @@ function drawIcon(ctx: CanvasRenderingContext2D, color: NutColor) {
 	ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
 	ctx.lineWidth = 2.5;
 
-	const scale = 2.5;
+	const scale = 3.1;
 	ctx.scale(scale, scale);
 
 	switch (color) {

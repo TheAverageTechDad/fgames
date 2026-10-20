@@ -6,7 +6,7 @@
 *{box-sizing:border-box}body{margin:0}button,select{font:inherit}button{cursor:pointer;touch-action:manipulation}button:disabled{cursor:default;opacity:.48}button:focus-visible,select:focus-visible{outline:3px solid var(--ink);outline-offset:4px}::selection{background:#6ce6b8;color:var(--ink)}h1,h2,h3{font-family:'Luckiest Guy',cursive;font-weight:400;line-height:1.1;margin:0;text-wrap:balance}p{margin:0;line-height:1.4}h1{font-size:clamp(22px,6vw,29px)}h2{font-size:25px}.muted{color:var(--ink-soft);font-size:15px}select{color:var(--ink);border:2px solid var(--ink);background:var(--cream);border-radius:10px;padding:8px;min-height:44px;min-width:64px}
 .app-surround{min-height:100dvh;display:flex;justify-content:center;align-items:center}.app-shell{position:relative;width:100%;max-width:460px;height:100dvh;overflow:hidden;background:var(--cream)}.screen-transition{height:100%;animation:screen-enter 230ms cubic-bezier(.22,1,.36,1)}
 .game-screen,.difficulty-screen,.home-screen{display:flex;flex-direction:column;height:100%;min-height:0;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink)}
-.game-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(max(14px,env(safe-area-inset-top)) + var(--edge-ramp)) 18px 12px;z-index:20;flex-shrink:0}.header-title{text-align:center;min-width:0;flex:1}.header-title p{font-size:14px;margin-top:4px;text-transform:capitalize;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.game-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(14px,env(safe-area-inset-top)) 18px 12px;z-index:20;flex-shrink:0}.header-title{text-align:center;min-width:0;flex:1}.header-title p{font-size:14px;margin-top:4px;text-transform:capitalize;color:var(--ink-soft);font-variant-numeric:tabular-nums}
 .toy-button{--top:var(--cream);--bottom:var(--cream-bottom);--lip:var(--ink);position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:44px;min-height:48px;padding:10px 14px;border:3px solid var(--ink);border-radius:15px;background:linear-gradient(var(--top),var(--bottom));box-shadow:0 5px 0 var(--lip);color:var(--ink);transition:transform 100ms ease-out,box-shadow 100ms ease-out;font-size:18px;line-height:1.1}
 .toy-button:before{content:'';position:absolute;top:3px;left:10px;right:10px;height:5px;background:#fff6e659;border-radius:6px;pointer-events:none}.toy-button:active:enabled{transform:translateY(4px);box-shadow:0 1px 0 var(--lip)}.icon-button{width:46px;height:46px;min-height:46px;padding:8px;flex-shrink:0}
 .mint{--top:var(--mint-top);--bottom:var(--mint-bottom);--lip:var(--mint-lip)}.sky{--top:var(--sky-top);--bottom:var(--sky-bottom);--lip:var(--sky-lip)}.coral{--top:var(--coral-top);--bottom:var(--coral-bottom);--lip:var(--coral-lip)}.grape{--top:var(--grape-top);--bottom:var(--grape-bottom);--lip:var(--grape-lip)}
@@ -23,16 +23,12 @@
 @media(max-height:700px){.game-header{padding-top:max(10px,env(safe-area-inset-top));padding-bottom:8px}.difficulty-content{gap:12px}.library-art{height:145px}.game-library{gap:18px;padding-top:4px}.library-label{padding:12px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:1ms!important;transition-duration:1ms!important;scroll-behavior:auto!important}}
 
-/* iOS 26 home-screen apps blur and tint the top ~40pt of the page (the Liquid Glass scroll edge);
-   no CSS or meta turns it off, so headers start below it there. */
-:root{--edge-ramp:0px}
-@supports (-webkit-touch-callout:none){@media (display-mode:standalone){:root{--edge-ramp:34px}}}
 /* Phones: whatever sits behind the status bar matches the screen, so the game runs edge to edge. */
 @media(max-width:599px){:root{background:var(--screen-bg,#e3d8c4)}}
 
 /* Game screens: full-bleed board, a light header and big round controls (no panels). */
 .icon-button.round{border-radius:50%}
-.play-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(max(12px,env(safe-area-inset-top)) + var(--edge-ramp)) 16px 4px;flex-shrink:0;z-index:20}
+.play-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(12px,env(safe-area-inset-top)) 16px 4px;flex-shrink:0;z-index:20}
 .play-title{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
 .play-title h1{font-size:30px}
 .difficulty-pill{font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:2px 10px;border-radius:99px;background:#241b3a14;color:var(--ink-soft)}
