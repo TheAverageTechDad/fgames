@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {levelTransition} from '#lib/components/level-transition';
  import solverWorkerUrl from '../solver.worker.ts?worker&url';
  import {createOfflineWorker} from '#lib/offline-worker';
  import {goto} from '$app/navigation';
@@ -336,7 +337,7 @@
 
 <div class="game-screen escape-screen" onpointermove={handlePointerMove} onpointerup={handlePointerUp} onpointercancel={handlePointerUp} role="application" aria-label="Escape game">
  <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
-	<main class="escape-field" bind:this={boardArea}>
+	<main class="escape-field" bind:this={boardArea} use:levelTransition={currentLevelId}>
 		<div class="relative" style="width: {boardSize}px; height: {boardSize}px;">
 			<!-- Outer Rounded Concrete Curb Frame (Matching Image 2) -->
 			<div

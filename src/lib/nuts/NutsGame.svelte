@@ -1,4 +1,5 @@
 <script lang="ts">
+ import {levelTransition} from '#lib/components/level-transition';
  import solverWorkerUrl from '../solver.worker.ts?worker&url';
  import {createOfflineWorker} from '#lib/offline-worker';
  import {goto} from '$app/navigation';
@@ -218,7 +219,7 @@
 
 <div class="game-screen nuts-screen">
  <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
- <main class="nuts-field">
+ <main class="nuts-field" use:levelTransition={currentLevelId}>
   <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
  </main>
  {#if guidedMove}<p class="guidance" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>{/if}
