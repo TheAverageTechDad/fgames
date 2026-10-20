@@ -1,4 +1,4 @@
-import type { NutsLevel } from './types';
+import type { NutsLevel } from './types.ts';
 
 export const NUTS_LEVELS: NutsLevel[] = [
 	// EASY LEVELS

@@ -1,4 +1,4 @@
-import type { VehicleData } from './types';
+import type { VehicleData } from './types.ts';
 
 export interface VehicleMove {
 	id: string;
@@ -20,115 +20,37 @@ export function buildGrid(vehicles: VehicleData[]): (string | null)[][] {
 	return grid;
 }
 
-function stateKey(vehicles: VehicleData[]): string {
-	return vehicles.map((v) => `${v.id}:${v.row},${v.col}`).join('|');
-}
-
-export function solveEscape(vehicles: VehicleData[], maxVisited = 30000): VehicleMove[] | null {
-	const target = vehicles.find((v) => v.isTarget);
-	if (!target) return null;
-
-	// If already at exit
-	if (target.col === 4) return [];
-
-	const queue: { vehicles: VehicleData[]; path: VehicleMove[] }[] = [];
-	const visited = new Set<string>();
-
-	queue.push({ vehicles: vehicles.map((v) => ({ ...v })), path: [] });
-	visited.add(stateKey(vehicles));
-
-	while (queue.length > 0 && visited.size < maxVisited) {
-		const { vehicles: current, path } = queue.shift()!;
-		const curTarget = current.find((v) => v.isTarget)!;
-
-		// Check if target car can reach exit
-		if (curTarget.col === 4) {
-			return path;
-		}
-
-		const grid = buildGrid(current);
-
-		for (let i = 0; i < current.length; i++) {
-			const v = current[i];
-
-			if (v.orientation === 'H') {
-				// 1. Move Left
-				let stepsLeft = 1;
-				while (v.col - stepsLeft >= 0 && grid[v.row][v.col - stepsLeft] === null) {
-					const nextVehicles = current.map((item, idx) =>
-						idx === i ? { ...item, col: item.col - stepsLeft } : { ...item }
-					);
-					const key = stateKey(nextVehicles);
-					if (!visited.has(key)) {
-						visited.add(key);
-						queue.push({
-							vehicles: nextVehicles,
-							path: [...path, { id: v.id, direction: 'LEFT', steps: stepsLeft }]
-						});
-					}
-					stepsLeft++;
-				}
-
-				// 2. Move Right
-				let stepsRight = 1;
-				while (
-					v.col + v.length - 1 + stepsRight < 6 &&
-					grid[v.row][v.col + v.length - 1 + stepsRight] === null
-				) {
-					const nextVehicles = current.map((item, idx) =>
-						idx === i ? { ...item, col: item.col + stepsRight } : { ...item }
-					);
-					const key = stateKey(nextVehicles);
-					if (!visited.has(key)) {
-						visited.add(key);
-						queue.push({
-							vehicles: nextVehicles,
-							path: [...path, { id: v.id, direction: 'RIGHT', steps: stepsRight }]
-						});
-					}
-					stepsRight++;
-				}
-			} else {
-				// Vertical
-				// 1. Move Up
-				let stepsUp = 1;
-				while (v.row - stepsUp >= 0 && grid[v.row - stepsUp][v.col] === null) {
-					const nextVehicles = current.map((item, idx) =>
-						idx === i ? { ...item, row: item.row - stepsUp } : { ...item }
-					);
-					const key = stateKey(nextVehicles);
-					if (!visited.has(key)) {
-						visited.add(key);
-						queue.push({
-							vehicles: nextVehicles,
-							path: [...path, { id: v.id, direction: 'UP', steps: stepsUp }]
-						});
-					}
-					stepsUp++;
-				}
-
-				// 2. Move Down
-				let stepsDown = 1;
-				while (
-					v.row + v.length - 1 + stepsDown < 6 &&
-					grid[v.row + v.length - 1 + stepsDown][v.col] === null
-				) {
-					const nextVehicles = current.map((item, idx) =>
-						idx === i ? { ...item, row: item.row + stepsDown } : { ...item }
-					);
-					const key = stateKey(nextVehicles);
-					if (!visited.has(key)) {
-						visited.add(key);
-						queue.push({
-							vehicles: nextVehicles,
-							path: [...path, { id: v.id, direction: 'DOWN', steps: stepsDown }]
-						});
-					}
-					stepsDown++;
-				}
-			}
-		}
-	}
-
-	return null;
+/** Breadth-first search over compact position strings; one slide is one move. */
+export function solveEscape(vehicles: VehicleData[], maxVisited = Infinity): VehicleMove[] | null {
+ const target = vehicles.findIndex(v => v.isTarget);
+ if (target < 0) return null;
+ const start = vehicles.map(v => String(v.orientation === 'H' ? v.col : v.row)).join('');
+ const queue = [start];
+ const parents = new Map<string, { key: string; move: VehicleMove } | null>([[start, null]]);
+ for (let head = 0; head < queue.length && parents.size <= maxVisited; head++) {
+  const key = queue[head];
+  if (Number(key[target]) === 4) {
+   const path: VehicleMove[] = [];
+   let node = key;
+   while (parents.get(node)) { const p = parents.get(node)!; path.push(p.move); node = p.key; }
+   return path.reverse();
+  }
+  const grid = new Int16Array(36).fill(-1);
+  vehicles.forEach((v,i) => {
+   const pos = Number(key[i]);
+   for(let k=0;k<v.length;k++) grid[v.orientation === 'H' ? v.row*6+pos+k : (pos+k)*6+v.col] = i;
+  });
+  vehicles.forEach((v,i) => {
+   const pos = Number(key[i]);
+   for (const sign of [-1,1]) for(let steps=1;steps<6;steps++) {
+    const edge = sign < 0 ? pos-steps : pos+v.length-1+steps;
+    if(edge<0 || edge>=6 || grid[v.orientation === 'H' ? v.row*6+edge : edge*6+v.col] !== -1) break;
+    const next = key.slice(0,i)+String(pos+sign*steps)+key.slice(i+1);
+    if(parents.has(next)) continue;
+    parents.set(next,{key,move:{id:v.id,direction:v.orientation==='H' ? (sign<0?'LEFT':'RIGHT') : (sign<0?'UP':'DOWN'),steps}});
+    queue.push(next);
+   }
+  });
+ }
+ return null;
 }

@@ -1,4 +1,4 @@
-import type { NutColor } from './types';
+import type { NutColor } from './types.ts';
 
 export interface NutMove {
 	from: number;
@@ -24,17 +24,17 @@ export function isLevelSolved(bolts: NutColor[][], capacity = 4): boolean {
 	return true;
 }
 
-export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = 25000): NutMove[] | null {
+export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = Infinity): NutMove[] | null {
 	if (isLevelSolved(bolts, capacity)) return [];
 
-	const queue: { state: NutColor[][]; path: NutMove[] }[] = [];
-	const visited = new Set<string>();
+	const queue = new MinHeap<{ state: NutColor[][]; path: NutMove[] }>();
+	const visited = new Map<string, number>();
 
-	queue.push({ state: bolts.map((b) => [...b]), path: [] });
-	visited.add(canonicalKey(bolts));
+	queue.push({ state: bolts.map((b) => [...b]), path: [] }, lowerBound(bolts));
+	visited.set(canonicalKey(bolts), 0);
 
-	while (queue.length > 0 && visited.size < maxStates) {
-		const { state, path } = queue.shift()!;
+	while (queue.size > 0 && visited.size < maxStates) {
+		const { state, path } = queue.pop()!;
 
 		if (isLevelSolved(state, capacity)) {
 			return path;
@@ -88,12 +88,12 @@ export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = 250
 					}
 
 					const key = canonicalKey(nextState);
-					if (!visited.has(key)) {
-						visited.add(key);
+					if ((visited.get(key) ?? Infinity) > path.length + 1) {
+						visited.set(key, path.length + 1);
 						queue.push({
 							state: nextState,
 							path: [...path, { from: i, to: j, count: moveCount }]
-						});
+						}, path.length + 1 + lowerBound(nextState));
 					}
 				}
 			}
@@ -101,4 +101,23 @@ export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = 250
 	}
 
 	return null;
+}
+
+function lowerBound(bolts: NutColor[][]) {
+ let runs=0; const colors=new Set<NutColor>();
+ for(const b of bolts) for(let i=0;i<b.length;i++) { colors.add(b[i]); if(i===0 || b[i]!==b[i-1]) runs++; }
+ return runs-colors.size;
+}
+class MinHeap<T> {
+ items: {value:T; priority:number}[]=[];
+ get size(){return this.items.length;}
+ push(value:T,priority:number){
+  const item={value,priority}; let i=this.items.length; this.items.push(item);
+  while(i>0){const p=(i-1)>>1;if(this.items[p].priority<=priority)break;this.items[i]=this.items[p];i=p;}this.items[i]=item;
+ }
+ pop():T|undefined{
+  if(!this.items.length)return;const first=this.items[0],last=this.items.pop()!;
+  if(this.items.length){let i=0;while(i*2+1<this.items.length){let c=i*2+1;if(c+1<this.items.length&&this.items[c+1].priority<this.items[c].priority)c++;if(this.items[c].priority>=last.priority)break;this.items[i]=this.items[c];i=c;}this.items[i]=last;}
+  return first.value;
+ }
 }

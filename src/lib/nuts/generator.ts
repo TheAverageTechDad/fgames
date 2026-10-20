@@ -1,9 +1,9 @@
-import { createPRNG } from '../utils/prng';
-import { isLevelSolved } from './solver';
-import { NUTS_LEVELS } from './levels';
-import type { NutsLevel, NutColor } from './types';
+import { createPRNG } from '../utils/prng.ts';
+import { isLevelSolved } from './solver.ts';
+import { NUTS_LEVELS } from './levels.ts';
+import type { NutsLevel, NutColor } from './types.ts';
 
-const ALL_COLORS: NutColor[] = ['blue', 'orange', 'pink', 'green', 'yellow', 'red', 'purple', 'cyan'];
+const ALL_COLORS: NutColor[] = ['blue', 'orange', 'green', 'yellow', 'red', 'purple'];
 
 const DIFFICULTY_CONFIG = {
 	easy: {
@@ -19,16 +19,16 @@ const DIFFICULTY_CONFIG = {
 		shuffleSteps: 45
 	},
 	hard: {
-		colorCount: 7,
+		colorCount: 5,
 		capacity: 4,
 		emptyBolts: 2,
 		shuffleSteps: 60
 	},
 	extra_hard: {
-		colorCount: 8,
+		colorCount: 6,
 		capacity: 4,
 		emptyBolts: 2,
-		shuffleSteps: 80
+		shuffleSteps: 160
 	}
 };
 
@@ -50,10 +50,10 @@ function hasCompleteColorSets(bolts: NutColor[][], capacity: number): boolean {
 /**
  * Procedurally generates a deterministic, guaranteed-solvable Nuts and Bolts level.
  */
-export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'hard' | 'extra_hard' = 'medium'): NutsLevel {
+export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'hard' | 'extra_hard' = 'medium', preferCurated = true): NutsLevel {
 	// 1. Check curated iconic levels (e.g. Medium Level 1 from video)
 	const curated = CURATED_LEVELS.get(`${difficulty}_${levelId}`);
-	if (curated && hasCompleteColorSets(curated.bolts, 4)) {
+	if (preferCurated && curated && hasCompleteColorSets(curated.bolts, 4)) {
 		return {
 			...curated,
 			bolts: curated.bolts.map((b) => [...b])
@@ -67,6 +67,16 @@ export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'h
 	// Select distinct colors for this level
 	const colors = prng.shuffle(ALL_COLORS).slice(0, config.colorCount);
 	const totalBolts = config.colorCount + config.emptyBolts;
+
+    // Offline candidate mode: the build script checks solvability and exact move count.
+    // Six distinct colours keep advanced boards readable without pink/cyan near-duplicates.
+    if (!preferCurated) {
+        const pieces=prng.shuffle(colors.flatMap(color=>Array(config.capacity).fill(color)));
+        const candidate: NutColor[][]=[];
+        for(let i=0;i<config.colorCount;i++)candidate.push(pieces.slice(i*config.capacity,(i+1)*config.capacity));
+        for(let i=0;i<config.emptyBolts;i++)candidate.push([]);
+        return {id:levelId,name:`Level ${levelId}`,difficulty,capacity:config.capacity,bolts:candidate};
+    }
 
 	// Start with solved state
 	const bolts: NutColor[][] = [];

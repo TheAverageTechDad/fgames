@@ -56,7 +56,7 @@ describe('Nuts & Bolts Solver and Generator', () => {
 		expect(level1_a.bolts).toEqual(level1_b.bolts);
 
 		const levelHard = getNutsLevel(5, 'hard');
-		expect(levelHard.bolts.length).toBeGreaterThanOrEqual(8);
+		expect(levelHard.bolts.length).toBeGreaterThanOrEqual(7);
 		// Empty bolts exist
 		const emptyCount = levelHard.bolts.filter((b) => b.length === 0).length;
 		expect(emptyCount).toBeGreaterThanOrEqual(1);

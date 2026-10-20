@@ -1,4 +1,4 @@
-import type { EscapeLevel } from './types';
+import type { EscapeLevel } from './types.ts';
 
 export const ESCAPE_LEVELS: EscapeLevel[] = [
 	// EASY LEVELS (Tutorial / quick wins)

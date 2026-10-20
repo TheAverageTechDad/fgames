@@ -1,7 +1,7 @@
-import { createPRNG } from '../utils/prng';
-import { solveEscape } from './solver';
-import { ESCAPE_LEVELS } from './levels';
-import type { EscapeLevel, VehicleData, Orientation, FacingDirection } from './types';
+import { createPRNG } from '../utils/prng.ts';
+import { solveEscape } from './solver.ts';
+import { ESCAPE_LEVELS } from './levels.ts';
+import type { EscapeLevel, VehicleData, Orientation, FacingDirection } from './types.ts';
 
 // Curated levels lookup
 const CURATED_LEVELS = new Map<string, EscapeLevel>();
@@ -187,10 +187,10 @@ export function getEscapeLevel(levelId: number, difficulty: 'easy' | 'medium' | 
 		}
 
 		// 4. Test solvability with fast BFS solver
-		const solution = solveEscape(vehicles, 3000);
+		const solution = solveEscape(vehicles);
 		if (solution !== null && solution.length > 0) {
 			const moves = solution.length;
-			if (moves >= params.minMoves) {
+			if (moves >= params.minMoves && moves <= params.maxMoves) {
 				return {
 					id: levelId,
 					name: `Level ${levelId}`,
