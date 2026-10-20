@@ -1,19 +1,24 @@
 <script lang="ts">
+ import {goto} from '$app/navigation';
 	import confetti from 'canvas-confetti';
 	import Vehicle from './Vehicle.svelte';
 	import { buildGrid, solveEscape, type VehicleMove } from './solver';
-	import { getEscapeLevel } from './generator';
+	import { saveProgress, readHints, saveHints, type StoredEscapeLevel } from '#lib/level-library';
 	import { sound } from '#lib/sound';
 	import type { EscapeLevel, VehicleData } from './types';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+ import GameHeader from '#lib/components/GameHeader.svelte';
+ import WinCard from '#lib/components/WinCard.svelte';
+ import Icon from '#lib/components/Icon.svelte';
 
 	interface Props {
+        levels: StoredEscapeLevel[];
 		initialLevelId?: number;
 		difficulty?: 'easy' | 'medium' | 'hard' | 'extra_hard';
 		onBack: () => void;
 	}
 
-	let { initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
+	let { levels, initialLevelId = 1, difficulty = 'medium', onBack }: Props = $props();
 
 	let currentLevelId = $state(1);
 	let unlockedThrough = $state(1);
@@ -23,7 +28,7 @@
 		unlockedThrough = initialLevelId;
 	});
 
-	const currentLevel = $derived(getEscapeLevel(currentLevelId, difficulty));
+	const currentLevel = $derived(levels[Math.min(levels.length-1, Math.max(0, currentLevelId-1))]);
 
 	// Vehicles state
 	let vehicles: VehicleData[] = $state([]);
@@ -35,18 +40,22 @@
 
 	// Board geometry
 	let boardSize = $state(350);
+ let boardArea: HTMLElement;
+ let settling=$state(false),hintBusy=$state(false),tutorial=$state(false);
+ let timer: ReturnType<typeof setTimeout> | undefined;
+ let hintWorker:Worker|undefined;
+ const guidedMove=$derived(tutorial&&moveHistory.length<2?currentLevel.solution[moveHistory.length]:null);
+ onMount(()=>{hintsCount=readHints('escape');try{tutorial=currentLevelId===1&&!localStorage.getItem('fgames_escape_tutorial');}catch{}});
+ onDestroy(()=>{clearTimeout(timer);hintWorker?.terminate();});
 	const PADDING = 10;
 	const GAP = 5;
 	const CELL_SIZE = $derived((boardSize - PADDING * 2 - GAP * 5) / 6);
 
-	onMount(() => {
-		const updateBoardSize = () => {
-			boardSize = Math.max(180, Math.min(350, window.innerWidth - 32, window.innerHeight - 180));
-		};
-		updateBoardSize();
-		window.addEventListener('resize', updateBoardSize);
-		return () => window.removeEventListener('resize', updateBoardSize);
-	});
+
+ onMount(()=>{
+  const resize=()=>{boardSize=Math.max(180,Math.min(boardArea.clientWidth-36,boardArea.clientHeight-20));};
+  const observer=new ResizeObserver(resize);observer.observe(boardArea);resize();return ()=>observer.disconnect();
+ });
 
 	// Dragging state
 	let activeVehicleId = $state<string | null>(null);
@@ -55,37 +64,13 @@
 	let dragMaxPx = $state(0);
 	let dragStartPointer = 0;
 	let dragStartPos = 0; // initial row or col
-	let hasHitBump = false;
+	let hasHitBump = $state(false);
 
 	function initLevel(lvl: EscapeLevel) {
-		// Clone vehicles and verify no overlaps exist
-		const grid: (string | null)[][] = Array.from({ length: 6 }, () => Array(6).fill(null));
-		const safeVehicles: VehicleData[] = [];
-
-		for (const v of lvl.vehicles) {
-			const clone = { ...v };
-			let hasConflict = false;
-			for (let i = 0; i < clone.length; i++) {
-				const r = clone.orientation === 'V' ? clone.row + i : clone.row;
-				const c = clone.orientation === 'H' ? clone.col + i : clone.col;
-				if (r >= 0 && r < 6 && c >= 0 && c < 6 && grid[r][c] !== null) {
-					hasConflict = true;
-					break;
-				}
-			}
-			if (!hasConflict) {
-				for (let i = 0; i < clone.length; i++) {
-					const r = clone.orientation === 'V' ? clone.row + i : clone.row;
-					const c = clone.orientation === 'H' ? clone.col + i : clone.col;
-					if (r >= 0 && r < 6 && c >= 0 && c < 6) grid[r][c] = clone.id;
-				}
-			}
-			safeVehicles.push(clone);
-		}
-
+        clearTimeout(timer);hintWorker?.terminate();settling=false;hintBusy=false;
+        const safeVehicles=lvl.vehicles.map(v=>({...v}));
 		vehicles = safeVehicles;
 		moveHistory = [];
-		hintsCount = 3;
 		hintMove = null;
 		isWon = false;
 		isExiting = false;
@@ -135,12 +120,13 @@
 	}
 
 	function handlePointerDown(e: PointerEvent, v: VehicleData) {
-		if (isWon || isExiting) return;
+		if (isWon || isExiting || settling || hintBusy) return;
 		if (e.currentTarget instanceof HTMLElement) {
 			e.currentTarget.setPointerCapture(e.pointerId);
 		}
 
-		activeVehicleId = v.id;
+		if(activeVehicleId)return;
+        activeVehicleId = v.id;
 		hintMove = null;
 		hasHitBump = false;
 
@@ -210,7 +196,7 @@
 		}
 
 		const stepPx = CELL_SIZE + GAP;
-		const steps = Math.round(dragOffset / stepPx);
+		const steps = Math.round(Math.max(dragMinPx,Math.min(dragMaxPx,dragOffset)) / stepPx);
 		const targetPos = dragStartPos + steps;
 
 		moveVehicle(v, targetPos);
@@ -219,9 +205,14 @@
 	}
 
 	function moveVehicle(v: VehicleData, targetPos: number) {
-		if (isWon || isExiting) return;
+		if (isWon || isExiting || settling || hintBusy) return;
 		const { minPos, maxPos } = getMovementRange(v);
-		if (targetPos < minPos || targetPos > maxPos) return;
+		if (targetPos < minPos || targetPos > maxPos) {sound.playCarBump();return;}
+        const previous=v.orientation==='H'?v.col:v.row;
+        if(previous===targetPos)return;
+        if(guidedMove && (v.id!==guidedMove.id || targetPos-previous!==(guidedMove.direction==='LEFT'||guidedMove.direction==='UP'?-1:1)*guidedMove.steps))tutorial=false;
+        settling=true;
+        clearTimeout(timer);timer=setTimeout(()=>settling=false,130);
 		if (v.isTarget && targetPos >= 4) {
 			moveHistory.push({ id: v.id, prevRow: v.row, prevCol: v.col });
 			v.col = 4;
@@ -246,6 +237,7 @@
 		}
 
 		hintMove = null;
+        if(moveHistory.length>=2){tutorial=false;try{localStorage.setItem('fgames_escape_tutorial','true');}catch{}}
 	}
 
 	function handleVehicleKeydown(event: KeyboardEvent, v: VehicleData) {
@@ -262,11 +254,12 @@
 		sound.playCarExit();
 		sound.playHaptic([40, 60, 100]);
 
-		setTimeout(() => {
+		clearTimeout(timer);
+        timer=setTimeout(() => {
 			isWon = true;
 			isExiting = false;
 			unlockedThrough = Math.max(unlockedThrough, currentLevelId + 1);
-			sound.playUnstoppable();
+			sound.playVictory();
 			try {
 				confetti({
 					particleCount: 120,
@@ -275,19 +268,17 @@
 				});
 			} catch (_) {}
 
-			// Save progress
-			try {
-				localStorage.setItem(`fgames_escape_${difficulty}_level`, unlockedThrough.toString());
-			} catch (_) {}
+            saveProgress('escape',difficulty,currentLevelId+1);
 		}, 650);
 	}
 
 	function handleUndo() {
-		if (moveHistory.length === 0 || isWon || isExiting) {
+		if (moveHistory.length === 0 || isWon || isExiting || settling || hintBusy) {
 			sound.playError();
 			return;
 		}
-		const lastMove = moveHistory.pop()!;
+		tutorial=false;settling=true;clearTimeout(timer);timer=setTimeout(()=>settling=false,130);
+        const lastMove = moveHistory.pop()!;
 		const v = vehicles.find((item) => item.id === lastMove.id);
 		if (v) {
 			v.row = lastMove.prevRow;
@@ -298,23 +289,22 @@
 	}
 
 	function handleHint() {
-		if (isWon || isExiting) return;
+		if (isWon || isExiting || settling || hintBusy) return;
 		if (hintsCount <= 0) {
 			sound.playError();
 			return;
 		}
 
-		const path = solveEscape(vehicles);
-		if (path && path.length > 0) {
-			hintMove = path[0];
-			hintsCount--;
-			sound.playBoltComplete();
-		} else {
-			sound.playError();
-		}
-	}
+
+        hintBusy=true;hintWorker?.terminate();
+        hintWorker=new Worker(new URL('../solver.worker.ts',import.meta.url),{type:'module'});
+        hintWorker.onmessage=({data})=>{hintBusy=false;if(data){hintMove=data;hintsCount--;saveHints('escape',hintsCount);sound.playTap();}else sound.playError();hintWorker?.terminate();};
+        hintWorker.onerror=()=>{hintBusy=false;hintWorker?.terminate();sound.playError();};
+        hintWorker.postMessage({game:'escape',state:$state.snapshot(vehicles)});
+    }
 
 	function handleRestart() {
+        if(isExiting||settling)return;
 		sound.playTap();
 		initLevel(currentLevel);
 	}
@@ -322,7 +312,8 @@
 	function nextLevel() {
 		if (!isWon && currentLevelId >= unlockedThrough) return;
 		sound.playTap();
-		currentLevelId++;
+		if(currentLevelId>=levels.length){onBack();return;}
+        tutorial=false; currentLevelId++; void goto(`/escape/play?difficulty=${difficulty}&stage=${currentLevelId}`,{replace:true,reset:false});
 	}
 
 	function prevLevel() {
@@ -333,78 +324,14 @@
 	}
 </script>
 
-<div
-	class="relative flex flex-col justify-between w-full h-full min-h-0 max-w-md mx-auto select-none overflow-hidden rounded-3xl shadow-2xl"
-	style="background: radial-gradient(circle at 50% 25%, #232c28 0%, #171d1b 60%, #0e1211 100%);"
-	onpointermove={handlePointerMove}
-	onpointerup={handlePointerUp}
-	onpointercancel={handlePointerUp}
-	role="application"
-	aria-label="Escape Game Board"
->
-	<!-- TOP BAR (Back, Difficulty/Level, Restart) -->
-	<header class="flex items-center justify-between px-6 pt-5 pb-2 z-20">
-		<button
-			type="button"
-			onclick={onBack}
-			class="w-11 h-11 bg-white/95 rounded-full flex items-center justify-center text-slate-800 shadow-lg active:scale-90 transition-transform cursor-pointer"
-			aria-label="Back to main menu"
-		>
-			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-				<polyline points="15 18 9 12 15 6"></polyline>
-			</svg>
-		</button>
 
-		<div class="flex items-center gap-2.5">
-			<button
-				type="button"
-				onclick={prevLevel}
-				disabled={currentLevelId <= 1}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
-				aria-label="Previous level"
-			>
-				◀
-			</button>
-
-			<div class="flex flex-col items-center">
-				<span class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400 mb-0.5">
-					{difficulty.replace('_', ' ')}
-				</span>
-				<h2 class="text-2xl font-black text-white tracking-wide drop-shadow-md">
-					{currentLevel.name}
-				</h2>
-				<span class="text-[10px] font-bold text-slate-400">{moveHistory.length} moves</span>
-			</div>
-
-			<button
-				type="button"
-				onclick={nextLevel}
-				disabled={currentLevelId >= unlockedThrough && !isWon}
-				class="w-7 h-7 bg-white/15 hover:bg-white/25 disabled:opacity-25 rounded-full flex items-center justify-center text-white text-xs font-black transition-transform active:scale-90 cursor-pointer"
-				aria-label="Next level"
-			>
-				▶
-			</button>
-		</div>
-
-		<button
-			type="button"
-			onclick={handleRestart}
-			class="w-11 h-11 bg-white/95 rounded-full flex items-center justify-center text-slate-800 shadow-lg active:scale-90 transition-transform cursor-pointer"
-			aria-label="Restart level"
-		>
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l6 5.81" />
-			</svg>
-		</button>
-	</header>
-
-	<!-- PLAYING FIELD: 6x6 ASPHALT GRID WITH EXIT OPENING -->
-	<main class="flex-1 flex flex-col justify-center items-center px-4 py-2 z-10">
+<div class="game-screen escape-screen" onpointermove={handlePointerMove} onpointerup={handlePointerUp} onpointercancel={handlePointerUp} role="application" aria-label="Escape game">
+ <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
+	<main class="escape-field" bind:this={boardArea}>
 		<div class="relative" style="width: {boardSize}px; height: {boardSize}px;">
 			<!-- Outer Rounded Concrete Curb Frame (Matching Image 2) -->
 			<div
-				class="absolute inset-0 rounded-3xl bg-[#37413d] border-[7px] border-[#4b5550] shadow-[0_14px_28px_rgba(0,0,0,0.65)]"
+				class="absolute inset-0 rounded-3xl bg-[#fff6e6] border-[4px] border-[#241b3a] shadow-[0_7px_0_#241b3a]"
 			></div>
 
 			<!-- Exit Gate Opening on Row 2 Right Curb -->
@@ -432,7 +359,7 @@
 						v.col * (CELL_SIZE + GAP) -
 						PADDING +
 						(isDragging && v.orientation === 'H' ? dragOffset : 0) +
-						(isEscaping ? 240 : 0)}
+						(isEscaping ? boardSize : 0)}
 					{@const currentTop =
 						PADDING +
 						v.row * (CELL_SIZE + GAP) -
@@ -448,21 +375,25 @@
 							: CELL_SIZE}
 
 					<div
-						class="absolute pointer-events-auto touch-none transition-all cursor-grab active:cursor-grabbing"
+						class="absolute pointer-events-auto touch-none cursor-grab active:cursor-grabbing car-piece"
+                        data-vehicle={v.id}
+                        data-row={v.row} data-col={v.col}
+                        data-orientation={v.orientation}
 						class:duration-500={isEscaping}
 						class:ease-in={isEscaping}
-						style="left: {currentLeft}px; top: {currentTop}px; width: {vWidth}px; height: {vHeight}px; z-index: {isDragging ? 35 : isEscaping ? 40 : 20};"
+						style="transition: {isDragging?'none':isEscaping?'left 500ms ease-in':'left 120ms ease-out, top 120ms ease-out, transform 120ms ease-out'}; transform: {isDragging&&hasHitBump?'scale(0.97)':'none'}; left: {currentLeft}px; top: {currentTop}px; width: {vWidth}px; height: {vHeight}px; z-index: {isDragging ? 35 : isEscaping ? 40 : 20};"
 						onpointerdown={(e) => handlePointerDown(e, v)}
 						onkeydown={(e) => handleVehicleKeydown(e, v)}
 						role="button"
 						tabindex="0"
-						aria-label={v.isTarget ? 'Red Escape Vehicle' : `${v.color} ${v.type}`}
+						aria-label={v.isTarget ? 'Red car' : `${v.color} ${v.type}`}
 					>
+                        {#if guidedMove?.id===v.id}<span class="car-guide" aria-hidden="true"><Icon name="hand-pointing" size={32}/></span>{/if}
 						<Vehicle
 							vehicle={v}
 							{isDragging}
-							isHint={hintMove?.id === v.id}
-							hintDirection={hintMove?.id === v.id ? hintMove.direction : undefined}
+							isHint={(hintMove??guidedMove)?.id === v.id}
+							hintDirection={(hintMove??guidedMove)?.id === v.id ? (hintMove??guidedMove)?.direction : undefined}
 							cellSize={CELL_SIZE}
 							gap={GAP}
 						/>
@@ -472,87 +403,12 @@
 		</div>
 	</main>
 
-	<!-- BOTTOM ACTION CONTROLS (Undo, Hint) -->
-	<footer class="flex items-center justify-around px-12 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-2 z-20">
-		<!-- Undo Button -->
-		<div class="flex flex-col items-center">
-			<button
-				type="button"
-				onclick={handleUndo}
-				disabled={moveHistory.length === 0 || isWon || isExiting}
-				class="w-14 h-14 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 shadow-[0_6px_0_#b45309] text-white flex items-center justify-center active:translate-y-1 active:shadow-[0_2px_0_#b45309] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-				aria-label="Undo move"
-			>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M9 14 4 9l5-5" />
-					<path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
-				</svg>
-			</button>
-			<span class="text-xs font-bold text-amber-200/90 mt-1.5">Undo</span>
-		</div>
-
-		<!-- Hint Button with Badge -->
-		<div class="flex flex-col items-center relative">
-			<button
-				type="button"
-				onclick={handleHint}
-				disabled={isWon || isExiting || hintsCount <= 0}
-				class="w-14 h-14 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 shadow-[0_6px_0_#b45309] text-white flex items-center justify-center active:translate-y-1 active:shadow-[0_2px_0_#b45309] transition-all cursor-pointer disabled:opacity-50"
-				aria-label="Use hint"
-			>
-				<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
-					<path d="M9 18h6" />
-					<path d="M10 22h4" />
-				</svg>
-			</button>
-			<!-- Badge Count -->
-			<span class="absolute -top-1.5 -right-1 bg-white text-slate-800 text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center shadow-md">
-				{hintsCount}
-			</span>
-			<span class="text-xs font-bold text-amber-200/90 mt-1.5">Hint</span>
-		</div>
-	</footer>
-
-	<!-- UNSTOPPABLE! BANNER (Exact Replica of Frame 039 from video!) -->
-	{#if isWon}
-		<div
-			class="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 animate-pop-in"
-		>
-			<!-- Spinning sparkles ring -->
-			<div class="relative flex flex-col items-center text-center">
-				<div class="absolute -inset-16 flex items-center justify-center pointer-events-none animate-star-spin opacity-80">
-						<span class="absolute top-2 left-6 text-2xl">✨</span>
-						<span class="absolute top-4 right-8 text-3xl">✨</span>
-						<span class="absolute bottom-6 left-10 text-2xl">✨</span>
-						<span class="absolute bottom-4 right-10 text-3xl">✨</span>
-				</div>
-
-				<h1
-					class="text-4xl sm:text-5xl font-black text-[#facc15] tracking-tight drop-shadow-[0_4px_12px_rgba(250,204,21,0.6)] uppercase mb-3 scale-110"
-				>
-					UNSTOPPABLE!
-				</h1>
-			<p class="text-slate-300 text-base font-bold mb-6">Cleared in {moveHistory.length} moves.</p>
-
-				<div class="flex flex-col gap-3 w-64 mt-2">
-					<button
-						type="button"
-						onclick={nextLevel}
-						class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-extrabold rounded-2xl shadow-[0_5px_0_#9a3412] active:translate-y-1 active:shadow-none transition-all cursor-pointer text-lg tracking-wide"
-					>
-						NEXT LEVEL
-					</button>
-
-					<button
-						type="button"
-						onclick={handleRestart}
-						class="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition-all cursor-pointer text-sm"
-					>
-						Replay
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
+ {#if guidedMove}<p class="guidance"><Icon name="hand-pointing"/>Slide the marked car {guidedMove.direction.toLowerCase()}</p>{/if}
+ <footer class="power-row">
+ <button class="toy-button" onclick={handleUndo} disabled={!moveHistory.length||isWon||isExiting||settling||hintBusy} aria-label="Undo move"><Icon name="arrow-u-up-left"/><span>Undo</span></button>
+ <button class="toy-button grape" onclick={handleHint} disabled={isWon||isExiting||settling||hintBusy||hintsCount<=0} aria-label="Use hint"><Icon name="lightbulb"/><span>{hintBusy?'Thinking…':`Hint · ${hintsCount}`}</span></button>
+ <button class="toy-button" onclick={handleRestart} disabled={isExiting||settling} aria-label="Restart level"><Icon name="arrow-counter-clockwise"/><span>Restart</span></button>
+ </footer>
+ {#if isWon}<WinCard moves={moveHistory.length} best={currentLevel.minMoves} last={currentLevelId===levels.length} onNext={nextLevel} onReplay={handleRestart}/>{/if}
 </div>
+<style>.car-guide{position:absolute;z-index:50;left:30%;top:40%;pointer-events:none;color:#fff6e6;filter:drop-shadow(1px 2px 1px #241b3a)}</style>
