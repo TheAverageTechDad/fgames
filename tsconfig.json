@@ -3,12 +3,26 @@
 	"compilerOptions": {
 		"strict": true,
 		"paths": {
-			"$lib": ["./src/lib"],
-			"$lib/*": ["./src/lib/*"],
-			"#lib": ["./src/lib"],
-			"#lib/*": ["./src/lib/*"]
-		}
+			"$lib": [
+				"./src/lib"
+			],
+			"$lib/*": [
+				"./src/lib/*"
+			],
+			"#lib": [
+				"./src/lib"
+			],
+			"#lib/*": [
+				"./src/lib/*"
+			]
+		},
+		"checkJs": false
 	},
-	"include": ["src", "vite.config.ts"],
-	"exclude": ["src/service-worker.js"]
+	"include": [
+		"src",
+		"vite.config.ts"
+	],
+	"exclude": [
+		"src/service-worker.js"
+	]
 }
