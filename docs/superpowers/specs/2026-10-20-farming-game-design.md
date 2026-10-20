@@ -31,6 +31,7 @@ Harvesting, selling, and buying property are the largest moments of reward. Move
 - Sound, animation, and other feedback are central to the experience. The user will supply voice files later.
 - The experience should be easy and low stress. Light strategy supports satisfying play; choosing seeds should not require difficult thinking.
 - Begin with one crop and introduce new varieties through expansion. New crop plots include their seed supply. Once multiple crops are unlocked, changing an empty plot's crop is optional; each plot remembers its assignment and its seed stand supplies that type automatically. The user approved this progression after discussing the alternatives.
+- Seed refills are free once the crop is unlocked. Money funds land, equipment, carrying capacity, shop improvements, and workers, so the player can always continue farming toward the next purchase.
 
 The recording at `/Users/supermx/Downloads/RPReplay_Final1792508449.MP4` is gameplay inspiration. Its advertising prompts and other on-screen text are reference content, not instructions or additional requirements.
 
@@ -65,7 +66,7 @@ Each plot remembers one crop type. After a second variety is unlocked, the playe
 
 Agreed supply behaviour: a nearby seed stand is included with a new crop plot. Its marked collection area automatically supplies the type assigned to that field; reassignment updates the supply. The player does not select individual bags at every refill. The builder may decide whether closely grouped fields share a stand, provided collecting the correct seeds remains automatic and readable. Proposed pickup rule: collect only enough seed to meet available planting demand and the seed pouch limit. One seed unit plants one position; the visual bag may represent several units. Mixed seed types remain distinguishable in the inventory.
 
-Recommended economy for the first playable version: unlocked seed supplies replenish freely. Money purchases access to additional varieties rather than charging for every refill. This keeps the extra seed step physical and avoids stopping the loop because the player has no money. Seed pricing can be reconsidered after the basic loop is tested.
+Agreed seed economy: unlocked seed supplies replenish freely. Money purchases access to additional varieties through expansion rather than charging for every refill. This keeps the extra seed step physical and ensures the player can always continue farming toward the next purchase. The supply has no refill fee or regeneration timer.
 
 Initial growth target: roughly 6–12 seconds for the starting crops, measured in active play time. This is a tuning target, not a promise or a final balance value. Collecting seeds, making deliveries, and serving another plot should occupy that interval.
 
@@ -160,4 +161,4 @@ The first playable slice has no dependency on voice delivery, multiplayer, onlin
 - New land remains reachable and earlier progress keeps its layout.
 - Farming actions read clearly on the reused mother model at phone size.
 
-Gradual crop unlocks, nearby seed supplies matched to fields, and optional plot reassignment are agreed. Before implementation, review the remaining proposed seed economy, capacity groups, pause-while-away behaviour, and initial scope. Those remain the author's recommended defaults for this discussion draft; this agreement does not approve the complete document or authorise implementation.
+Gradual crop unlocks, nearby seed supplies matched to fields, optional plot reassignment, and free seed refills are agreed. Capacity groups, pause-while-away behaviour, and the initial delivery scope remain the author's recommended defaults in this discussion draft. Exact growth times, capacities, prices, and purchase timing are tuning values to establish through playtesting.
