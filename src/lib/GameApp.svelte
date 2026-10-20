@@ -36,7 +36,7 @@
  <GameHeader title="Offline Games"/>
  <main class="game-library">
  <p class="home-intro">Little games. Any spare moment.</p>
- {#each [{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'},{game:'catcha',title:'Catcha',description:'Tidy, cook and play together.',skin:'coral'}] as game}
+ {#each [{game:'catcha',title:'Catcha',description:'Tidy, cook and play together.',skin:'coral'},{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'}] as game}
  <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();if(game.game==='catcha')location.href='/catcha';else goto(`/${game.game}`,{state:{parent:'/'}});}} aria-label={`Play ${game.title}`}>
  <div class="library-art"><img src={`/cards/${game.game}-gameplay.webp`} alt={`${game.title} gameplay`} width="640" height="340"/></div>
  <div class="library-label"><div><h2>{game.title}</h2><p>{game.description}</p></div><span class="card-play"><Icon name="play" size={26}/></span></div>

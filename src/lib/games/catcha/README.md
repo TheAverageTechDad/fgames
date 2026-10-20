@@ -8,5 +8,8 @@ original repo stays live at clean-up-chase.pages.dev and only gets hotfixes.
 - Assets: `static/catcha/assets/`, referenced as `/catcha/assets/...`.
 - Tests: `node --test src/lib/games/catcha/tests/` (node:test, so vitest skips them).
 - Changes from the original: asset URLs, share URL, and an "arcade" home button on the picker card.
-- Not wired in fgames yet: Play Together (needs the `catcha-rooms` Worker behind `/api/room`) and
-  analytics (`BUILD.commit` stays "dev", so it's off).
+- Play Together: phones talk over WebRTC; `/api/room/CODE` (`functions/api/room/`) introduces them
+  and relays the game if a direct link fails. It's the `catcha-rooms` Worker (bound in `wrangler.toml`,
+  source in clean-up-chase/workers/rooms), shared with the original. Under `vite dev` there is no
+  `/api`: use `?net=tab` (two tabs), or `wrangler pages dev build` with the Worker running locally.
+- Analytics stays off (`BUILD.commit` stays "dev").
