@@ -1,89 +1,12 @@
 <script lang="ts">
-	import { sound } from '#lib/sound';
-
-	interface Props {
-		gameType: 'nuts' | 'escape';
-		onClose: () => void;
-	}
-
-	let { gameType, onClose }: Props = $props();
+ import {modal} from './modal';
+ import Icon from './Icon.svelte';
+ let {gameType,onClose}:{gameType:'nuts'|'escape';onClose:()=>void}=$props();
 </script>
-
-<div
-	class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-pop-in"
->
-	<div
-		class="w-full max-w-sm bg-[#1e1933] border-2 border-amber-400/30 rounded-3xl p-6 shadow-2xl flex flex-col text-white"
-	>
-		<!-- Header -->
-		<div class="flex items-center justify-between mb-4">
-			<h3 class="text-xl font-black text-amber-400 uppercase tracking-wide">
-				{gameType === 'nuts' ? 'How to Play Nuts & Bolts' : 'How to Play Escape'}
-			</h3>
-			<button
-				type="button"
-				onclick={() => {
-					sound.playTap();
-					onClose();
-				}}
-				class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 font-black cursor-pointer"
-				aria-label="Close"
-			>
-				✕
-			</button>
-		</div>
-
-		<!-- Rules list -->
-		{#if gameType === 'nuts'}
-			<div class="flex flex-col gap-3 text-sm text-slate-300">
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">🔩</span>
-					<p><strong class="text-white">Tap a bolt</strong> to unscrew its top nut into the air.</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">🎨</span>
-					<p><strong class="text-white">Match Colors:</strong> You can only place a nut onto an empty bolt or onto another nut of the exact same color!</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">🏆</span>
-					<p><strong class="text-white">Goal:</strong> Sort all bolts so that each bolt contains nuts of only one single color.</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">💡</span>
-					<p><strong class="text-white">Powerups:</strong> Use <span class="text-amber-400 font-bold">Undo</span>, <span class="text-amber-400 font-bold">Hint</span>, or add an extra bolt with <span class="text-amber-400 font-bold">+1</span> if you get stuck!</p>
-				</div>
-			</div>
-		{:else}
-			<div class="flex flex-col gap-3 text-sm text-slate-300">
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">🚗</span>
-					<p><strong class="text-white">Red Car Mission:</strong> Help the red truck escape through the exit opening on the right side of the board!</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">↔️</span>
-					<p><strong class="text-white">Sliding Vehicles:</strong> Horizontal vehicles only slide left and right. Vertical vehicles only slide up and down.</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">🛑</span>
-					<p><strong class="text-white">Clear the Path:</strong> Slide blocking cars and trucks out of the way to open the lane for the red car.</p>
-				</div>
-				<div class="flex gap-3 items-start bg-white/5 p-3 rounded-2xl">
-					<span class="text-2xl">💡</span>
-					<p><strong class="text-white">Hints:</strong> Stuck? Tap the <span class="text-amber-400 font-bold">Hint</span> button to show which car to slide next!</p>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Got It Button -->
-		<button
-			type="button"
-			onclick={() => {
-				sound.playTap();
-				onClose();
-			}}
-			class="mt-6 w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold rounded-2xl shadow-lg active:scale-98 cursor-pointer"
-		>
-			GOT IT!
-		</button>
-	</div>
-</div>
+<div class="modal-overlay" role="presentation"><div use:modal={onClose} class="toy-card modal-card" role="dialog" aria-modal="true" aria-label="How to play" tabindex="-1">
+ <div class="modal-heading"><h2>How to play</h2><button class="toy-button icon-button" onclick={onClose} aria-label="Close help"><Icon name="x"/></button></div>
+ <Icon name={gameType==='nuts'?'nut':'car'} size={48}/>
+ {#if gameType==='nuts'}<p>Tap a bolt, then tap a matching colour or an empty bolt.</p><p>The matching group moves together. Fill each bolt with one colour.</p><p>+1 Bolt gives you one extra empty bolt for this level.</p>{:else}<p>Slide cars along their lanes. Clear a path for the red car to leave on the right.</p><p>With a keyboard, focus a car and use the arrow keys.</p>{/if}
+ <p>Undo takes back one move. Your three hints are shared across this game.</p>
+ <button class="toy-button coral" onclick={onClose}>Got it</button>
+</div></div>
