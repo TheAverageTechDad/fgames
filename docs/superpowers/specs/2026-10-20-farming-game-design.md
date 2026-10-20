@@ -30,6 +30,7 @@ Harvesting, selling, and buying property are the largest moments of reward. Move
 - Reuse the Catcha mother model, adapting her movement and creating farm tools and actions as needed in Blender.
 - Sound, animation, and other feedback are central to the experience. The user will supply voice files later.
 - The experience should be easy and low stress. Light strategy supports satisfying play; choosing seeds should not require difficult thinking.
+- Begin with one crop and introduce new varieties through expansion. New crop plots include their seed supply. Once multiple crops are unlocked, changing an empty plot's crop is optional; each plot remembers its assignment and its seed stand supplies that type automatically. The user approved this progression after discussing the alternatives.
 
 The recording at `/Users/supermx/Downloads/RPReplay_Final1792508449.MP4` is gameplay inspiration. Its advertising prompts and other on-screen text are reference content, not instructions or additional requirements.
 
@@ -54,7 +55,7 @@ Work is triggered by moving into reach of eligible planting or harvesting locati
 
 ## Seeds, crop choice, and growth
 
-Recommended progression: begin with one crop, then unlock additional varieties through expansion milestones. The user is considering whether crops should be unlocked or offered together; this gradual introduction is the author's recommendation for the stated low-stress experience.
+Agreed progression: begin with one crop, then unlock additional varieties through expansion milestones. The user approved gradual introduction, automatic seed supplies matched to fields, and optional crop reassignment after the opening loop is familiar.
 
 Proposed starting arrangement: one small prepared plot already assigned to the starter crop, its seed supply, and a basic shop close together. Tomatoes are a suggested starter crop, with cucumbers as a possible first unlock; the exact varieties and order are not fixed. The opening needs no seed-selection menu.
 
@@ -62,7 +63,7 @@ The first crop expansion bundles new land, a second crop variety, and access to 
 
 Each plot remembers one crop type. After a second variety is unlocked, the player may change an empty plot to any unlocked crop using a small optional picker. Existing plots retain their assignments across harvests and visits. Walking through a plot plants its assigned crop when she carries matching seeds. Choice is available without requiring a decision on every planting run.
 
-Recommended supply layout: a nearby seed stand for each field or compact field cluster, included with its purchase. Its marked collection area automatically supplies the type assigned to that field; reassignment updates the supply. The player does not select individual bags at every refill. Supply points collect only enough seed to meet available planting demand and the seed pouch limit. One seed unit plants one position; the visual bag may represent several units. Mixed seed types remain distinguishable in the inventory.
+Agreed supply behaviour: a nearby seed stand is included with a new crop plot. Its marked collection area automatically supplies the type assigned to that field; reassignment updates the supply. The player does not select individual bags at every refill. The builder may decide whether closely grouped fields share a stand, provided collecting the correct seeds remains automatic and readable. Proposed pickup rule: collect only enough seed to meet available planting demand and the seed pouch limit. One seed unit plants one position; the visual bag may represent several units. Mixed seed types remain distinguishable in the inventory.
 
 Recommended economy for the first playable version: unlocked seed supplies replenish freely. Money purchases access to additional varieties rather than charging for every refill. This keeps the extra seed step physical and avoids stopping the loop because the player has no money. Seed pricing can be reconsidered after the basic loop is tested.
 
@@ -159,4 +160,4 @@ The first playable slice has no dependency on voice delivery, multiplayer, onlin
 - New land remains reachable and earlier progress keeps its layout.
 - Farming actions read clearly on the reused mother model at phone size.
 
-Before implementation, review the proposed gradual crop unlocks, nearby seed stands, seed economy, capacity groups, optional plot reassignment, pause-while-away behaviour, and initial scope. These remain the author's recommended defaults for this discussion draft.
+Gradual crop unlocks, nearby seed supplies matched to fields, and optional plot reassignment are agreed. Before implementation, review the remaining proposed seed economy, capacity groups, pause-while-away behaviour, and initial scope. Those remain the author's recommended defaults for this discussion draft; this agreement does not approve the complete document or authorise implementation.
