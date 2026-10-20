@@ -357,7 +357,7 @@
 			class="absolute inset-0 bg-black/75 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 animate-pop-in"
 		>
 			<div class="w-full max-w-xs bg-gradient-to-b from-[#2a1d49] to-[#1a122e] rounded-3xl p-6 border-2 border-amber-400/40 shadow-2xl flex flex-col items-center text-center">
-				<div class="text-5xl mb-2 animate-bounce">🏆</div>
+					<div class="text-5xl mb-2">🏆</div>
 				<h3 class="text-2xl font-black text-amber-400 mb-1 tracking-wider uppercase">Level Cleared!</h3>
 				<p class="text-slate-300 text-sm mb-6">All nuts sorted in {moveHistory.length} moves.</p>
 

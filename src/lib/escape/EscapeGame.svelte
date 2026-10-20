@@ -522,10 +522,10 @@
 			<!-- Spinning sparkles ring -->
 			<div class="relative flex flex-col items-center text-center">
 				<div class="absolute -inset-16 flex items-center justify-center pointer-events-none animate-star-spin opacity-80">
-					<span class="absolute top-2 left-6 text-pink-400 text-2xl">✨</span>
-					<span class="absolute top-4 right-8 text-amber-300 text-3xl">✨</span>
-					<span class="absolute bottom-6 left-10 text-cyan-300 text-2xl">✨</span>
-					<span class="absolute bottom-4 right-10 text-purple-300 text-3xl">✨</span>
+						<span class="absolute top-2 left-6 text-2xl">✨</span>
+						<span class="absolute top-4 right-8 text-3xl">✨</span>
+						<span class="absolute bottom-6 left-10 text-2xl">✨</span>
+						<span class="absolute bottom-4 right-10 text-3xl">✨</span>
 				</div>
 
 				<h1

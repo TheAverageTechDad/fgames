@@ -298,7 +298,7 @@
 				style="
 					background: linear-gradient(90deg, #22c55e 0%, #f59e0b 33%, #ef4444 66%, #9333ea 100%);
 					width: calc({sliderPos * 100}% - {sliderPos * 16}px + 16px);
-					transition: {isDragging ? 'none' : 'width 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'};
+						transition: {isDragging ? 'none' : 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1)'};
 				"
 			></div>
 
@@ -327,7 +327,7 @@
 				class="absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.35)] flex items-center justify-center pointer-events-none"
 				style="
 					left: calc({sliderPos * 100}% - {sliderPos * 40}px);
-					transition: {isDragging ? 'none' : 'left 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'};
+						transition: {isDragging ? 'none' : 'left 0.25s cubic-bezier(0.22, 1, 0.36, 1)'};
 				"
 			>
 				<div
