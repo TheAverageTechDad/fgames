@@ -14,6 +14,7 @@ export const CROP_CAPACITY = 24;
 export const SEED_CAPACITY = 12;
 export const GROW_SECONDS = 8;
 export const LAND_PRICE = 40;
+export const SALE_SECONDS = 0.45;
 export const SPOTS = {
   seeds: { x: -2.9, z: 1.25 },
   cucumberSeeds: { x: 2.8, z: -4.1 },
@@ -58,8 +59,8 @@ export function stepFarm(state: FarmState, delta: number, input: Point): FarmEve
   }
   // Sales are customer exchanges, independent of the player's presence at the counter.
   state.saleClock += dt;
-  const sales = Math.min(30, Math.floor(state.saleClock / 0.9));
-  state.saleClock %= 0.9;
+  const sales = Math.min(70, Math.floor(state.saleClock / SALE_SECONDS));
+  state.saleClock %= SALE_SECONDS;
   for (let i = 0; i < sales; i++) {
     const crop: Crop | null = state.stock.tomato > 0 ? 'tomato' : state.stock.cucumber > 0 ? 'cucumber' : null;
     if (!crop) break;
