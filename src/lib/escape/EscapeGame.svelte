@@ -11,7 +11,8 @@
 	import { sound } from '#lib/sound';
 	import type { EscapeLevel, VehicleData } from './types';
 	import { onMount, onDestroy } from 'svelte';
- import GameHeader from '#lib/components/GameHeader.svelte';
+ import PlayHeader from '#lib/components/PlayHeader.svelte';
+ import RoundControl from '#lib/components/RoundControl.svelte';
  import WinCard from '#lib/components/WinCard.svelte';
  import Icon from '#lib/components/Icon.svelte';
 
@@ -336,7 +337,7 @@
 
 
 <div class="game-screen escape-screen" onpointermove={handlePointerMove} onpointerup={handlePointerUp} onpointercancel={handlePointerUp} role="application" aria-label="Escape game">
- <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
+ <PlayHeader level={currentLevelId} {difficulty} {onBack} onRestart={handleRestart}/>
 	<main class="escape-field" bind:this={boardArea} use:levelTransition={currentLevelId}>
 		<div class="relative" style="width: {boardSize}px; height: {boardSize}px;">
 			<!-- Outer Rounded Concrete Curb Frame (Matching Image 2) -->
@@ -412,13 +413,13 @@
 				{/each}
 			</div>
 		</div>
+	{#if guidedMove}<p class="field-tip"><Icon name="hand-pointing"/>Slide the marked car {guidedMove.direction.toLowerCase()}</p>{/if}
 	</main>
 
- {#if guidedMove}<p class="guidance"><Icon name="hand-pointing"/>Slide the marked car {guidedMove.direction.toLowerCase()}</p>{/if}
- <footer class="power-row">
- <button class="toy-button" onclick={handleUndo} disabled={!moveHistory.length||isWon||isExiting||settling||hintBusy} aria-label="Undo move"><Icon name="arrow-u-up-left"/><span>Undo</span></button>
- <button class="toy-button grape" onclick={handleHint} disabled={isWon||isExiting||settling||hintBusy||hintsCount<=0} aria-label="Use hint"><Icon name="lightbulb"/><span>{hintBusy?'Thinking…':`Hint · ${hintsCount}`}</span></button>
- <button class="toy-button" onclick={handleRestart} disabled={isExiting||settling} aria-label="Restart level"><Icon name="arrow-counter-clockwise"/><span>Restart</span></button>
+ <!-- ponytail: controls stay enabled while a car settles (the handlers ignore those taps); dimming them made the row flicker -->
+ <footer class="play-controls">
+  <RoundControl icon="arrow-u-up-left" label="Undo" disabled={!moveHistory.length||isWon} ariaLabel="Undo move" onclick={handleUndo}/>
+  <RoundControl icon="lightbulb" label={hintBusy?'Thinking…':'Hint'} skin="grape" badge={hintsCount} disabled={isWon||hintsCount<=0} ariaLabel={`Use hint, ${hintsCount} left`} onclick={handleHint}/>
  </footer>
  {#if isWon}<WinCard moves={moveHistory.length} best={currentLevel.minMoves} last={currentLevelId===levels.length} onNext={nextLevel} onReplay={handleRestart}/>{/if}
 </div>

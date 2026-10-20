@@ -13,6 +13,8 @@
  let {library}:{library?:Library}=$props();
  const selectedGame=$derived(page.params.game==='escape'?'escape':'nuts');
  const screen=$derived(!page.params.game?'home':page.url.pathname.endsWith('/play')?'play':'difficulty');
+ // the status-bar strip shows the page background: match the screen so play runs edge to edge
+ $effect(()=>{document.documentElement.style.setProperty('--screen-bg',screen!=='play'?'#fff6e6':selectedGame==='nuts'?'#e1e8d1':'#d3deca');});
  const currentDifficulty=$derived((['easy','medium','hard','extra_hard'].includes(page.url.searchParams.get('difficulty')??'')?page.url.searchParams.get('difficulty'):'easy') as Difficulty);
  let initialLevel=$state(1);
  $effect(()=>{initialLevel=Math.max(1,Math.min(savedLevel(selectedGame,currentDifficulty),Number(page.url.searchParams.get('stage'))||savedLevel(selectedGame,currentDifficulty)));});

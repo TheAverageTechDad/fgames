@@ -467,13 +467,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
         const positions=bolts.map((_,i)=>getBoltPosition(i,bolts.length));
         if(!positions.length)return;
-        const minX=Math.min(...positions.map(p=>p.x))-1.15;
-        const maxX=Math.max(...positions.map(p=>p.x))+1.15;
+        const minX=Math.min(...positions.map(p=>p.x))-1.0;
+        const maxX=Math.max(...positions.map(p=>p.x))+1.0;
         const minY=Math.min(...positions.map(p=>p.y))-.7;
         const maxY=Math.max(...positions.map(p=>p.y))+HOVER_Y_OFFSET+1.4;
         const centerY=(minY+maxY)/2;
         const tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-        const distance=Math.max((maxX-minX)/(2*tan*aspect),(maxY-minY)/(2*tan))*1.16;
+        const distance=Math.max((maxX-minX)/(2*tan*aspect),(maxY-minY)/(2*tan))*1.06;
         camera.position.set(0,centerY+distance*.23,distance);
         camera.lookAt(0,centerY,0);
         camera.updateProjectionMatrix();

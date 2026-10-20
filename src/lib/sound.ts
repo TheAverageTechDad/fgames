@@ -27,13 +27,41 @@ function noise(duration:number,frequency:number,volume:number,delay=0){
  gain.gain.setValueAtTime(volume,t);gain.gain.exponentialRampToValueAtTime(.001,t+duration);
  source.connect(filter);filter.connect(gain);gain.connect(c.destination);source.start(t);source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};
 }
+// Metal on a thread. The reference game's nut sound is one hit, then a fast run of clicks that ring
+// the nut's partials (Hz, read off a spectrogram of that recording). Clicks go through a resonator bank
+// tuned to those partials; the first hit and the seating also ring briefly.
+const METAL:[number,number][]=[[1250,.45],[2050,.55],[3250,1],[3650,.7],[7600,.5],[8400,.42],[10900,.3]];
+function ring(c:AudioContext,t:number,volume:number){
+ for(const [f,w,decay] of [[3250,1,.18],[7600,.55,.32],[8400,.45,.36],[10900,.3,.42]]){
+  const o=c.createOscillator(),g=c.createGain();o.frequency.value=f*(.995+Math.random()*.01);
+  g.gain.setValueAtTime(volume*w,t);g.gain.exponentialRampToValueAtTime(.0001,t+decay);
+  o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+decay+.02);o.onended=()=>{o.disconnect();g.disconnect();};
+ }
+}
+function thread(clicks:number,span:number,volume:number,loosening:boolean){
+ if(sound.muted)return;const c=context();if(!c)return;const t=c.currentTime,rate=c.sampleRate;
+ const len=Math.ceil(rate*(span+.05)),buffer=c.createBuffer(1,len,rate),data=buffer.getChannelData(0);
+ for(let i=0;i<clicks;i++){
+  const p=i/(clicks-1);
+  // loosening speeds up as the nut frees; tightening slows as it seats
+  const at=Math.max(0,span*(loosening?1-(1-p)**1.4:p**1.4)+(Math.random()-.5)*.008);
+  const amp=(i===0?1:.6)*(.7+Math.random()*.3)*(1-.55*p);
+  const start=Math.floor(at*rate);
+  for(let k=0;k<rate*.003&&start+k<len;k++)data[start+k]+=(Math.random()*2-1)*amp*Math.exp(-k/(rate*.0005));
+ }
+ const source=c.createBufferSource(),out=c.createGain();source.buffer=buffer;out.gain.value=volume;out.connect(c.destination);
+ const nodes:AudioNode[]=[source,out];
+ for(const [f,w] of METAL){const band=c.createBiquadFilter(),g=c.createGain();band.type='bandpass';band.frequency.value=f;band.Q.value=18;g.gain.value=w;source.connect(band);band.connect(g);g.connect(out);nodes.push(band,g);}
+ source.start(t);source.onended=()=>setTimeout(()=>nodes.forEach(n=>n.disconnect()),200);
+ ring(c,t,volume*.035);
+}
 export const sound={
  get muted(){try{const saved=localStorage.getItem('fgames_muted');if(saved!==null)mute=saved==='true';}catch{}return mute;},
  set muted(value:boolean){mute=value;try{localStorage.setItem('fgames_muted',String(value));}catch{}},
  toggleMute(){this.muted=!this.muted;return this.muted;},
  playTap(){tone(notes[4],.045,0,.045);haptic('tick');},
- playUnscrew(){for(let i=0;i<4;i++)noise(.018,1600,.05,i*.035);},
- playScrewDown(){tone(notes[0],.07,0,.12);noise(.025,1000,.05);haptic('land');},
+ playUnscrew(){thread(9,.3,1.3,true);},
+ playScrewDown(){thread(7,.22,1.3,false);const c=context();if(c&&!sound.muted)ring(c,c.currentTime+.24,.03);tone(notes[0]*.75,.06,.24,.06);haptic('land');},
  playLocked(){tone(notes[0]/2,.06,0,.07);haptic('tick');},
  playBoltComplete(){const base=Math.min(combo++,4);[0,2,4].forEach((n,i)=>tone(notes[base+n],.2,i*.065));haptic('combo');},
  resetCombo(){combo=0;},

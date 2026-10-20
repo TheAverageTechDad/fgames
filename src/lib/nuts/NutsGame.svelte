@@ -7,7 +7,8 @@
 	import confetti from 'canvas-confetti';
 	import { onMount, onDestroy } from 'svelte';
  import { groupMoveCount } from './moves';
- import GameHeader from '#lib/components/GameHeader.svelte';
+ import PlayHeader from '#lib/components/PlayHeader.svelte';
+ import RoundControl from '#lib/components/RoundControl.svelte';
  import WinCard from '#lib/components/WinCard.svelte';
  import Icon from '#lib/components/Icon.svelte';
 	import Nuts3DScene from './three/Nuts3DScene.svelte';
@@ -220,17 +221,19 @@
 
 
 <div class="game-screen nuts-screen">
- <GameHeader title={`Level ${currentLevelId}`} subtitle={`${difficulty.replace('_',' ')} · ${moveHistory.length} moves`} {onBack}/>
+ <PlayHeader level={currentLevelId} {difficulty} {onBack} onRestart={handleRestart}/>
  <main class="nuts-field" use:levelTransition={currentLevelId}>
   <Nuts3DScene {bolts} {selectedBolt} hintMove={hintMove??guidedMove} {isWon} {capacity} {nudge} onBoltClick={handleBoltClick} onSettled={finishAnimation} guided={!!guidedMove}/>
+  {#if guidedMove}<p class="field-tip" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>
+  {:else if showBoltTip}<button class="field-tip" onclick={()=>{showBoltTip=false;try{localStorage.setItem('fgames_bolt_tip','true');}catch{}}}>Add gives you one empty bolt. Tap to dismiss.</button>{/if}
  </main>
- {#if guidedMove}<p class="guidance" aria-live="polite"><Icon name="hand-pointing"/>Tap {selectedBolt===guidedMove.from?'the marked empty or matching bolt':'the marked source bolt'}</p>{/if}
- {#if showBoltTip}<button class="bolt-tip" onclick={()=>{showBoltTip=false;try{localStorage.setItem('fgames_bolt_tip','true');}catch{}}}>+1 Bolt adds an empty bolt for this level. Tap to dismiss.</button>{/if}
- <footer class="power-row">
-  <button class="toy-button" onclick={handleUndo} disabled={!moveHistory.length||isWon||busy||hintBusy} aria-label="Undo move"><Icon name="arrow-u-up-left"/><span>Undo</span></button>
-  <button class="toy-button grape" onclick={handleHint} disabled={isWon||busy||hintBusy||hintsCount<=0} aria-label="Use hint"><Icon name="lightbulb"/><span>{hintBusy?'Thinking…':`Hint · ${hintsCount}`}</span></button>
-  <button class="toy-button mint" onclick={handleAddBolt} disabled={hasAddedBolt||isWon||busy||hintBusy} aria-label="Add extra bolt"><Icon name="plus"/><span>+1 Bolt</span></button>
-  <button class="toy-button" onclick={handleRestart} disabled={busy} aria-label="Restart level"><Icon name="arrow-counter-clockwise"/><span>Restart</span></button>
+ <!-- ponytail: controls stay enabled while a nut animates (the handlers ignore those taps); dimming them made the row flicker -->
+ <footer class="play-controls">
+  <RoundControl icon="arrow-u-up-left" label="Undo" disabled={!moveHistory.length||isWon} ariaLabel="Undo move" onclick={handleUndo}/>
+  <div class="control-group">
+   <RoundControl icon="lightbulb" label={hintBusy?'Thinking…':'Hint'} skin="grape" badge={hintsCount} disabled={isWon||hintsCount<=0} ariaLabel={`Use hint, ${hintsCount} left`} onclick={handleHint}/>
+   <RoundControl icon="plus" label="Add" skin="mint" disabled={hasAddedBolt||isWon} ariaLabel="Add extra bolt" onclick={handleAddBolt}/>
+  </div>
  </footer>
  {#if isWon}<WinCard moves={moveHistory.length} best={currentLevel.minMoves} assisted={hasAddedBolt} last={currentLevelId===levels.length} onNext={nextLevel} onReplay={handleRestart}/>{/if}
 </div>
