@@ -311,7 +311,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     animateWalker(w, w.walk > 0.2, 11, dt);
   }
 
-  // The children: Catcha's two boys run between play spots, sometimes chasing each other.
+  // The children: Catcha's two girls run between play spots, sometimes chasing each other.
   const kids: (Walker & { target: Point; rest: number; chase: boolean; jump: number })[] = [];
   function updateKids(dt: number) {
     kids.forEach((kid, i) => {
@@ -428,12 +428,12 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     if (disposed) disposeObject(gltf.scene); else loadedModels.push(gltf.scene);
     return gltf;
   };
-  const ready = Promise.all([load(FARM_ASSETS.farmer), load(FARM_ASSETS.olderBoy), load(FARM_ASSETS.youngerBoy)]).then(([mother, ...boys]) => {
+  const ready = Promise.all([load(FARM_ASSETS.farmer), load(FARM_ASSETS.olderGirl), load(FARM_ASSETS.youngerGirl)]).then(([mother, ...girls]) => {
     if (disposed) return;
     const model = fit(mother.scene, 1.65); body.add(model);
     model.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) joints.push(o); });
-    boys.forEach((boy, i) => {
-      const group = new THREE.Group(), kid = fit(boy.scene, i ? 0.95 : 1.15), kidJoints: THREE.Object3D[] = [];
+    girls.forEach((girl, i) => {
+      const group = new THREE.Group(), kid = fit(girl.scene, i ? 0.95 : 1.15), kidJoints: THREE.Object3D[] = [];
       kid.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) kidJoints.push(o); });
       group.add(kid, shadowDisc(0.24)); group.position.set(PLAYGROUND[i + 1].x, 0, PLAYGROUND[i + 1].z); scene.add(group);
       kids.push({ group, joints: kidJoints, phase: i, walk: 0, squash: 1, target: PLAYGROUND[i + 4], rest: i, chase: false, jump: 0 });
