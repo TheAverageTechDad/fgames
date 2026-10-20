@@ -31,6 +31,6 @@ Physical iPhone Safari, iPhone home-screen install and cheap Android checks have
 
 Items explicitly marked “Later” in the report (hidden nuts, statistics and game-specific settings) remain outside this release.
 
-Release verification: 21 unit tests passed; all eight production browser journeys passed with `FGAMES_STRICT_PERF=1` and no startup tasks above 50 ms. Offline reload and offline hints passed. Both the background renderer and the main-thread fallback passed rapid-tap guards, Next and Level 2 reload checks. The deterministic design scan returned no findings; no suppressions were added.
+Release verification: 21 unit tests passed; all eight production browser journeys passed with `FGAMES_STRICT_PERF=1` and no startup tasks above 50 ms. Offline reload and offline hints passed. Service-worker registration runs once through the root layout, which handles expected offline update failures. Both the background renderer and the main-thread fallback passed rapid-tap guards, Next and Level 2 reload checks. The deterministic design scan returned no findings; no suppressions were added.
 
 The measured startup results are stored in `verification/browser-smoke.json`.

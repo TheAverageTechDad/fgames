@@ -50,6 +50,7 @@ try{
  }
  // Back, refresh, debug hooks, storage, offline and tight viewport checks.
  const context=await browser.newContext({viewport:{width:375,height:667}}),page=await context.newPage();
+ const offlineErrors=[];page.on('pageerror',error=>offlineErrors.push(error.message));
  await page.goto(base+'/?game=escape&level=57');await page.getByRole('heading',{name:'Offline Games',exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>typeof window.__nuts),'undefined');
  await page.getByRole('button',{name:'Play Nuts & Bolts',exact:true}).click();await page.getByRole('button',{name:'Extra Hard',exact:true}).click();await page.getByRole('button',{name:'Play · Level 1',exact:true}).click();
@@ -63,6 +64,6 @@ try{
  await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
  await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  await context.setOffline(true);await page.goto(base+'/nuts?difficulty=extra_hard');await page.getByRole('button',{name:'Play · Level 1',exact:true}).waitFor();await page.getByRole('button',{name:'Play · Level 1',exact:true}).click();await page.locator('[data-bolt="0"]').waitFor();await page.reload();await page.locator('[data-bolt="0"]').waitFor();await page.getByRole('button',{name:'Use hint',exact:true}).click();await page.getByText('Hint · 2',{exact:true}).waitFor();await context.setOffline(false);
- await context.close();
+ assert.deepEqual(offlineErrors,[]);await context.close();
  await writeFile('test-results/smoke.json',JSON.stringify(results,null,2));console.log('PASS navigation, storage, offline, debug guard and 375px camera bounds');
 }finally{await browser.close();}
