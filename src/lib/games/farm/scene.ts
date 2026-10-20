@@ -38,8 +38,15 @@ const DAY_SECONDS = 300;
 const SHOPPER_SLOT = (i: number, stall = 0) => stall
   ? new THREE.Vector3(SPOTS.standCounter.x + 0.25 - i * 0.72, 0, SPOTS.standCounter.z + 0.9)
   : new THREE.Vector3(SPOTS.counter.x + 0.25 + i * 0.72, 0, SPOTS.counter.z + 0.9);
-const SHOPPER_SPAWN = [new THREE.Vector3(12, 0, SPOTS.counter.z + 0.9), new THREE.Vector3(0.3, 0, 16)];
-const SHOPPER_EXIT = [new THREE.Vector3(SPOTS.counter.x + 0.25, 0, 12), new THREE.Vector3(-0.3, 0, 16)];
+const SHOPPER_SPAWN = [new THREE.Vector3(12, 0, SPOTS.counter.z + 0.9), new THREE.Vector3(0.25, 0, 19)];
+const SHOPPER_EXIT = [new THREE.Vector3(SPOTS.counter.x + 0.25, 0, 12), new THREE.Vector3(-0.25, 0, 19)];
+// Orchard shoppers come up the road and in through the gate in the south fence, never through the fence.
+const SHOPPER_DOOR = [null, new THREE.Vector3(0, 0, 9.4)];
+// Along a path through an optional door: the first 70% of the walk reaches the door, the rest the goal.
+function along(from: THREE.Vector3, door: THREE.Vector3 | null, to: THREE.Vector3, t: number) {
+  if (!door) return from.clone().lerp(to, t);
+  return t < 0.7 ? from.clone().lerp(door, t / 0.7) : door.clone().lerp(to, (t - 0.7) / 0.3);
+}
 // Where the children play: points on the paths and lawns, clear of the fields.
 const PLAYGROUND: Point[] = [{ x: 0, z: 0 }, { x: -5.5, z: 0 }, { x: 5.5, z: 0 }, { x: 0, z: -5.5 }, { x: 0, z: 5.5 }, { x: -1.4, z: 5.2 },
   { x: 4.0, z: 5.7 }, { x: -5.6, z: 3.4 }, { x: 0.3, z: -3 }, { x: -3, z: 0.2 }, { x: 4.8, z: 0.5 }, { x: 1.2, z: 4.6 }];
@@ -196,18 +203,21 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const farmer = new THREE.Group(); farmer.position.set(state.player.x, 0, state.player.z); scene.add(farmer);
   const body = new THREE.Group(); farmer.add(body);
   const stack = new THREE.Group(); stack.position.set(0, 0.78, 0.36); body.add(stack);
-  const carried = { seed: instanced(sphere, COLORS.burlap, 24, stack), ...Object.fromEntries(PRODUCTS.map(c => [c, instanced(sphere, COLORS[c], 48, stack)])) } as Record<Product | 'seed', THREE.InstancedMesh>;
+  const carried = { seed: instanced(sphere, COLORS.burlap, 24, stack), ...Object.fromEntries(PRODUCTS.map(c => [c, instanced(sphere, COLORS[c], 120, stack)])) } as Record<Product | 'seed', THREE.InstancedMesh>;
   let stackHeight = 0;
   function updateStack() {
     const key = `${total(state.seeds)}:${PRODUCTS.map(c => state.produce[c]).join(':')}`;
     if (key === stackKey) return;
     stackKey = key;
-    // Two columns: seed bags at the bottom, then the harvest piled on top.
+    // Seed bags at the bottom, then the harvest piled on top: two columns, widening to three and then a
+    // 2×2 block as a big basket fills, so the pile stays a pile rather than a tower.
     let y = 0;
+    const load = total(state.produce) + total(state.seeds), cols = load > 60 ? 4 : load > 30 ? 3 : 2;
+    const spot = (i: number): [number, number] => cols === 4 ? [(i % 2 - 0.5) * 0.21, (Math.floor(i / 2) % 2 - 0.5) * 0.2] : [(i % cols - (cols - 1) / 2) * 0.21, ((i * 7) % 3 - 1) * 0.015];
     const layer = (kind: Product | 'seed', n: number, h: number) => {
-      const m = carried[kind]; m.count = n;
-      for (let i = 0; i < n; i++) place(m, i, (i % 2 - 0.5) * 0.21, y + Math.floor(i / 2) * h + h / 2, ((i * 7) % 3 - 1) * 0.015, SHAPE[kind], kind === 'cucumber' ? 0 : i * 0.9);
-      y += Math.ceil(n / 2) * h; m.instanceMatrix.needsUpdate = true;
+      const m = carried[kind]; m.count = Math.min(n, 120);
+      for (let i = 0; i < m.count; i++) { const [x, z] = spot(i); place(m, i, x, y + Math.floor(i / cols) * h + h / 2, z, SHAPE[kind], kind === 'cucumber' ? 0 : i * 0.9); }
+      y += Math.ceil(m.count / cols) * h; m.instanceMatrix.needsUpdate = true;
     };
     layer('seed', total(state.seeds), 0.15);
     layer('tomato', state.produce.tomato, 0.17);
@@ -299,7 +309,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       return made;
     })();
     Object.assign(shopper, { id, leaving: 0, key: '', happy: true, frontAt: 0 }); shopper.bubble.visible = false; shopper.group.userData.look = look;
-    shopper.group.userData.stall = stall;
+    shopper.group.userData.stall = stall; shopper.group.userData.through = false;
     shopper.group.position.copy(SHOPPER_SPAWN[stall]); shopper.group.visible = true; scene.add(shopper.group); shoppers.set(id, shopper);
     return shopper;
   }
@@ -319,7 +329,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     state.customers.forEach(c => {
       const i = places[c.stall]++;
       const shopper = shoppers.get(c.id) ?? makeShopper(c.id, c.stall), slot = SHOPPER_SLOT(i, c.stall), g = shopper.group.position;
-      const goal = c.wait > 0 ? SHOPPER_SPAWN[c.stall].clone().lerp(slot, 1 - c.wait / ARRIVE_SECONDS) : slot;
+      const goal = c.wait > 0 ? along(SHOPPER_SPAWN[c.stall], SHOPPER_DOOR[c.stall], slot, 1 - c.wait / ARRIVE_SECONDS) : slot;
       walkTo(shopper, goal, 7, dt);
       const front = i === 0 && c.wait === 0 && Math.hypot(g.x - slot.x, g.z - slot.z) < 0.1;
       shopper.bubble.visible = front;
@@ -342,8 +352,10 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       if (front || shopper.walk < 0.02) shopper.group.rotation.y = turn(shopper.group.rotation.y, Math.PI, dt * 10);
     });
     for (const shopper of shoppers.values()) if (shopper.leaving) {
-      const exit = SHOPPER_EXIT[shopper.group.userData.stall as number];
-      walkTo(shopper, exit, shopper.happy ? 2.2 : 3, dt);
+      const stall = shopper.group.userData.stall as number, door = SHOPPER_DOOR[stall], exit = SHOPPER_EXIT[stall];
+      // Out through the door first, if this stall has one.
+      if (door && !shopper.group.userData.through && shopper.group.position.distanceTo(door) < 0.15) shopper.group.userData.through = true;
+      walkTo(shopper, door && !shopper.group.userData.through ? door : exit, shopper.happy ? 2.2 : 3, dt);
       shopper.bubble.visible = time - shopper.leaving < 1.2;
       if (shopper.group.position.distanceTo(exit) < 0.1) { shopper.group.removeFromParent(); shoppers.delete(shopper.id); spare[shopper.group.userData.look].push(shopper); }
     }
@@ -430,13 +442,17 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const pool = new THREE.Mesh(poolGeometry, poolMaterial); pool.position.set(at.x, 0.05, at.z); pool.renderOrder = 2; scene.add(pool);
   }
   const fireflyMaterial = new THREE.SpriteMaterial({ map: poolTexture, color: '#e8ff9a', blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0 });
-  const fireflies = Array.from({ length: 22 }, (_, i) => {
-    const s = new THREE.Sprite(fireflyMaterial); s.scale.setScalar(0.22); s.userData.home = new THREE.Vector3((rand() - 0.5) * 13, 0.6 + rand() * 0.8, (rand() - 0.5) * 13); s.userData.phase = i * 1.7; scene.add(s); return s;
+  // Fireflies live all over the farm, mostly by hedges, trees and fields, and each glows on its own slow rhythm,
+  // so only a few show at a time instead of a swarm on screen.
+  const fireflies = Array.from({ length: 36 }, (_, i) => {
+    const s = new THREE.Sprite(fireflyMaterial); s.scale.setScalar(0);
+    s.userData.home = new THREE.Vector3(-8 + rand() * 18, 0.4 + rand() * 0.9, -7 + rand() * 19); s.userData.phase = rand() * 20; s.userData.rate = 0.25 + rand() * 0.35;
+    scene.add(s); return s;
   });
 
   // Now and then a light shower drifts over: streaks, splashes and a slightly greyer light.
-  const RAIN = 200, SHOWER = 22;
-  const rain = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 0.6, 0.03), new THREE.MeshBasicMaterial({ color: '#eef6ff', transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }), RAIN);
+  const RAIN = 150, SHOWER = 22;
+  const rain = new THREE.InstancedMesh(new THREE.BoxGeometry(0.012, 0.5, 0.012), new THREE.MeshBasicMaterial({ color: '#eef6ff', transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }), RAIN);
   rain.frustumCulled = false; rain.count = 0; scene.add(rain);
   const drops = Array.from({ length: RAIN }, () => new THREE.Vector3((rand() - 0.5) * 16, rand() * 9, (rand() - 0.5) * 16));
   // ?rain starts a shower straight away, for checking it.
@@ -592,7 +608,9 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     if (orchardBuilt || !hasOrchard(state)) return;
     orchardBuilt = true;
     const [x0, x1, z0, z1] = [-8.65, 0.95, 6.75, 13.05];
-    props.fence(orchardRoot, x0, z1, x1, z1); props.fence(orchardRoot, x0, z0 + 0.1, x0, z1); props.fence(orchardRoot, x1, 9.4, x1, z1);
+    // The south fence has a gate where the road comes in from the south.
+    props.fence(orchardRoot, x0, z1, -0.85, z1); props.fence(orchardRoot, x0, z0 + 0.1, x0, z1); props.fence(orchardRoot, x1, 9.4, x1, z1 - 0.4);
+    for (const x of [-0.85, 0.85]) props.rbox(orchardRoot, '#8a5a35', x, 0.5, z1, 0.18, 1.0, 0.18, 0.04);
     props.fence(orchardRoot, x0, z0 + 0.1, -6.65, z0 + 0.1);
     // A mown meadow under the trees and a gravel strip for the apiary, so each part reads at a glance.
     props.rbox(orchardRoot, '#93c858', -5.5, 0.008, 9.25, 5.6, 0.01, 3.9, 0.02);
@@ -786,12 +804,14 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     // Time of day loops every few minutes; a shower greys the light a little.
     dayClock += dt;
     const day = sky.set(dayClock / DAY_SECONDS), wet = updateRain(dt); sunOffset.copy(day.sun);
-    hemi.intensity *= 1 - wet * 0.25; sun.intensity *= 1 - wet * 0.6;
+    hemi.intensity *= 1 - wet * 0.15; sun.intensity *= 1 - wet * 0.4;
     props.glow.emissiveIntensity = day.glow * 1.6; poolMaterial.opacity = day.glow * 0.45; fireflyMaterial.opacity = day.glow * 0.9;
     fireflies.forEach(f => {
       const h = f.userData.home as THREE.Vector3, ph = f.userData.phase as number;
-      f.position.set(focus.x + h.x + Math.sin(time * 0.7 + ph) * 0.6, h.y + Math.sin(time * 1.3 + ph) * 0.25, focus.z + h.z + Math.cos(time * 0.5 + ph) * 0.6);
-      f.scale.setScalar(0.16 + Math.max(0, Math.sin(time * 3 + ph)) * 0.12);
+      f.position.set(h.x + Math.sin(time * 0.4 + ph) * 0.8, h.y + Math.sin(time * 0.9 + ph) * 0.2, h.z + Math.cos(time * 0.3 + ph) * 0.8);
+      // A glow for about a third of each cycle, then dark.
+      const glow = Math.sin(time * f.userData.rate * Math.PI * 2 + ph);
+      f.scale.setScalar(glow > 0.45 ? 0.1 + (glow - 0.45) * 0.22 : 0);
     });
     updateBirds(dt, day.glow);
     const goal = farmGoal(state).at;

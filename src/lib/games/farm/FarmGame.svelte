@@ -89,13 +89,18 @@
   });
 </script>
 
+{#snippet coin(style = '')}
+  <!-- Drawn rather than typed, so the $ sits dead centre whatever the font's metrics. -->
+  <svg class="coin-icon" {style} viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16.8" r="15" fill="#d39729"/><circle cx="16" cy="16" r="15" fill="#f7c74f"/><circle cx="16" cy="16" r="11.6" fill="none" stroke="#ffdf79" stroke-width="1.6"/><path d="M20.3 11.6c-.9-1.5-2.4-2.3-4.3-2.3-2.3 0-3.9 1.2-3.9 3 0 4.3 8.5 2.4 8.5 6.9 0 1.9-1.8 3.3-4.3 3.3-2 0-3.6-.8-4.5-2.3M16 7v18" fill="none" stroke="#9a661c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{/snippet}
+
 <div class="farm-surround">
   <main class="farm-shell" aria-label="Pocket Farm">
     <div class="farm-world" bind:this={host}></div>
     <header class="farm-header">
       <button class="farm-round" aria-label="Back to arcade" onclick={home}><Icon name="arrow-left" size={24}/></button>
       <div class="farm-brand"><h1>Pocket Farm</h1><div class="farm-stars" aria-label={`Shop rating: ${hud.stars} of 5 stars`}>{#each [1, 2, 3, 4, 5] as n}<span class:half={hud.stars === n - 0.5} class:on={hud.stars >= n}>★</span>{/each}</div></div>
-      <div class="farm-wallet" bind:this={wallet} aria-label={`Wallet: ${hud.wallet} coins`}><span class="coin-icon" aria-hidden="true">$</span><strong data-wallet>{hud.wallet}</strong></div>
+      <div class="farm-wallet" bind:this={wallet} aria-label={`Wallet: ${hud.wallet} coins`}>{@render coin()}<strong data-wallet>{hud.wallet}</strong></div>
     </header>
     <div class="farm-side-controls">
       <button class="farm-round small" aria-label={hud.muted ? 'Turn sound on' : 'Mute sound'} aria-pressed={hud.muted} onclick={toggleSound}><Icon name={hud.muted ? 'speaker-slash' : 'speaker-high'} size={21}/></button>
@@ -107,7 +112,7 @@
     {#if coinId > 0}
       {#key coinId}
         <div class="money-flight" aria-hidden="true" style={`left:${flight.fromX}px;top:${flight.fromY}px;--dx:${flight.dx}px;--dy:${flight.dy}px`}>
-          {#each [0, 1, 2, 3, 4] as i}<span class="coin-icon" style={`--delay:${i * 55}ms`}>$</span>{/each}
+          {#each [0, 1, 2, 3, 4] as i}{@render coin(`--delay:${i * 55}ms`)}{/each}
         </div>
       {/key}
     {/if}
@@ -166,14 +171,13 @@
   .farm-surround{height:100dvh;overflow:hidden;display:flex;justify-content:center;background:#456c3d;color:#294d35}
   .farm-shell{position:relative;width:100%;max-width:500px;height:100%;isolation:isolate;overflow:hidden;background:#8db75b;touch-action:none;-webkit-user-select:none;user-select:none}
   .farm-world{position:absolute;inset:0;overflow:hidden}.farm-world :global(canvas){display:block;width:100%;height:100%;outline:none;touch-action:none}
-  .farm-shell{--farm-top:max(16px,env(safe-area-inset-top))}
-  /* iOS 26 draws the page under a blurred status-bar strip and can report no inset for it: keep controls below. */
-  @supports(-webkit-touch-callout:none){.farm-shell{--farm-top:max(52px,env(safe-area-inset-top))}}
+  /* The same top inset as the puzzle games' header, so the back button and wallet sit on the same line. */
+  .farm-shell{--farm-top:max(12px,env(safe-area-inset-top))}
   .farm-header{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:var(--farm-top) 15px 12px;background:linear-gradient(#68954bcc,transparent);pointer-events:none}
   .farm-header>*{pointer-events:auto}.farm-brand{flex:1;min-width:0}.farm-stars{display:inline-flex;margin-top:4px;font-size:14px;line-height:1;color:#d8d9b8;text-shadow:0 1px 0 #41633466;padding:3px 7px;border-radius:10px;background:#fff6dfd9}.farm-stars .on{color:#f5b92e}.farm-stars .half{background:linear-gradient(90deg,#f5b92e 50%,#d8d9b8 50%);-webkit-background-clip:text;background-clip:text;color:transparent}
   .farm-brand h1{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;font-size:26px;color:#fff9df;text-shadow:0 2px 0 #416633,1px 0 0 #416633}
   .farm-round{width:43px;height:43px;min-width:43px;border:2px solid #49613a;border-radius:50%;background:#fff6df;box-shadow:0 3px 0 #49613a66;display:grid;place-items:center;color:#37553b;padding:8px}.farm-round:active{transform:translateY(2px);box-shadow:none}.farm-round.small{width:38px;height:38px;min-width:38px;padding:7px;background:#fff6dfed}
-  .farm-wallet{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 7px;border:2px solid #6d7339;border-radius:24px;background:#fff4cf;box-shadow:0 3px 0 #55753f66;min-width:82px}.farm-wallet strong{font-size:23px;font-weight:400;font-variant-numeric:tabular-nums}.coin-icon{display:grid;place-items:center;width:27px;height:27px;flex-shrink:0;background:#f7c74f;border:2px solid #d39729;border-radius:50%;color:#9a661c;font-size:19px;box-shadow:inset 0 0 0 2px #ffdf79;font-weight:400}
+  .farm-wallet{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 7px;border:2px solid #6d7339;border-radius:24px;background:#fff4cf;box-shadow:0 3px 0 #55753f66;min-width:82px}.farm-wallet strong{font-size:23px;font-weight:400;font-variant-numeric:tabular-nums}.coin-icon{display:block;width:28px;height:28px;flex-shrink:0}
   .farm-side-controls{position:absolute;right:16px;top:calc(var(--farm-top) + 62px);display:flex;flex-direction:column;gap:10px}.pause-symbol{width:14px;height:16px;border-left:5px solid currentColor;border-right:5px solid currentColor}
   .farm-footer{position:absolute;bottom:0;left:0;right:0;padding:0 16px max(12px,env(safe-area-inset-bottom));pointer-events:none;}
   .inventory-pill{display:flex;align-items:center;gap:5px;padding:3px 10px 3px 5px;border-radius:13px;background:#f2eed6}.inventory-pill svg{width:24px;height:24px}.inventory-pill strong{font-size:18px;line-height:1;font-weight:400;font-variant-numeric:tabular-nums}.inventory-pill small{font-size:12px;color:#829066;margin-left:1px}
@@ -187,7 +191,7 @@
   .shop-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;background:#f2eed6;margin-bottom:6px}.shop-row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.shop-row strong{font-size:15px;font-weight:400}.shop-row span{font-size:11px;color:#6d7959}
   .pips{display:flex;gap:4px;margin-top:2px}.pips i{width:16px;height:5px;border-radius:3px;background:#dcdcc0}.pips i.on{background:#e9b948}
   .shop-buy{min-width:74px;min-height:42px;border:2px solid #b07d22;border-radius:14px;background:linear-gradient(#ffe08a,#f5c043);color:#5e3d0a;font-size:16px;box-shadow:0 3px 0 #b07d2288}.shop-buy:disabled{background:#e8e4cf;border-color:#cfcbb2;color:#8d8b78;box-shadow:none;opacity:1}
-  .money-flight{position:absolute;pointer-events:none}.money-flight>span{position:absolute;animation:coin-travel .55s var(--delay) cubic-bezier(.4,0,.8,1) both;opacity:0}
+  .money-flight{position:absolute;pointer-events:none}.money-flight>.coin-icon{position:absolute;animation:coin-travel .55s var(--delay) cubic-bezier(.4,0,.8,1) both;opacity:0}
   .farm-world :global(.farm-joystick){position:absolute;display:none;width:100px;height:100px;margin:-50px;border:2px solid #fff8e899;background:#fff8e82b;border-radius:50%;pointer-events:none;z-index:4}.farm-world :global(.farm-joystick>div){position:absolute;left:30px;top:30px;width:36px;height:36px;background:#fff8e8c9;border:2px solid #ffffffc9;border-radius:50%}
   @keyframes toast-pop{from{opacity:0;translate:0 10px;scale:.9}to{opacity:1;translate:0 0;scale:1}}@keyframes coin-travel{0%{opacity:0;transform:translate(0,0) scale(.6)}15%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.7)}}
   @media(min-width:600px){.farm-surround{padding:14px}.farm-shell{height:min(960px,calc(100dvh - 28px));border-radius:28px;box-shadow:0 12px 50px #1c362e66;border:3px solid #365437}}

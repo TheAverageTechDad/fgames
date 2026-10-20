@@ -167,6 +167,10 @@ describe('Pocket Farm loop', () => {
     expect(speed(s)).toBeCloseTo(RUN_SPEED * 1.1);
     expect(buyUpgrade(s, 'pouch') && buyUpgrade(s, 'pouch')).toBe(true);
     expect(buyUpgrade(s, 'pouch')).toBe(false);
+    const before = capacity(s);
+    for (let i = 0; i < 5; i++) expect(buyUpgrade(s, 'basket')).toBe(true);
+    expect(buyUpgrade(s, 'basket')).toBe(false);
+    expect(capacity(s)).toBe(before + 60);
   });
   it('decorations are bought once each; farmhands pick, replant and stock the stall', () => {
     const s = createFarm();

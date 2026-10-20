@@ -10,7 +10,7 @@ export type Plot = { id: number; crop: Crop; cells: Cell[] };
 export type Customer = { id: number; stall: number; crop: Product; want: number; got: number; wait: number; patience: number };
 export type Helper = Point & { carry: Inventory };
 export type Stats = { harvested: Inventory; sold: Inventory; served: number; unhappy: number; earned: number };
-export type UpgradeId = 'sprinkler' | 'stall' | 'boots' | 'pouch';
+export type UpgradeId = 'sprinkler' | 'basket' | 'stall' | 'boots' | 'pouch';
 export type DecorId = 'arch' | 'scarecrow' | 'benches' | 'fountain' | 'windmill';
 export type FarmState = {
   version: 1; player: Point; plots: Plot[]; seeds: Inventory; produce: Inventory;
@@ -96,6 +96,7 @@ export const PURCHASES: { kind: 'field' | 'basket' | 'coop' | 'orchard' | 'hives
 // Bought from the board by the farmhouse door.
 export const UPGRADES: Record<UpgradeId, { name: string; detail: string; prices: number[] }> = {
   sprinkler: { name: 'Sprinklers', detail: 'Crops grow 15% faster', prices: [150, 300, 600] },
+  basket: { name: 'Big basket', detail: 'Carry 12 more', prices: [400, 900, 1800, 3500, 6000] },
   stall: { name: 'Fancy stall', detail: '+1 coin for every item sold', prices: [200, 400, 800] },
   boots: { name: 'Comfy boots', detail: 'Run 10% faster', prices: [100, 250, 500] },
   pouch: { name: 'Seed pouch', detail: 'Carry 6 more seeds', prices: [80, 200] }
@@ -121,7 +122,7 @@ export const total = (items: Inventory) => PRODUCTS.reduce((sum, p) => sum + (it
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
 export const ripeCells = (s: FarmState) => s.plots.flatMap(p => p.cells.filter(c => c.stage === 'ripe'));
 const owns = (s: FarmState, kind: (typeof PURCHASES)[number]['kind']) => PURCHASES.slice(0, s.purchased).some(p => p.kind === kind);
-export const capacity = (s: FarmState) => BASE_CAPACITY + 12 * PURCHASES.slice(0, s.purchased).filter(p => p.kind === 'basket').length;
+export const capacity = (s: FarmState) => BASE_CAPACITY + 12 * (PURCHASES.slice(0, s.purchased).filter(p => p.kind === 'basket').length + s.upgrades.basket);
 export const seedCapacity = (s: FarmState) => BASE_SEEDS + 6 * s.upgrades.pouch;
 export const hasCoop = (s: FarmState) => owns(s, 'coop');
 export const hasOrchard = (s: FarmState) => owns(s, 'orchard');
@@ -169,7 +170,7 @@ const GOALS: Goal[] = [
   { text: 'Sell 10 jars of honey', target: 10, value: s => s.stats.sold.honey, reward: 80 },
   { text: 'Add 3 decorations', target: 3, value: beauty, reward: 80 },
   { text: 'Hire a second farmhand', target: 2, value: s => s.helpers.length, reward: 100 },
-  { text: 'Max out every upgrade', target: 11, value: levels, reward: 150 },
+  { text: 'Max out every upgrade', target: Object.values(UPGRADES).reduce((n, u) => n + u.prices.length, 0), value: levels, reward: 150 },
   { text: 'Finish the farm with every decoration', target: 5, value: beauty, reward: 200 }
 ];
 export function currentGoal(s: FarmState): Goal {
@@ -191,7 +192,7 @@ export function createFarm(): FarmState {
   return { version: 1, player: { x: 0, z: 0.4 }, plots: [makePlot(0)],
     seeds: empty(), produce: empty(), stock: empty(), wallet: 0, cash: 0, standCash: 0, sold: 0,
     purchased: 0, rating: 3, goal: 0, stats: { harvested: empty(), sold: empty(), served: 0, unhappy: 0, earned: 0 },
-    upgrades: { sprinkler: 0, stall: 0, boots: 0, pouch: 0 }, decor: [], helpers: [],
+    upgrades: { sprinkler: 0, basket: 0, stall: 0, boots: 0, pouch: 0 }, decor: [], helpers: [],
     nests: NESTS.map(() => 0), layClock: 0, hives: HIVES.map(() => 0), honeyClock: 0,
     customers: [], nextCustomer: 0, arrival: STALLS.map(() => ARRIVE_SECONDS), serve: STALLS.map(() => 0),
     actionClock: 0, purchaseProgress: 0, lastCell: null, muted: false, music: true, haptics: true };

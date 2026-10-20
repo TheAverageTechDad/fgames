@@ -124,3 +124,8 @@ Fixes from the recording: the back button, title and wallet sat under iOS 26's b
 - The orchard is larger (x −8.4…0.75, z 6.4…12.8): six smaller trees spaced 1.55 × 1.65 apart on a mown meadow with apples on the outside of the canopy, the stand moved a little south, and the hives on their own gravel strip along the south fence, in front of the trees; the beehive tile sits where the hives will stand.
 - Each new area gets a short camera tour and a banner saying what to do there (coop, orchard, hives, fields and decorations). The camera now follows within the land she owns rather than the original square.
 - The benches face the camera (side-on they read as a tall post). "Coins are piling up!" only shows when a pile is at least 5% of the wallet, and ripe apples get their own hint.
+- Header: the farm now uses the puzzle games' rule, `max(12px, env(safe-area-inset-top))`. On the installed app the page starts below the status bar and reports no inset, so session 3's 52px iOS minimum pushed the farm's controls about 40px lower than Nuts & Bolts. Both headers now sit on the same line.
+- The wallet coin is an SVG with a drawn, centred $ (the font's metrics set the typed $ low and to the left).
+- Orchard shoppers walk up a road that continues the stone path south and come in through a gate in the orchard's south fence, leaving the same way.
+- Rain streaks are thinner and fainter and dim the light less. Fireflies are spread over the whole farm, each glowing on its own slow cycle, rather than a cluster around the camera.
+- A Big basket upgrade (5 levels, +12 each, $400–$6,000) takes the basket from 48 to 108; the carried pile widens to three and then four columns as it grows.

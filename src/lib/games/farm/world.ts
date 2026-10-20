@@ -29,6 +29,8 @@ export function buildFarmWorld(props: FarmProps, root: THREE.Object3D) {
   surface(root, 'paver', 2.6, 0.022, 2.95, 3.7, 2.7, 2);
   surface(root, 'paver', SPOTS.counter.x + 0.25, 0.019, 8.3, 1.2, 8, 2);
   surface(root, 'paver', 8.3, 0.018, 3.5, 7.8, 1.2, 2);
+  // The stone path runs on south past the orchard as the road its shoppers walk in on.
+  surface(root, 'paver', 0, 0.021, 16, 1.5, 9, 2);
   // The path carries on through the hedge towards where the coop yard opens.
   surface(root, 'paver', EDGE + 1.1, 0.02, 0, 2.2, 1.5, 2);
   // Stone balustrade along the far edges, low hedges along the near ones so nothing hides the farm.
