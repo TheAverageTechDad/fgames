@@ -329,6 +329,14 @@ export function createFarmProps() {
     for (let i = 0; i <= posts; i++) rbox(p, '#a8754a', ax + (bx - ax) * i / posts, 0.35, az + (bz - az) * i / posts, 0.12, 0.7, 0.12, 0.03);
     for (const y of [0.3, 0.55]) rbox(p, '#c48f5c', (ax + bx) / 2, y, (az + bz) / 2, along ? length : 0.06, 0.08, along ? 0.06 : length, 0.02);
   }
+  // A sprinkler head on a short post; `arm` spins while it sprays.
+  function sprinkler() {
+    const g = new THREE.Group(), arm = new THREE.Group();
+    cylinder(g, '#6f7a74', 0, 0.2, 0, 0.03, 0.4); ball(g, '#9aa6a0', 0, 0.42, 0, 0.06, 0.04, 0.06);
+    arm.position.y = 0.45; g.add(arm); rbox(arm, '#b9c4be', 0, 0, 0, 0.28, 0.03, 0.04, 0.01); ball(arm, '#4f8fc9', 0.14, 0, 0, 0.025);
+    g.userData.arm = arm;
+    return g;
+  }
   function coop() {
     const g = new THREE.Group();
     rbox(g, '#b8453a', 0, 0.62, 0, 2.0, 1.0, 1.0, 0.05);
@@ -367,7 +375,7 @@ export function createFarmProps() {
       c.font = '48px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#5a3a20'; c.fillText('Upgrades', w / 2, h / 2 + 3);
     }), toneMapped: false }));
     materials.set(`sign${materials.size}`, plate.material as THREE.Material);
-    plate.scale.set(1.0, 0.44, 1); plate.position.set(0, 0.95, 0.04); g.add(plate);
+    plate.scale.set(1.0, 0.44, 1); plate.position.set(0, 0.95, 0.07); g.add(plate);
     return g;
   }
   // Decorations: each returns its group; the windmill also hands back its sails to turn.
@@ -392,8 +400,8 @@ export function createFarmProps() {
       }
       ball(g, COLORS.foliage, 0, 0.3, -0.05, 0.25); ball(g, '#f6a5b5', 0, 0.5, 0.05, 0.08);
     } else if (id === 'fountain') {
-      cylinder(g, COLORS.stone, 0, 0.15, 0, 0.62, 0.3); cylinder(g, '#8fd0e8', 0, 0.29, 0, 0.54, 0.02);
-      cylinder(g, COLORS.stone, 0, 0.55, 0, 0.1, 0.6); cylinder(g, COLORS.stone, 0, 0.85, 0, 0.3, 0.1); cylinder(g, '#8fd0e8', 0, 0.9, 0, 0.25, 0.02);
+      cylinder(g, COLORS.stone, 0, 0.15, 0, 0.62, 0.3); cylinder(g, '#8fd0e8', 0, 0.32, 0, 0.54, 0.02);
+      cylinder(g, COLORS.stone, 0, 0.55, 0, 0.1, 0.6); cylinder(g, COLORS.stone, 0, 0.85, 0, 0.3, 0.1); cylinder(g, '#8fd0e8', 0, 0.92, 0, 0.25, 0.02);
       ball(g, '#cdeefa', 0, 1.0, 0, 0.08, 0.14, 0.08);
     } else {
       const h = 4.2;
@@ -411,7 +419,7 @@ export function createFarmProps() {
     return g;
   }
   return {
-    fence, coop, nestBox, hen, signboard, decoration,
+    sprinkler, fence, coop, nestBox, hen, signboard, decoration,
     glow, person, lamp, material, box, rbox, ball, cylinder, surface, decal, label, canvasTexture, hedge, balustrade, cypress, roundTree, bush, crate, crop, fieldBed, seedStand, market, house,
     dispose() { geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   };

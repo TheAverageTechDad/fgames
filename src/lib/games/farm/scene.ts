@@ -58,6 +58,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; scene.add(sun, sun.target);
   const sky = createSky({ scene, hemi, sun }), puffs = createPuffs(scene);
+  const TEXEL = 18 / 2048, WORLD_UP = new THREE.Vector3(0, 1, 0), lightDir = new THREE.Vector3(), lightRight = new THREE.Vector3(), lightUp = new THREE.Vector3(), shadowFocus = new THREE.Vector3();
   const camera = new THREE.OrthographicCamera(-3, 3, 6, -6, 0.1, 100);
   const focus = new THREE.Vector3(), aim = new THREE.Vector3(), reach = BOUNDS - 2.6;
   // The player sits a little above centre, clear of the bottom task card.
@@ -471,7 +472,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
 
   // Decorations appear where they belong when bought; the windmill turns and the fountain splashes.
   const decorations = new Map<DecorId, { group: THREE.Group; born: number }>();
-  const FACING: Record<DecorId, number> = { arch: 0, scarecrow: Math.PI / 4, benches: -Math.PI / 4, fountain: 0, windmill: Math.PI / 4 };
+  const FACING: Record<DecorId, number> = { arch: 0, scarecrow: Math.PI / 2, benches: -Math.PI / 4, fountain: 0, windmill: Math.PI / 4 };
   function syncDecor(animate: boolean) {
     for (const id of state.decor) if (!decorations.has(id)) {
       const group = props.decoration(id); group.position.set(DECOR[id].at.x, 0, DECOR[id].at.z); group.rotation.y = FACING[id]; scene.add(group);
@@ -509,6 +510,31 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
         hand.items.instanceMatrix.needsUpdate = true;
       }
     });
+  }
+  // Sprinklers: one head per upgrade level on each field's corners, spinning and misting in turns.
+  const CORNERS = [[1.35, 1.35], [-1.35, 1.35], [1.35, -1.35]];
+  const sprinklers: { arm: THREE.Group; x: number; z: number; phase: number }[] = [];
+  const sprinklerRoot = new THREE.Group(); scene.add(sprinklerRoot);
+  let sprinklerKey = '';
+  function updateSprinklers(dt: number) {
+    const key = `${state.plots.length}:${state.upgrades.sprinkler}`;
+    if (key !== sprinklerKey) {
+      sprinklerKey = key; sprinklerRoot.clear(); sprinklers.length = 0;
+      state.plots.forEach((plot, p) => CORNERS.slice(0, state.upgrades.sprinkler).forEach(([dx, dz], i) => {
+        const f = FIELDS[plot.id], head = props.sprinkler(), x = f.x + dx * Math.sign(-f.x || 1), z = f.z + dz * Math.sign(-f.z || 1);
+        head.position.set(x, 0.1, z); sprinklerRoot.add(head);
+        sprinklers.push({ arm: head.userData.arm, x, z, phase: p * 2.3 + i * 1.1 });
+      }));
+    }
+    for (const s of sprinklers) {
+      const on = (time + s.phase) % 9 < 5;
+      if (!on) continue;
+      s.arm.rotation.y += dt * 5;
+      for (let n = 0; n < 2 && Math.random() < dt * 40; n++) {
+        const a = s.arm.rotation.y + n * Math.PI, v = 1.3 + Math.random() * 0.6;
+        puffs.spawn(s.x + Math.cos(a) * 0.15, 0.55, s.z - Math.sin(a) * 0.15, Math.cos(a) * v, 0.6, -Math.sin(a) * v, 0.7, 0.32, '#bfe6ff');
+      }
+    }
   }
   addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
@@ -653,7 +679,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       }
       offer.position.y = state.wallet >= next.price ? Math.abs(Math.sin(time * 3)) * 0.015 : 0;
     }
-    updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt);
+    updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
     boardRoot.visible = boardOpen(state);
     for (const [id, d] of decorations) {
       if (d.born >= 0) d.group.scale.setScalar(pop(Math.min(1, (time - d.born) / 0.6)));
@@ -700,7 +726,11 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     puffs.step(dt);
     focus.lerp(focusTarget(), 1 - Math.exp(-dt * 5));
     camera.position.copy(focus).addScaledVector(VIEW, 30); camera.lookAt(focus);
-    sun.position.copy(focus).add(day.sun); sun.target.position.copy(focus);
+    // The shadow camera follows the view in whole shadow-map texels; sliding it by fractions makes thin surfaces shimmer.
+    const forward = lightDir.copy(day.sun).normalize().negate(), right = lightRight.crossVectors(forward, WORLD_UP).normalize(), up = lightUp.crossVectors(right, forward);
+    const a = focus.dot(right), b = focus.dot(up);
+    shadowFocus.copy(focus).addScaledVector(right, Math.round(a / TEXEL) * TEXEL - a).addScaledVector(up, Math.round(b / TEXEL) * TEXEL - b);
+    sun.position.copy(shadowFocus).add(day.sun); sun.target.position.copy(shadowFocus);
     renderer.render(scene, camera);
     hudClock += dt; saveClock += dt;
     if (hudClock > 0.1 || events.length) { hudClock = 0; callbacks.update(); }

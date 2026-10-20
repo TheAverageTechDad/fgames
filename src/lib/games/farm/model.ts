@@ -80,7 +80,7 @@ export const UPGRADES: Record<UpgradeId, { name: string; detail: string; prices:
 export const HELPER_PRICES = [600, 1200];
 // Decorations make the farm lovelier: each brings shoppers a little sooner and adds to tips.
 export const DECOR: Record<DecorId, { name: string; price: number; at: Point }> = {
-  scarecrow: { name: 'Scarecrow', price: 120, at: { x: -5.6, z: -5.6 } },
+  scarecrow: { name: 'Scarecrow', price: 120, at: { x: -1.25, z: -3.2 } },
   arch: { name: 'Flower arch', price: 150, at: { x: 0, z: -6.1 } },
   benches: { name: 'Garden benches', price: 180, at: { x: 1.4, z: 5.4 } },
   fountain: { name: 'Fountain', price: 250, at: { x: 5.2, z: 5.2 } },
