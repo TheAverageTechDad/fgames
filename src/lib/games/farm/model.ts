@@ -332,30 +332,43 @@ export function stepFarm(state: FarmState, delta: number, input: Point): FarmEve
   return events;
 }
 
-// Farmhands pick the nearest ripe plant nobody else is after, replant it straight away with their own
-// seed, and take a full load to the counter. They walk around the same props she does.
+// Farmhands pick the nearest ripe plant (or, once the coop is open, a nest with eggs) nobody else is after,
+// replant straight away with their own seed, and take a full load to the counter. They use the yard gate
+// and walk around the same props she does.
 const HELPER_SPEED = 2.2;
+const GATE: Point = { x: 6.75, z: 0 };
+const inYard = (p: Point) => p.x > 6.6;
+type Job = Point & ({ kind: 'cell'; cell: Cell; crop: Crop } | { kind: 'nest'; nest: number } | { kind: 'market' } | { kind: 'rest' });
 function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'], at: Point, amount: number, crop?: Product) => void) {
-  const claimed = new Set<string>();
-  for (const h of state.helpers) {
+  const claimed = new Set<string>(), walls = solids(state).filter(b => !FIELDS.some(f => f.stand.x === b[0] && f.stand.z === b[1]));
+  state.helpers.forEach((h, index) => {
     const load = total(h.carry);
-    const ripe = state.plots.flatMap(plot => plot.cells.filter(c => c.stage === 'ripe' && !claimed.has(c.id)).map(cell => Object.assign({ crop: plot.crop, cell }, cell)));
-    const target = load >= HELPER_LOAD || (load > 0 && !ripe.length) ? { ...SPOTS.market, kind: 'market' as const }
-      : nearest(h, ripe) ?? { x: SPOTS.board.x + 0.8 + state.helpers.indexOf(h) * 0.6, z: SPOTS.board.z - 0.8, kind: 'rest' as const };
-    if ('cell' in target) claimed.add(target.cell.id);
-    // One axis at a time, so a farmhand slides along a wall instead of sticking to it. They step past seed stands.
-    const d = distance(h, target), step = Math.min(d, HELPER_SPEED * dt), walls = solids(state).filter(b => !FIELDS.some(f => f.stand.x === b[0] && f.stand.z === b[1]));
-    if (d > 0.001) { h.x += (target.x - h.x) / d * step; pushOut(h, walls, 0.2); h.z += (target.z - h.z) / d * step; pushOut(h, walls, 0.2); }
-    if (distance(h, target) > 0.15) continue;
-    if ('cell' in target && target.cell.stage === 'ripe') {
+    const jobs: Job[] = [
+      ...state.plots.flatMap(plot => plot.cells.filter(c => c.stage === 'ripe' && !claimed.has(c.id)).map(cell => ({ x: cell.x, z: cell.z, kind: 'cell' as const, cell, crop: plot.crop }))),
+      ...(hasCoop(state) ? NESTS.flatMap((n, i) => state.nests[i] >= 2 && !claimed.has(`nest${i}`) ? [{ ...n, kind: 'nest' as const, nest: i }] : []) : [])
+    ];
+    const target: Job = load >= HELPER_LOAD || (load > 0 && !jobs.length) ? { ...SPOTS.market, kind: 'market' }
+      : nearest(h, jobs) ?? { x: SPOTS.board.x + 0.8 + index * 0.6, z: SPOTS.board.z - 0.8, kind: 'rest' };
+    if (target.kind === 'cell') claimed.add(target.cell.id);
+    if (target.kind === 'nest') claimed.add(`nest${target.nest}`);
+    // Into or out of the yard by the gate; one axis at a time, so they slide along a wall instead of sticking.
+    const via = inYard(target) !== inYard(h) && distance(h, GATE) > 0.3 ? GATE : target;
+    const d = distance(h, via), step = Math.min(d, HELPER_SPEED * dt);
+    if (d > 0.001) { h.x += (via.x - h.x) / d * step; pushOut(h, walls, 0.2); h.z += (via.z - h.z) / d * step; pushOut(h, walls, 0.2); }
+    if (via !== target || distance(h, target) > 0.15) return;
+    if (target.kind === 'cell' && target.cell.stage === 'ripe') {
       h.carry[target.crop] += 3; state.stats.harvested[target.crop] += 3;
       target.cell.stage = 'growing'; target.cell.age = 0;
       emit('helper', target.cell, 3, target.crop);
-    } else if ('kind' in target && target.kind === 'market' && load > 0) {
+    } else if (target.kind === 'nest') {
+      const take = Math.min(state.nests[target.nest], HELPER_LOAD + 3 - load);
+      state.nests[target.nest] -= take; h.carry.egg += take; state.stats.harvested.egg += take;
+      emit('helper', target, take, 'egg');
+    } else if (target.kind === 'market' && load > 0) {
       for (const item of PRODUCTS) { state.stock[item] += h.carry[item]; h.carry[item] = 0; }
       emit('helper', SPOTS.market, load);
     }
-  }
+  });
 }
 
 // The next useful thing to do and where it is; drives both the hint text and the guide arrow.

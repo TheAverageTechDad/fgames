@@ -182,6 +182,14 @@ describe('Pocket Farm loop', () => {
     expect(s.stock.tomato + s.stats.sold.tomato).toBeGreaterThan(0);
     expect(s.plots[0].cells.some(c => c.stage !== 'empty')).toBe(true);
   });
+  it('farmhands fetch eggs from the coop through the gate and stock them', () => {
+    const s = createFarm();
+    s.wallet = 100_000; while (purchaseNext(s));
+    hireHelper(s); s.nests = [4, 4, 4]; s.player = { x: 0, z: -6 };
+    for (let i = 0; i < 600; i++) stepFarm(s, 0.05, stay);
+    expect(s.stats.harvested.egg).toBeGreaterThan(0);
+    expect(s.stock.egg + s.stats.sold.egg).toBeGreaterThan(0);
+  });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();
     stepFarm(s, 1000, { x: 1, z: 1 });

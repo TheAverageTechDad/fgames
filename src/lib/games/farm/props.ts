@@ -245,10 +245,12 @@ export function createFarmProps() {
     }
     return g;
   }
-  function market() {
-    const g = new THREE.Group();
-    rbox(g, COLORS.woodDark, 0, 0.36, 0, 1.9, 0.72, 0.8, 0.05);
-    for (let i = 0; i < 5; i++) box(g, '#9d6a3e', -0.76 + i * 0.38, 0.36, 0.405, 0.04, 0.62, 0.01);
+  // The stall dresses up with each Fancy stall level: fresh paint and bunting, then flower boxes and lanterns,
+  // then a FARM FRESH sign on top and baskets of produce either side.
+  function market(level = 0) {
+    const g = new THREE.Group(), body = level ? '#5f9a70' : COLORS.woodDark, slat = level ? '#fff3dc' : '#9d6a3e';
+    rbox(g, body, 0, 0.36, 0, 1.9, 0.72, 0.8, 0.05);
+    for (let i = 0; i < 5; i++) box(g, slat, -0.76 + i * 0.38, 0.36, 0.405, 0.04, 0.62, 0.01);
     rbox(g, '#d9a865', 0, 0.75, 0, 2.02, 0.08, 0.9, 0.03);
     for (const x of [-0.92, 0.92]) rbox(g, COLORS.woodDark, x, 0.95, -0.36, 0.08, 1.9, 0.08, 0.03);
     for (let i = 0; i < 8; i++) {
@@ -257,6 +259,30 @@ export function createFarmProps() {
     }
     for (const x of SHELF_X) crate(g, x, 0.79, 0, 0.42);
     rbox(g, '#6b8fb0', 0.8, 0.9, -0.3, 0.22, 0.18, 0.16, 0.04);
+    if (level >= 1) for (let i = 0; i < 9; i++) {
+      const flag = mesh(g, geometry('flag', () => new THREE.ConeGeometry(0.07, 0.16, 3)), material(['#f5c043', '#4f7fb8', '#e8344f', '#7fc06a'][i % 4]), -0.88 + i * 0.22, 1.47, 0.17);
+      flag.rotation.x = Math.PI;
+    }
+    if (level >= 2) {
+      for (const x of [-0.55, 0.55]) {
+        rbox(g, '#8a5a35', x, 0.12, 0.55, 0.7, 0.2, 0.22, 0.04);
+        for (let i = 0; i < 5; i++) { ball(g, COLORS.foliage, x - 0.26 + i * 0.13, 0.26, 0.55, 0.08); ball(g, ['#f6a5b5', '#fff2c2', '#e8344f'][i % 3], x - 0.26 + i * 0.13, 0.33, 0.6, 0.045); }
+      }
+      for (const x of [-0.92, 0.92]) { cylinder(g, '#3d4a3f', x, 1.5, 0.05, 0.012, 0.25); ball(g, '#fff3c8', x, 1.36, 0.05, 0.07, 0.09, 0.07).material = glow; }
+    }
+    if (level >= 3) {
+      rbox(g, COLORS.woodDark, 0, 2.18, -0.45, 1.3, 0.42, 0.06, 0.03);
+      const sign = new THREE.Mesh(geometry('plane-v', () => new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: canvasTexture(256, 80, (c, w, h) => {
+        c.fillStyle = '#2f3b33'; c.beginPath(); c.roundRect(4, 4, w - 8, h - 8, 12); c.fill();
+        c.font = '44px "Lilita One", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#ffe48a'; c.fillText('FARM FRESH', w / 2, h / 2 + 2);
+      }), toneMapped: false }));
+      materials.set(`sign${materials.size}`, sign.material as THREE.Material);
+      sign.scale.set(1.2, 0.36, 1); sign.position.set(0, 2.18, -0.41); g.add(sign);
+      for (const [x, color] of [[-1.25, COLORS.tomato], [1.25, COLORS.strawberry]] as const) {
+        const basket = crate(g, x, 0, 0.1, 0.4);
+        for (let i = 0; i < 5; i++) ball(basket, color, (i % 3 - 1) * 0.1, 0.3 + Math.floor(i / 3) * 0.06, (i % 2 - 0.5) * 0.08, 0.08);
+      }
+    }
     return g;
   }
   function house() {

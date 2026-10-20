@@ -59,5 +59,4 @@ export function buildFarmWorld(props: FarmProps, root: THREE.Object3D) {
   groundTile(props, root, SPOTS.market.x, SPOTS.market.z, 1.2, 0.8, (c, w, h) => {
     tile(c, w, h, { dash: [2.2, 1.4] }); tileText(c, 'SELL', w / 2, h * 0.53, h * 0.44);
   });
-  const market = props.market(); market.position.set(SPOTS.counter.x, 0, SPOTS.counter.z); root.add(market);
 }

@@ -536,6 +536,16 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       }
     }
   }
+  // The stall is rebuilt as its upgrade level rises.
+  let stall: THREE.Group | null = null, stallLevel = -1, stallBorn = -10;
+  function syncStall(animate: boolean) {
+    if (state.upgrades.stall === stallLevel) return;
+    stallLevel = state.upgrades.stall;
+    if (stall) { stall.removeFromParent(); stall.traverse(o => { if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) { o.material.map?.dispose(); o.material.dispose(); } }); }
+    stall = props.market(stallLevel); stall.position.set(SPOTS.counter.x, 0, SPOTS.counter.z); scene.add(stall);
+    stallBorn = animate ? time : -10;
+  }
+  syncStall(false);
   addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
   let squash = 1, lean = 0, wasMoving = false, stepPhase = 0, dustClock = 0, dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.06);
@@ -681,6 +691,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     }
     updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
     boardRoot.visible = boardOpen(state);
+    if (stall && stallBorn >= 0) stall.scale.setScalar(pop(Math.min(1, (time - stallBorn) / 0.6)));
     for (const [id, d] of decorations) {
       if (d.born >= 0) d.group.scale.setScalar(pop(Math.min(1, (time - d.born) / 0.6)));
       if (id === 'windmill') (d.group.userData.sails as THREE.Group).rotation.z += dt * 0.7;
@@ -746,8 +757,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     shop(action: ShopAction) {
       const ok = action.kind === 'upgrade' ? buyUpgrade(state, action.id) : action.kind === 'decor' ? buyDecor(state, action.id) : hireHelper(state);
       if (!ok) return false;
-      syncDecor(true); syncHelpers();
-      feedback({ type: 'upgrade', at: action.kind === 'decor' ? DECOR[action.id].at : SPOTS.board, amount: 0, id: action.kind === 'helper' ? 'helper' : action.id });
+      syncDecor(true); syncHelpers(); syncStall(true);
+      feedback({ type: 'upgrade', at: action.kind === 'decor' ? DECOR[action.id].at : action.kind === 'upgrade' && action.id === 'stall' ? SPOTS.counter : SPOTS.board, amount: 0, id: action.kind === 'helper' ? 'helper' : action.id });
       callbacks.save(); callbacks.update();
       return true;
     },
