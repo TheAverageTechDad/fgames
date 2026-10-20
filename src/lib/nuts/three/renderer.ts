@@ -26,8 +26,10 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	// Constants for 3D layout (Scaled down & spaced out for clean, airy layout)
 	const NUT_HEIGHT = 0.50;
 	const NUT_BASE_Y = 0.42; // nut is .50 tall and centred: its bottom rests on the base hub (y .16)
-	const SHAFT_TOP_Y = 2.57;
-	const HOVER_Y_OFFSET = 3.25;
+	const SHAFT_TOP_Y = 2.57; // the shaft is built for 4 nuts; taller stacks stretch it (see buildScene)
+	// Lift height for a selected nut: clear of the shaft tip at any capacity (3.25 for the usual 4).
+	const hoverOffset = () => Math.max(3.25, NUT_BASE_Y + capacity * NUT_HEIGHT + 0.83);
+	let HOVER_Y_OFFSET = hoverOffset();
 
 	const BOLT_SPACING_X_TOP = 2.24;
 	const BOLT_SPACING_X_BOTTOM = 1.95;
@@ -230,6 +232,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	}
 
 	function buildScene() {
+		HOVER_Y_OFFSET = hoverOffset();
 		boltMeshes.forEach((m) => scene.remove(m));
 		boltMeshes.length = 0;
 		caps.forEach((cap) => scene.remove(cap));
@@ -241,6 +244,8 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			const isExtraEmpty = i >= bolts.length;
 			const bMat = isExtraEmpty ? lockedBaseMaterial : baseMaterial;
 			const boltGroup = createBoltMeshGroup(boltMaterial, bMat, isExtraEmpty);
+			// keep the shaft tip above the stack when a level holds more than 4 nuts
+			boltGroup.children.at(-1)!.scale.y = Math.max(1, (NUT_BASE_Y + capacity * NUT_HEIGHT + 0.15) / SHAFT_TOP_Y);
 
 			const pos = getBoltPosition(i, totalBolts);
 			boltGroup.position.copy(pos);
@@ -618,13 +623,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			const pulse = 1.0 + Math.sin(time * 6.5) * 0.12;
 
 			if (hintSourceMarker) {
-				hintSourceMarker.position.set(srcPos.x, srcPos.y + 3.4, srcPos.z);
+				hintSourceMarker.position.set(srcPos.x, srcPos.y + HOVER_Y_OFFSET + 0.15, srcPos.z);
 				hintSourceMarker.scale.set(pulse, pulse, pulse);
 				hintSourceMarker.rotation.y = time * 2.0;
 				hintSourceMarker.visible = true;
 			}
 			if (hintTargetMarker) {
-				hintTargetMarker.position.set(dstPos.x, dstPos.y + 3.4, dstPos.z);
+				hintTargetMarker.position.set(dstPos.x, dstPos.y + HOVER_Y_OFFSET + 0.15, dstPos.z);
 				hintTargetMarker.scale.set(pulse, pulse, pulse);
 				hintTargetMarker.rotation.y = -time * 2.0;
 				hintTargetMarker.visible = true;
@@ -668,7 +673,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
  initThree();buildScene();
  void renderer.compileAsync(scene,camera).then(()=>{if(alive)animate();});
  return {
-  update(next:SceneState){const oldLength=bolts.length;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(next.nudge&&next.nudge.at!==lastNudge){lastNudge=next.nudge.at;capWobble[next.nudge.bolt]=WOBBLE;}if(oldLength!==bolts.length)buildScene();else syncNuts();},
+  update(next:SceneState){const oldLength=bolts.length,oldCapacity=capacity;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(next.nudge&&next.nudge.at!==lastNudge){lastNudge=next.nudge.at;capWobble[next.nudge.bolt]=WOBBLE;}if(oldLength!==bolts.length||oldCapacity!==capacity)buildScene();else syncNuts();},
   resize(next:Viewport){viewport=next;handleResize();},
   pointer:pointerDown,
   destroy(){alive=false;cancel(animationFrameId);scene.traverse(obj=>{if(obj instanceof THREE.Mesh){obj.geometry.dispose();const materials=Array.isArray(obj.material)?obj.material:[obj.material];for(const material of materials){if(material.map)material.map.dispose();material.dispose();}}});renderer.dispose();}
