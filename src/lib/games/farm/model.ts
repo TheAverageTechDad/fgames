@@ -31,7 +31,8 @@ export const GROW: Record<Crop, number> = { tomato: 8, cucumber: 9, strawberry: 
 export const GROW_SECONDS = Math.max(...Object.values(GROW));
 export const BASE_CAPACITY = 24;
 export const BASE_SEEDS = 12;
-export const HOLD_SECONDS = 0.8;
+// Standing on a price tile pays it off bit by bit; dearer land takes a little longer to pay (0.9s for $40, 2.4s at most).
+export const holdSeconds = (price: number) => Math.min(2.4, 0.9 + price / 600);
 export const QUEUE_SIZE = 3;
 export const ARRIVE_SECONDS = 1.6;
 export const SERVE_SECONDS = 0.25;
@@ -343,7 +344,7 @@ export function stepFarm(state: FarmState, delta: number, input: Point & { sprin
   stepHelpers(state, dt, emit);
   const next = nextPurchase(state);
   if (next && distance(p, next.at) < 0.8 && state.wallet >= next.price) {
-    state.purchaseProgress += dt / HOLD_SECONDS;
+    state.purchaseProgress = Math.min(1, state.purchaseProgress + dt / holdSeconds(next.price));
     if (state.purchaseProgress >= 1 && purchaseNext(state)) emit('purchase', next.at, next.price);
   } else state.purchaseProgress = 0;
   const goal = currentGoal(state);

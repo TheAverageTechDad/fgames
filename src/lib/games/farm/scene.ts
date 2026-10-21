@@ -15,6 +15,8 @@ type Callbacks = {
   update: () => void;
   event: (event: FarmEvent, screen: { x: number; y: number }) => void;
   save: () => void;
+  /** While she stands on a price tile, once per coin: where the tile is on screen, for coins flying from the wallet. */
+  pay: (screen: { x: number; y: number }) => void;
 };
 type Flight = { mesh: THREE.Object3D; from: THREE.Vector3; to: () => THREE.Vector3; delay: number; age: number; duration: number; lift: number };
 type Walker = { group: THREE.Group; joints: THREE.Object3D[]; phase: number; walk: number; squash: number };
@@ -75,11 +77,13 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   // A new area gets a short tour: the camera glides over to show it, then comes back to her.
   let tour: { x: number; z: number; until: number } | null = null;
   // Follow her, held a little inside the land she owns so the view never drifts far past its edges.
+  // LIFT puts her a touch below centre: the HUD lives along the top now.
+  const LIFT = -0.25;
   const focusTarget = () => {
-    if (tour && time < tour.until) return aim.set(tour.x + 0.55, 0, tour.z + 0.55);
+    if (tour && time < tour.until) return aim.set(tour.x + LIFT, 0, tour.z + LIFT);
     const minX = (hasOrchard(state) ? ORCHARD.minX : -BOUNDS) + 1.4, maxX = (hasCoop(state) ? YARD.maxX : BOUNDS) - 1.4;
     const minZ = -BOUNDS + 1.4, maxZ = (hasOrchard(state) ? ORCHARD.maxZ : BOUNDS) - 1.2;
-    return aim.set(Math.max(minX, Math.min(maxX, state.player.x)) + 0.55, 0, Math.max(minZ, Math.min(maxZ, state.player.z)) + 0.55);
+    return aim.set(Math.max(minX, Math.min(maxX, state.player.x)) + LIFT, 0, Math.max(minZ, Math.min(maxZ, state.player.z)) + LIFT);
   };
   focus.copy(focusTarget());
   const resize = () => {
@@ -129,7 +133,11 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   const offer = new THREE.Group(); scene.add(offer);
   const ringMaterial = new THREE.MeshBasicMaterial({ color: '#ffd84f', toneMapped: false, transparent: true, depthWrite: false });
   const ring = new THREE.Mesh(new THREE.BufferGeometry(), ringMaterial); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 2; scene.add(ring);
-  let offerFor = -1, ringShown = -1;
+  // The price sits on its own decal so it can count down as she pays.
+  let offerFor = -1, ringShown = -1, priceTile: THREE.Mesh | null = null, priceShown = -1, payClock = 0;
+  const drawPrice = (amount: number) => (c: CanvasRenderingContext2D, w: number, h: number) => {
+    c.clearRect(0, 0, w, h); coinIcon(c, w * 0.32, h * 0.7, h * 0.08); tileText(c, String(amount), w * 0.58, h * 0.7, h * 0.17);
+  };
   function updateOffer() {
     if (offerFor === state.purchased) return;
     offerFor = state.purchased;
@@ -160,8 +168,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
         c.strokeStyle = '#94613a'; c.lineWidth = h * 0.035; c.beginPath(); c.arc(w * 0.5, h * 0.26, w * 0.16, Math.PI, 0); c.stroke();
         tileText(c, '+12', w * 0.5, h * 0.37, h * 0.12);
       }
-      coinIcon(c, w * 0.32, h * 0.7, h * 0.08); tileText(c, String(next.price), w * 0.58, h * 0.7, h * 0.17);
     });
+    priceTile = groundTile(props, offer, next.at.x, next.at.z, size, size, drawPrice(next.price)); priceTile.position.y += 0.002; priceShown = next.price;
     ring.position.set(next.at.x, 0.05, next.at.z); ring.userData.radius = field ? 1.08 : 0.62; ringShown = -1;
   }
   addPlots(false); updateOffer();
@@ -834,6 +842,20 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
         ring.geometry = progress > 0 ? new THREE.RingGeometry(r, r + 0.15, 64, 1, Math.PI / 2, -progress * Math.PI * 2) : new THREE.BufferGeometry();
       }
       offer.position.y = state.wallet >= next.price ? Math.abs(Math.sin(time * 3)) * 0.015 : 0;
+      // Paying: coins stream from the wallet into the land and its price counts down to nothing.
+      const left = Math.ceil(next.price * (1 - progress));
+      if (priceTile && left !== priceShown) {
+        priceShown = left;
+        const texture = (priceTile.material as THREE.MeshBasicMaterial).map as THREE.CanvasTexture, canvas = texture.image as HTMLCanvasElement;
+        drawPrice(left)(canvas.getContext('2d')!, canvas.width, canvas.height); texture.needsUpdate = true;
+      }
+      if (progress > 0 && (payClock -= dt) <= 0) {
+        payClock = 0.075;
+        const point = new THREE.Vector3(next.at.x, 0.1, next.at.z).project(camera);
+        callbacks.pay({ x: (point.x + 1) * host.clientWidth / 2, y: (1 - point.y) * host.clientHeight / 2 });
+        audio.cue('pay');
+      }
+      if (progress <= 0) payClock = 0;
     }
     updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
     boardRoot.visible = boardOpen(state);
