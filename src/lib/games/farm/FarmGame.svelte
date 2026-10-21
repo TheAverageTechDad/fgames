@@ -47,7 +47,7 @@
         orchard: 'Orchard open! Pick apples under the trees and sell them at the green stand', hives: 'The bees moved in! Collect honey jars and sell them at the green stand',
         field: `New field! ${farm.plots.at(-1)?.crop === 'strawberry' ? 'Strawberries' : 'Cucumbers'} unlocked` }[bought?.kind ?? 'field'],
       goal: `Goal complete! +$${e.amount}`, egg: `+${e.amount} ${e.amount === 1 ? 'egg' : 'eggs'}`, honey: `+${e.amount} ${e.amount === 1 ? 'jar' : 'jars'} of honey`, helper: '',
-      upgrade: e.id === 'helper' ? 'A farmhand joined the farm!' : e.id && e.id in DECOR ? `${DECOR[e.id as DecorId].name} added!` : e.id ? `${UPGRADES[e.id as UpgradeId].name} level ${farm.upgrades[e.id as UpgradeId]}!` : '' };
+      upgrade: e.id === 'helper' ? 'A farmhand joined the farm!' : e.id && e.id in DECOR ? `${DECOR[e.id as DecorId].name} added!` : e.id === 'shoes' && farm.upgrades.shoes === 1 ? 'Running shoes! Push the stick to its edge to sprint' : e.id ? `${UPGRADES[e.id as UpgradeId].name} level ${farm.upgrades[e.id as UpgradeId]}!` : '' };
     // A goal banner stays up a little longer and is not cut short by ordinary pickups.
     if (messages[e.type] && (!toastBig || e.type === 'goal')) {
       toast = messages[e.type]; toastBig = e.type === 'goal' || e.type === 'purchase' || e.type === 'upgrade'; toastId++; clearTimeout(toastTimer);

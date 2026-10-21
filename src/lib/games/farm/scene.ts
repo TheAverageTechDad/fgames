@@ -6,7 +6,7 @@ import { buildFarmWorld, groundTile, LAMPS } from './world';
 import { createPuffs, createSky } from './juice';
 import { createFarmInput } from './input';
 import { createFarmAudio } from './audio';
-import { stepFarm, farmGoal, nextPurchase, speed, total, distance, hasCoop, hasOrchard, hasHives, stallFor, boardOpen, buyUpgrade, buyDecor, hireHelper,
+import { stepFarm, farmGoal, nextPurchase, speed, canSprint, total, distance, hasCoop, hasOrchard, hasHives, stallFor, boardOpen, buyUpgrade, buyDecor, hireHelper,
   BOUNDS, PRODUCTS, PURCHASES, FIELDS, GROW, SPOTS, NESTS, HIVES, STALLS, YARD, ORCHARD, DECOR, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
   type FarmState, type FarmEvent, type Cell, type Crop, type Product, type Point, type DecorId, type UpgradeId } from './model';
 export type ShopAction = { kind: 'upgrade'; id: UpgradeId } | { kind: 'decor'; id: DecorId } | { kind: 'helper' };
@@ -392,11 +392,17 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
         if (d < (kid.chase && i > 0 ? 0.6 : 0.1)) {
           kid.rest = 0.6 + Math.random() * 2.2; kid.chase = Math.random() < 0.35;
           kid.target = PLAYGROUND[Math.floor(Math.random() * PLAYGROUND.length)];
-          if (Math.random() < 0.4) kid.jump = 0.45;
         }
+        // Now and then she jumps mid-run, the way the player does.
+        if (d > 1 && kid.jump <= 0 && Math.random() < dt * 0.3) { kid.jump = KID_JUMP; kid.squash = 0.75; }
       }
-      // A happy hop now and then.
-      if (kid.jump > 0) { kid.jump = Math.max(0, kid.jump - dt); p.y = Math.sin((1 - kid.jump / 0.45) * Math.PI) * 0.35; if (kid.jump === 0) dust(p.x, p.z, 3, 0.15); }
+      // Catcha's jump: a quick crouch, half a second in the air, a squash and a puff on landing.
+      if (kid.jump > 0) {
+        kid.jump = Math.max(0, kid.jump - dt);
+        const air = (KID_JUMP - CROUCH - kid.jump) / (KID_JUMP - CROUCH);
+        p.y = air > 0 ? Math.sin(air * Math.PI) * 0.45 : 0;
+        if (kid.jump === 0) { kid.squash = 0.8; dust(p.x, p.z, 3, 0.15); }
+      }
     });
   }
 
@@ -647,8 +653,8 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
   // Catcha's jump, same timing (a 0.09s crouch, half a second in the air), scaled down to the farmer.
-  const CROUCH = 0.09, GRAVITY = 30, JUMP_V = 7.5, HOP_TIME = 0.32;
-  let jumpT = -1, airborne = false, vy = 0, feetY = 0, landT = 0, hopT = 0, jumps = 0;
+  const CROUCH = 0.09, GRAVITY = 30, JUMP_V = 7.5, HOP_TIME = 0.32, KID_JUMP = CROUCH + 0.5;
+  let jumpT = -1, airborne = false, vy = 0, feetY = 0, landT = 0, hopT = 0, jumps = 0, wasDashing = false, dashTime = 0;
   let squash = 1, lean = 0, wasMoving = false, stepPhase = 0, dustClock = 0, dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.06);
   // ?time=0.7 starts at that point of the day (0 morning … 0.72 night), like Catcha's ?season=.
   const joints: THREE.Object3D[] = [];
@@ -743,10 +749,23 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     // The stick reports screen directions; turn them into the rotated world.
     const screen = input.read(), move = { x: (screen.x + screen.z) * ISO, z: (screen.z - screen.x) * ISO };
     const from = { ...state.player };
-    const events = stepFarm(state, dt, move); events.forEach(feedback);
+    const sprinting = screen.sprint && canSprint(state);
+    const events = stepFarm(state, dt, { ...move, sprint: screen.sprint }); events.forEach(feedback);
     const moving = dt > 0 && distance(from, state.player) / dt > 0.3, carrying = total(state.produce) + total(state.seeds) > 0;
     // Running is quick and bouncy; a full basket slows her to a heavy walk.
-    const pace = (speed(state) / RUN_SPEED - 0.55) / 0.45;
+    const pace = (speed(state, sprinting) / RUN_SPEED - 0.55) / 0.45;
+    // Catcha's sprint: a burst of dust and a whoosh as it starts, a skid when it ends.
+    const dashing = sprinting && moving;
+    if (dashing !== wasDashing) {
+      // A burst behind her as it starts; a skid (dust thrown forward) only after a real sprint.
+      if (dashing || dashTime > 0.3) {
+        const bx = -Math.sin(farmer.rotation.y), bz = -Math.cos(farmer.rotation.y), k = dashing ? 1 : -1;
+        for (let i = 0; i < 5; i++) puffs.spawn(state.player.x + bx * 0.3, 0.15, state.player.z + bz * 0.3, k * bx * (1 + Math.random()) + Math.random() - 0.5, 0.5 + Math.random() * 0.5, k * bz * (1 + Math.random()) + Math.random() - 0.5, 0.55, 0.6);
+        audio.cue(dashing ? 'dash' : 'skid'); if (!dashing) squash = 0.82;
+      }
+      wasDashing = dashing; dashTime = 0;
+    }
+    dashTime += dt;
     stepPhase += dt * (moving ? 8 + 6 * pace : 0);
     if (input.jump() && jumpT < 0 && !airborne) jumpT = 0;
     if (jumpT >= 0 && (jumpT += dt) >= CROUCH) {

@@ -10,7 +10,7 @@ export type Plot = { id: number; crop: Crop; cells: Cell[] };
 export type Customer = { id: number; stall: number; crop: Product; want: number; got: number; wait: number; patience: number };
 export type Helper = Point & { carry: Inventory };
 export type Stats = { harvested: Inventory; sold: Inventory; served: number; unhappy: number; earned: number };
-export type UpgradeId = 'sprinkler' | 'basket' | 'stall' | 'boots' | 'pouch';
+export type UpgradeId = 'sprinkler' | 'basket' | 'stall' | 'boots' | 'shoes' | 'pouch';
 export type DecorId = 'arch' | 'scarecrow' | 'benches' | 'fountain' | 'windmill';
 export type FarmState = {
   version: 1; player: Point; plots: Plot[]; seeds: Inventory; produce: Inventory;
@@ -99,6 +99,8 @@ export const UPGRADES: Record<UpgradeId, { name: string; detail: string; prices:
   basket: { name: 'Big basket', detail: 'Carry 12 more', prices: [600, 1400, 2800, 5000, 9000] },
   stall: { name: 'Fancy stall', detail: '+1 coin for every item sold', prices: [300, 700, 1400] },
   boots: { name: 'Comfy boots', detail: 'Run 10% faster', prices: [150, 400, 800] },
+  // Catcha's sprint, earned here: push the stick to its edge (or hold Shift). Not with a full basket.
+  shoes: { name: 'Running shoes', detail: 'Sprint: push the stick to its edge', prices: [1200, 3000] },
   pouch: { name: 'Seed pouch', detail: 'Carry 6 more seeds', prices: [120, 300] }
 };
 export const HELPER_PRICES = [1000, 2000];
@@ -192,7 +194,7 @@ export function createFarm(): FarmState {
   return { version: 1, player: { x: 0, z: 0.4 }, plots: [makePlot(0)],
     seeds: empty(), produce: empty(), stock: empty(), wallet: 0, cash: 0, standCash: 0, sold: 0,
     purchased: 0, rating: 3, goal: 0, stats: { harvested: empty(), sold: empty(), served: 0, unhappy: 0, earned: 0 },
-    upgrades: { sprinkler: 0, basket: 0, stall: 0, boots: 0, pouch: 0 }, decor: [], helpers: [],
+    upgrades: { sprinkler: 0, basket: 0, stall: 0, boots: 0, shoes: 0, pouch: 0 }, decor: [], helpers: [],
     nests: NESTS.map(() => 0), layClock: 0, hives: HIVES.map(() => 0), honeyClock: 0,
     customers: [], nextCustomer: 0, arrival: STALLS.map(() => ARRIVE_SECONDS), serve: STALLS.map(() => 0),
     actionClock: 0, purchaseProgress: 0, lastCell: null, muted: false, music: true, haptics: true };
@@ -228,7 +230,10 @@ export function hireHelper(state: FarmState): boolean {
 export const arrivalSeconds = (s: FarmState) => (2.4 - s.rating * 0.3) * (1 - 0.06 * beauty(s));
 export const tip = (s: FarmState) => (s.rating >= 4.95 ? 2 : s.rating >= 4 ? 1 : 0) + Math.floor(beauty(s) / 2);
 // A full basket slows her from a run to a walk; seeds weigh nothing; boots help.
-export const speed = (s: FarmState) => RUN_SPEED * (1 + 0.1 * s.upgrades.boots) * (1 - 0.45 * total(s.produce) / capacity(s));
+export const speed = (s: FarmState, sprint = false) =>
+  RUN_SPEED * (1 + 0.1 * s.upgrades.boots) * (1 - 0.45 * total(s.produce) / capacity(s)) * (sprint && canSprint(s) ? 1 + 0.175 * s.upgrades.shoes : 1);
+// Running shoes let her sprint until the basket is more than half full.
+export const canSprint = (s: FarmState) => s.upgrades.shoes > 0 && total(s.produce) <= capacity(s) / 2;
 
 function pushOut(p: Point, boxes: Box[], r = 0.25) {
   for (const [ox, oz, hw, hd] of boxes) {
@@ -247,12 +252,12 @@ function stockStall(state: FarmState, stall: number, from: Inventory) {
   return moved;
 }
 
-export function stepFarm(state: FarmState, delta: number, input: Point): FarmEvent[] {
+export function stepFarm(state: FarmState, delta: number, input: Point & { sprint?: boolean }): FarmEvent[] {
   const events: FarmEvent[] = [];
   const dt = Number.isFinite(delta) ? Math.min(30, Math.max(0, delta)) : 0;
   const mx = Number.isFinite(input.x) ? input.x : 0, mz = Number.isFinite(input.z) ? input.z : 0;
   const length = Math.max(1, Math.hypot(mx, mz));
-  const p = state.player, v = speed(state) * Math.min(dt, 0.1), coop = hasCoop(state), orchard = hasOrchard(state), hives = hasHives(state);
+  const p = state.player, v = speed(state, input.sprint) * Math.min(dt, 0.1), coop = hasCoop(state), orchard = hasOrchard(state), hives = hasHives(state);
   // Move one axis at a time and keep each step that stays on her land, so she slides along its edges.
   const x = p.x + mx / length * v, z = p.z + mz / length * v;
   if (onLand({ x, z: p.z }, coop, orchard)) p.x = x;

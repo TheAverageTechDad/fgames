@@ -172,6 +172,21 @@ describe('Pocket Farm loop', () => {
     expect(buyUpgrade(s, 'basket')).toBe(false);
     expect(capacity(s)).toBe(before + 60);
   });
+  it('sprinting needs running shoes and a basket no more than half full', () => {
+    const s = createFarm();
+    s.wallet = 100_000;
+    expect(speed(s, true)).toBeCloseTo(RUN_SPEED);
+    purchaseNext(s);
+    expect(buyUpgrade(s, 'shoes')).toBe(true);
+    expect(speed(s, true)).toBeCloseTo(RUN_SPEED * 1.175);
+    expect(buyUpgrade(s, 'shoes')).toBe(true);
+    expect(speed(s, true)).toBeCloseTo(RUN_SPEED * 1.35);
+    const start = s.player.x;
+    stepFarm(s, 0.1, { x: 1, z: 0, sprint: true });
+    expect(s.player.x - start).toBeCloseTo(RUN_SPEED * 1.35 * 0.1);
+    s.produce.tomato = Math.floor(capacity(s) / 2) + 1;
+    expect(speed(s, true)).toBeCloseTo(speed(s));
+  });
   it('decorations are bought once each; farmhands pick, replant and stock the stall', () => {
     const s = createFarm();
     s.wallet = 100_000; purchaseNext(s);
