@@ -71,13 +71,14 @@ describe('Pocket Farm loop', () => {
     stepFarm(s, 0.3, stay);
     expect(s.rating).toBeCloseTo(2.52);
   });
-  it('lets an empty-handed shopper switch to produce that is in stock', () => {
+  it('never sells a shopper the wrong produce; they leave unhappy instead', () => {
     const s = createFarm();
     s.customers = [{ id: 1, stall: 0, crop: 'cucumber', want: 2, got: 0, wait: 0, patience: PATIENCE_SECONDS }];
     s.stock.tomato = 2; s.player = { ...away };
-    stepFarm(s, 0.6, stay);
-    expect(s.stock.tomato).toBe(0);
-    expect(s.cash).toBeGreaterThanOrEqual(2 * PRICES.tomato);
+    stepFarm(s, 1, stay);
+    expect(s.stock.tomato).toBe(2);
+    const events = stepFarm(s, PATIENCE_SECONDS, stay);
+    expect(events.some(e => e.type === 'unhappy')).toBe(true);
   });
   it('buys each purchase once, in order: field, basket, field, basket', () => {
     const s = createFarm();
@@ -224,7 +225,7 @@ describe('Pocket Farm loop', () => {
     expect(s.produce.apple).toBe(3); expect(s.stock.tomato).toBe(2);
     s.player = { ...SPOTS.stand }; stepFarm(s, 0.2, stay);
     expect(s.produce.apple).toBe(0); expect(s.stock.apple).toBe(3);
-    s.player = { x: 0, z: -6 };
+    s.stock.honey = 3; s.player = { x: 0, z: -6 };
     for (let i = 0; i < 200; i++) stepFarm(s, 0.05, stay);
     expect(s.stats.sold.apple).toBeGreaterThan(0);
     expect(s.standCash).toBeGreaterThan(0);

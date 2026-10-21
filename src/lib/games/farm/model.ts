@@ -296,16 +296,14 @@ export function stepFarm(state: FarmState, delta: number, input: Point & { sprin
     while (opened && queue.length < QUEUE_SIZE && state.arrival[s] >= interval) {
       state.arrival[s] -= interval;
       const id = state.nextCustomer++;
-      state.customers.push({ id, stall: s, crop: sells[id % sells.length], want: 1 + (id * 5 + 1) % 3, got: 0, wait: ARRIVE_SECONDS, patience: PATIENCE_SECONDS });
+      state.customers.push({ id, stall: s, crop: sells[(Math.imul(id + 1, 2654435761) >>> 16) % sells.length], want: 1 + (id * 5 + 1) % 3, got: 0, wait: ARRIVE_SECONDS, patience: PATIENCE_SECONDS });
       queue = state.customers.filter(c => c.stall === s);
     }
     if (queue.length >= QUEUE_SIZE) state.arrival[s] = Math.min(state.arrival[s], interval);
     for (const c of queue) c.wait = Math.max(0, c.wait - dt);
     const leave = (c: Customer) => state.customers.splice(state.customers.indexOf(c), 1);
-    const onShelf = () => stall.accepts.find(k => state.stock[k] > 0);
-    // An empty-handed shopper happily switches to whatever is on the shelf; with nothing they want, patience runs down.
+    // A shopper only takes what they came for; without it on the shelf, their patience runs down.
     const front = queue[0];
-    if (front && front.got === 0 && state.stock[front.crop] === 0) front.crop = onShelf() ?? front.crop;
     if (front && front.wait === 0 && state.stock[front.crop] === 0) {
       front.patience -= dt;
       if (front.patience <= 0) {
@@ -319,7 +317,6 @@ export function stepFarm(state: FarmState, delta: number, input: Point & { sprin
     for (let guard = 0; guard < 200 && state.serve[s] >= SERVE_SECONDS; guard++) {
       const c = queue[0];
       if (!c || c.wait > 0) { state.serve[s] = Math.min(state.serve[s], SERVE_SECONDS); break; }
-      if (c.got === 0 && state.stock[c.crop] === 0) c.crop = onShelf() ?? c.crop;
       if (state.stock[c.crop] === 0) { state.serve[s] = SERVE_SECONDS; break; }
       state.serve[s] -= SERVE_SECONDS;
       const price = priceOf(state, c.crop);
@@ -490,7 +487,7 @@ export function farmGoal(s: FarmState): { hint: string; at: Point | null } {
     return { hint: `You can afford ${what}. Stand on the golden tile!`, at: next.at };
   }
   if (full && deliver) return { hint: 'Basket full! Bring your harvest to the stall.', at: deliver };
-  const waiting = STALLS.findIndex((st, i) => { const f = s.customers.find(c => c.stall === i); return f && !f.wait && s.stock[f.crop] === 0 && st.accepts.some(k => s.produce[k] > 0); });
+  const waiting = STALLS.findIndex((_, i) => { const f = s.customers.find(c => c.stall === i); return f && !f.wait && s.stock[f.crop] === 0 && s.produce[f.crop] > 0; });
   if (waiting >= 0) return { hint: 'A shopper is waiting. Bring them what they need!', at: STALLS[waiting].sell };
   const ripe = ripeCells(s);
   const pickNext = nearest(s.player, ripe);
