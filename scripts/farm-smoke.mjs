@@ -58,6 +58,15 @@ try {
   assert(touched.player.x > initial.player.x + 0.2);
   await page.waitForTimeout(250);
   assert(Math.abs((await current()).player.x - touched.player.x) < 0.05);
+  // Catcha's jump: a second finger, then Space. (A quick tap jumps too, but headless frames are too slow to time one.)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 500, id: 0 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 500, id: 0 }, { x: 260, y: 300, id: 1 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.locator('[data-jumps="1"]').waitFor();
+  await page.waitForTimeout(700);
+  await page.keyboard.press('Space');
+  await page.locator('[data-jumps="2"]').waitFor();
+  await page.waitForTimeout(700);
   report.push('Real one-thumb drag moves the character; cancellation releases movement.');
 
   await walk(-3.8, -0.4);

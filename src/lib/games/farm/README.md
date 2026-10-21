@@ -10,7 +10,7 @@ Working title for the portrait farming game. Launch from the arcade or `/farm`.
 - `world.ts`: the static farm (ground, stone paths, balustrade, hedges, house, trees, ground tiles), merged into a few draw calls.
 - `props.ts`: reusable local meshes and baked canvas textures for soil, crops, stands, market, hedges, trees, bushes, lamps, tiles and the hand-built shoppers.
 - `assets.ts`: shared local GLB references. Does not import or initialise Catcha.
-- `input.ts`: floating one-thumb stick, mouse drag, arrows/WASD (screen directions), input cancellation and cleanup.
+- `input.ts`: floating one-thumb stick, mouse drag, arrows/WASD (screen directions), Catcha's jump (quick tap, second finger, Space), input cancellation and cleanup.
 - `audio.ts`: gesture-unlocked sound design (transients, plucks, bells, coin clinks, ladders, soft reverb), the looping soundtrack, and haptics through the shared Catcha module.
 
 Start: `pnpm dev`. Verify: `pnpm check`, `pnpm test`, `pnpm build`, then `FGAMES_URL=<preview url> node scripts/farm-smoke.mjs`.

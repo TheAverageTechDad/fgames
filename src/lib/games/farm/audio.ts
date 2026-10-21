@@ -170,6 +170,13 @@ export function createFarmAudio(state: FarmState) {
       if (state.muted || !ctx || ctx.state !== 'running') return;
       RECIPES[event.type]?.(event);
     },
+    /** Moves shared with Catcha that the farm sim never sees: Catcha's springy boing and soft landing pat. */
+    cue(name: 'jump' | 'land') {
+      if (state.haptics && !document.hidden) haptic(name === 'jump' ? 'tick' : 'land');
+      if (state.muted || !ctx || ctx.state !== 'running') return;
+      if (name === 'jump') { tone(260, { type: 'triangle', glide: 720 / 260, decay: 0.16, gain: 0.035, wet: 0.15 }); noise(0.12, { freq: 700, sweep: 2000 / 700, q: 1.2, gain: 0.02 }); }
+      else { tone(120, { glide: 70 / 120, decay: 0.12, gain: 0.05, wet: 0.1 }); noise(0.06, { type: 'lowpass', freq: 450, gain: 0.03 }); }
+    },
     /** Call after the mute or music preference changes, and on pause. */
     refresh(isPaused = paused) { paused = isPaused; level(); },
     destroy() {

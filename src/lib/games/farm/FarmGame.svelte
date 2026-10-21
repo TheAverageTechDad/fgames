@@ -136,7 +136,7 @@
         <p data-hint>{hud.hint}</p>
         <div class="next-field"><span class="goal-text" data-goal>{hud.goal}</span><div class="land-progress" aria-label={`Goal ${Math.round(hud.progress * 100)}% complete`}><span style:transform={`scaleX(${hud.progress})`}></span></div><span class="reward">+${hud.reward}</span></div>
       </div>
-      {#if !hud.moved}<p class="move-tip">Drag to move <span>·</span> Everything else happens as you go</p>{/if}
+      {#if !hud.moved}<p class="move-tip">Drag to move <span>·</span> Tap to jump <span>·</span> The rest happens as you go</p>{/if}
     </footer>
     {#if hud.atBoard && !shopClosed && !loading}
       <section class="farm-shop" aria-label="Farm shop">

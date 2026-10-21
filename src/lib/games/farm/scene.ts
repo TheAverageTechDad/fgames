@@ -59,7 +59,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.04;
-  const canvas = renderer.domElement; canvas.tabIndex = 0; canvas.setAttribute('aria-label', 'Farm. Drag to move, or use arrow keys.');
+  const canvas = renderer.domElement; canvas.tabIndex = 0; canvas.setAttribute('aria-label', 'Farm. Drag to move, or use arrow keys. Tap or press Space to jump.');
   canvas.dataset.farmCanvas = ''; host.append(canvas);
   const input = createFarmInput(canvas, host), audio = createFarmAudio(state), props = createFarmProps();
   const scene = new THREE.Scene(); scene.background = new THREE.Color(COLORS.grass);
@@ -646,6 +646,9 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   addOrchard(); addHives();
   addYard(); syncDecor(false);
   let disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), saveClock = 0, hudClock = 0, actionTime = 0, faceCell: Point | null = null;
+  // Catcha's jump, same timing (a 0.09s crouch, half a second in the air), scaled down to the farmer.
+  const CROUCH = 0.09, GRAVITY = 30, JUMP_V = 7.5, HOP_TIME = 0.32;
+  let jumpT = -1, airborne = false, vy = 0, feetY = 0, landT = 0, hopT = 0, jumps = 0;
   let squash = 1, lean = 0, wasMoving = false, stepPhase = 0, dustClock = 0, dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.06);
   // ?time=0.7 starts at that point of the day (0 morning … 0.72 night), like Catcha's ?season=.
   const joints: THREE.Object3D[] = [];
@@ -702,7 +705,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     if (event.type === 'delivery') {
       const stall = STALLS[event.stall ?? 0];
       fly(item(stall.accepts[0]), stackTop(), () => v3(stall.counter, 1.15), Math.min(8, event.amount), { gap: 0.05, lift: 0.5 });
-      pulse(stall.sell, '#ffffff', 0.6); squash = 1.15;
+      pulse(stall.sell, '#ffffff', 0.6); squash = 1.15; hopT = HOP_TIME; // Catcha's happy hop on every delivery
     }
     if (event.type === 'sale') {
       const s = event.stall ?? 0;
@@ -745,15 +748,30 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     // Running is quick and bouncy; a full basket slows her to a heavy walk.
     const pace = (speed(state) / RUN_SPEED - 0.55) / 0.45;
     stepPhase += dt * (moving ? 8 + 6 * pace : 0);
-    farmer.position.set(state.player.x, moving ? Math.abs(Math.sin(stepPhase)) * (0.02 + 0.05 * pace) : 0, state.player.z);
+    if (input.jump() && jumpT < 0 && !airborne) jumpT = 0;
+    if (jumpT >= 0 && (jumpT += dt) >= CROUCH) {
+      jumpT = -1; airborne = true; vy = JUMP_V; host.dataset.jumps = String(++jumps); audio.cue('jump'); dust(state.player.x, state.player.z, 3, 0.15);
+    }
+    if (airborne) {
+      vy -= GRAVITY * dt; feetY += vy * dt;
+      if (feetY <= 0 && vy <= 0) { feetY = vy = 0; airborne = false; landT = 0.16; audio.cue('land'); dust(state.player.x, state.player.z, 5, 0.25); }
+    }
+    landT = Math.max(0, landT - dt); hopT = Math.max(0, hopT - dt);
+    // 0 at take-off, 1 coming down.
+    const crouching = jumpT >= 0, air = airborne ? THREE.MathUtils.clamp(0.5 - vy / (2 * JUMP_V), 0, 1) : -1, grounded = !crouching && air < 0;
+    const bob = moving && grounded ? Math.abs(Math.sin(stepPhase)) * (0.02 + 0.05 * pace) : 0;
+    farmer.position.set(state.player.x, feetY + bob + (hopT > 0 ? Math.sin((1 - hopT / HOP_TIME) * Math.PI) * 0.35 : 0), state.player.z);
     const facing = moving ? Math.atan2(move.x, move.z) : faceCell && actionTime > 0 ? Math.atan2(faceCell.x - state.player.x, faceCell.z - state.player.z) : null;
     if (facing !== null) farmer.rotation.y = turn(farmer.rotation.y, facing, dt * 14);
     // Catcha's body language: squash on starting, stopping and picking up; lean into a run, sit back under load.
     if (moving !== wasMoving) { squash = moving ? 0.86 : 0.9; if (!moving) dust(state.player.x, state.player.z, 2, 0.2); wasMoving = moving; }
-    squash += ((moving ? 1 + Math.cos(stepPhase * 2) * 0.035 : 1) - squash) * Math.min(1, dt * 10);
-    lean += ((moving ? 0.16 * pace - 0.06 * (1 - pace) : 0) - lean) * Math.min(1, dt * 10);
+    // Jumping as in Catcha: crouch forward, stretch on take-off, lean back to land, squash on touch-down.
+    const squashTo = crouching ? 0.72 : air >= 0 ? (air < 0.35 ? 1.18 : 1.04) : landT > 0 ? 0.78 : moving ? 1 + Math.cos(stepPhase * 2) * 0.035 : 1;
+    const leanTo = crouching ? 0.3 : air >= 0 ? (air < 0.6 ? 0.2 : -0.1) : moving ? 0.16 * pace - 0.06 * (1 - pace) : 0;
+    const settle = Math.min(1, dt * (grounded && landT <= 0 ? 10 : 16));
+    squash += (squashTo - squash) * settle; lean += (leanTo - lean) * settle;
     body.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash)); body.rotation.x = lean;
-    if (moving) {
+    if (moving && grounded) {
       dustClock += dt * (5 + 8 * pace);
       while (dustClock >= 1) {
         dustClock -= 1;
@@ -762,12 +780,15 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
           bx * (0.6 + Math.random()), 0.6 + Math.random() * 0.5, bz * (0.6 + Math.random()), 0.5, 0.45 + 0.35 * pace);
       }
     } else dustClock = 0;
-    farmerShadow.position.set(state.player.x, 0.04, state.player.z);
+    farmerShadow.position.set(state.player.x, 0.04, state.player.z); farmerShadow.scale.setScalar(1 - Math.min(0.4, farmer.position.y * 0.4));
     actionTime = Math.max(0, actionTime - dt);
     for (const joint of joints) {
       const arm = joint.name.startsWith('arm'), side = joint.name.includes('right') ? 1 : -1;
-      const swing = moving ? Math.sin(stepPhase) * (0.3 + 0.35 * pace) * side : 0;
-      joint.rotation.x = arm ? (actionTime > 0 ? -0.5 - 0.6 * Math.sin(actionTime / 0.32 * Math.PI) : carrying ? -1.15 : -swing * 0.7) : swing;
+      const swing = moving && grounded ? Math.sin(stepPhase) * (0.3 + 0.35 * pace) * side : 0;
+      // In a jump the arms swing back, then up (unless they hold the basket); the legs split like a leap, then reach down.
+      joint.rotation.x = arm
+        ? (actionTime > 0 ? -0.5 - 0.6 * Math.sin(actionTime / 0.32 * Math.PI) : carrying ? -1.15 : crouching ? 0.9 : air >= 0 ? -2.2 + air * 1.5 + (side > 0 ? 0.25 : 0) : -swing * 0.7)
+        : crouching ? 0 : air >= 0 ? (air < 0.7 ? (side > 0 ? -0.75 : 0.55) : -0.3) : swing;
     }
     updateStack();
     // The pile leans back a little as she walks and settles when she stops.
