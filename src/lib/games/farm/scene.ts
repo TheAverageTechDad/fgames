@@ -406,21 +406,24 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const up = frame ? -14 : 12;
     c.beginPath(); c.moveTo(14, 32 + up); c.quadraticCurveTo(40, 28, 64, 36); c.quadraticCurveTo(88, 28, 114, 32 + up); c.quadraticCurveTo(88, 40, 64, 44); c.quadraticCurveTo(40, 40, 14, 32 + up); c.fill();
   }));
-  const sunOffset = new THREE.Vector3(0, 12, 7);
-  const birds: { sprite: THREE.Sprite; shade: THREE.Mesh; velocity: THREE.Vector3; flap: number }[] = [];
+  const sunOffset = new THREE.Vector3(0, 12, 7), screenDown = new THREE.Vector3(1, 0, 1).normalize();
+  // The shadow is the bird itself laid flat on the ground, wings across the line of flight.
+  const birdShadow = new THREE.PlaneGeometry(0.7, 0.35).rotateX(-Math.PI / 2).rotateY(Math.PI / 4);
+  const birds: { sprite: THREE.Sprite; shade: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; velocity: THREE.Vector3; flap: number }[] = [];
   let nextFlock = 6;
   function updateBirds(dt: number, night: number) {
     nextFlock -= dt;
     if (nextFlock <= 0 && night < 0.6) {
       nextFlock = 14 + Math.random() * 18;
       const dir = new THREE.Vector3(1, 0, -1).normalize().multiplyScalar(Math.random() < 0.5 ? 1 : -1), side = new THREE.Vector3(-dir.z, 0, dir.x);
-      const start = focus.clone().addScaledVector(dir, -14).addScaledVector(side, (Math.random() - 0.5) * 6);
+      // Flocks cross the top of the screen, above the player, with their shadows over the fields there.
+      const start = focus.clone().addScaledVector(dir, -14).addScaledVector(screenDown, -(2.2 + Math.random() * 2));
       for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: birdFrames[0], transparent: true, opacity: 0.8, depthWrite: false, depthTest: false }));
         sprite.scale.set(0.8, 0.4, 1); sprite.renderOrder = 6;
         sprite.position.copy(start).addScaledVector(dir, -i * 0.8).addScaledVector(side, (i % 2 ? 1 : -1) * i * 0.5).setY(3.2 + Math.random() * 0.6);
-        const shade = new THREE.Mesh(pulseGeometry, new THREE.MeshBasicMaterial({ color: '#203020', transparent: true, opacity: 0.08, depthWrite: false }));
-        shade.scale.setScalar(0.25); effectRoot.add(sprite, shade);
+        const shade = new THREE.Mesh(birdShadow, new THREE.MeshBasicMaterial({ map: birdFrames[0], transparent: true, opacity: 0.22, depthWrite: false }));
+        effectRoot.add(sprite, shade);
         birds.push({ sprite, shade, velocity: dir.clone().multiplyScalar(2 + Math.random() * 0.3), flap: Math.random() * 6 });
       }
     }
@@ -428,9 +431,9 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       const b = birds[i]; b.sprite.position.addScaledVector(b.velocity, dt); b.flap += dt * 7;
       // The shadow falls straight away from the sun, so it sits under the bird on screen.
       const lift = b.sprite.position.y / 12;
-      b.sprite.material.map = birdFrames[Math.sin(b.flap) > 0 ? 0 : 1];
+      b.sprite.material.map = b.shade.material.map = birdFrames[Math.sin(b.flap) > 0 ? 0 : 1];
       b.shade.position.set(b.sprite.position.x - sunOffset.x * lift, 0.06, b.sprite.position.z - sunOffset.z * lift);
-      if (b.sprite.position.distanceTo(focus) > 24) { b.sprite.removeFromParent(); b.shade.removeFromParent(); b.sprite.material.dispose(); (b.shade.material as THREE.Material).dispose(); birds.splice(i, 1); }
+      if (b.sprite.position.distanceTo(focus) > 24) { b.sprite.removeFromParent(); b.shade.removeFromParent(); b.sprite.material.dispose(); b.shade.material.dispose(); birds.splice(i, 1); }
     }
   }
 
@@ -876,7 +879,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       for (const s of [...shoppers.values(), ...spare.flat()]) scene.add(s.group);
       disposeObject(scene); merged.forEach(g => g.dispose()); puffs.dispose();
       loadedModels.forEach(disposeObject); props.dispose(); sphere.dispose(); coinGeometry.dispose();
-      bubbleTextures.forEach(t => t.dispose()); birdFrames.forEach(t => t.dispose());
+      bubbleTextures.forEach(t => t.dispose()); birdFrames.forEach(t => t.dispose()); birdShadow.dispose();
       sun.shadow.map?.dispose(); renderer.dispose(); renderer.forceContextLoss(); canvas.remove();
     }
   };

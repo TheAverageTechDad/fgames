@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
+
+	let ready = $state(false);
 
 	// ponytail: Catcha boots at import time and has no destroy(); links in and out of this page use
 	// data-sveltekit-reload, so the browser tears down its WebGL context, loop and listeners.
@@ -12,7 +15,10 @@
 		// iOS Safari pinch-zoom and long-press menus ignore touch-action on the page itself.
 		for (const type of ['gesturestart', 'gesturechange', 'contextmenu', 'selectstart', 'dragstart'])
 			document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
-		import('#lib/games/catcha/main.js');
+		// main.js awaits its room, characters and UI at the top level, so the import settles once it can draw.
+		import('#lib/games/catcha/main.js')
+			.then(() => requestAnimationFrame(() => (ready = true)))
+			.catch((error) => dispatchEvent(new ErrorEvent('error', { message: String(error), error })));
 	});
 </script>
 
@@ -20,6 +26,13 @@
 	<title>Catcha</title>
 </svelte:head>
 
+{#if !ready}
+	<div class="catcha-loading" role="status" out:fade={{ duration: 300 }}>
+		<div class="loading-spark" aria-hidden="true">✦</div>
+		<h2>Getting the house ready</h2>
+		<p>A tidy house, one little toy at a time.</p>
+	</div>
+{/if}
 <pre id="fatal"></pre>
 
 <style>
@@ -59,7 +72,7 @@
 		}
 	}
 	:global(body) {
-		background: #087573 url('/catcha/assets/icons/icon-192.png') center / 128px no-repeat;
+		background: #9ed8cf;
 	}
 	:global(.rotated) {
 		--safe-left: env(safe-area-inset-top, 0px);
@@ -79,8 +92,38 @@
 		touch-action: none;
 		outline: none;
 	}
+	/* Same splash as Pocket Farm's, in Catcha's teal. */
+	.catcha-loading {
+		position: fixed;
+		inset: 0;
+		z-index: 1;
+		background: #9ed8cf;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-direction: column;
+		text-align: center;
+		padding: 35px;
+		gap: 16px;
+		font-family: 'Lilita One', sans-serif;
+	}
+	.catcha-loading h2 {
+		font-size: 30px;
+		color: #10504c;
+	}
+	.catcha-loading p {
+		font-size: 16px;
+		color: #3a7a72;
+	}
+	.loading-spark {
+		font-size: 80px;
+		line-height: 1;
+		color: #ffd36b;
+		text-shadow: 0 4px 0 #4f9e93;
+	}
 	#fatal {
 		position: fixed;
+		z-index: 2;
 		inset: 0;
 		display: none;
 		place-items: center;
