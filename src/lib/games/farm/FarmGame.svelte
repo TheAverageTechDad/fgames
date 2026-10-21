@@ -5,7 +5,7 @@
   import { createFarm, farmGoal, currentGoal, capacity, seedCapacity, total, atBoard, upgradePrice, helperPrice, PURCHASES, UPGRADES, DECOR, HELPER_PRICES,
     type DecorId, type FarmEvent, type FarmState, type UpgradeId } from './model';
   import { installHaptics } from '#lib/haptics';
-  import { readFarm, saveFarm } from './storage';
+  import { readFarm, saveFarm, SAVE_KEY } from './storage';
   import type { createFarmScene, ShopAction } from './scene';
 
   let host: HTMLDivElement;
@@ -29,7 +29,16 @@
   let flight = $state({ fromX: 0, fromY: 0, dx: 0, dy: 0 });
   let toastTimer: ReturnType<typeof setTimeout>;
   const store = { getItem: (key: string) => localStorage.getItem(key), setItem: (key: string, value: string) => localStorage.setItem(key, value) };
-  function save() { if (!saveFarm(store, farm)) saveWarning = true; }
+  let resetting = false;
+  function save() { if (!resetting && !saveFarm(store, farm)) saveWarning = true; }
+  // Starting over takes two taps, then clears the save and reloads; nothing saves on the way out.
+  let confirmReset = $state(false);
+  function startOver() {
+    if (!confirmReset) { confirmReset = true; return; }
+    resetting = true;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable: the reload starts fresh anyway */ }
+    location.reload();
+  }
   function event(e: FarmEvent, target: { x: number; y: number }) {
     const bought = PURCHASES[farm.purchased - 1];
     const messages = { seed: `+${e.amount} seeds`, plant: '', served: '', sale: '', harvest: `+${e.amount} ${{ tomato: 'tomatoes', cucumber: 'cucumbers', strawberry: 'strawberries', apple: 'apples' }[e.crop as string] ?? ''}`,
@@ -52,7 +61,7 @@
     }
   }
   function pause() { engine?.setPaused(true); save(); pauseDialog.showModal(); }
-  function resume() { engine?.setPaused(false); }
+  function resume() { confirmReset = false; engine?.setPaused(false); }
   function toggleSound() { farm.muted = !farm.muted; hud = snapshot(); engine?.refreshAudio(); save(); }
   function toggleMusic() { farm.music = !farm.music; hud = snapshot(); engine?.refreshAudio(); save(); }
   // The shop sheet opens on the SHOP tile; closing it keeps it shut until she steps off and back on.
@@ -163,6 +172,7 @@
       <button class="setting-row" onclick={toggleHaptics}><Icon name="vibrate" size={22}/><span>Vibration</span><strong>{hud.haptics ? 'On' : 'Off'}</strong></button>
       <button class="toy-button mint" onclick={() => pauseDialog.close()}>Back to farming</button>
       <button class="farm-text-button" onclick={home}>Back to arcade</button>
+      <button class="farm-text-button reset" class:confirm={confirmReset} data-reset onclick={startOver}>{confirmReset ? 'Tap again to erase this farm and start over' : 'Start a new farm'}</button>
     </dialog>
   </main>
 </div>
@@ -184,7 +194,7 @@
   .farm-task{padding:9px 12px 9px;background:#fff8e9f2;border:2px solid #56703d;border-radius:18px;box-shadow:0 4px 0 #486a3766}.task-row{display:flex;gap:6px;align-items:center}.field-count{margin-left:auto;font-size:11px;white-space:nowrap;color:#658155;background:#e9edce;padding:4px 8px;border-radius:9px}.farm-task p{font-size:13px;color:#4f6142;margin-top:7px;min-height:17px}.next-field{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px;font-size:11px;color:#7b855e}.next-field span{font-variant-numeric:tabular-nums;white-space:nowrap}.next-field .goal-text{color:#3e5534;font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:55%}.next-field .reward{color:#9a661c;background:#fff0bf;padding:1px 6px;border-radius:7px}.land-progress{flex:1;height:7px;border-radius:5px;background:#e5e7cd;overflow:hidden}.land-progress>span{display:block;width:100%;height:100%;background:#e9b948;border-radius:5px;transform-origin:left;transition:transform .3s}.move-tip{text-align:center;margin-top:8px;font-size:10px;color:#fff8e5;text-shadow:0 1px 2px #466932}.move-tip span{padding:0 4px}
   .farm-toast{position:absolute;top:24%;left:50%;transform:translateX(-50%);padding:9px 16px;max-width:88%;width:max-content;border-radius:20px;background:#fff7df;color:#3a6336;box-shadow:0 3px 0 #41633455;font-size:16px;animation:toast-pop .2s ease-out;pointer-events:none;text-align:center}.farm-toast.big{font-size:21px;padding:12px 22px;background:#ffe79a;color:#6b4a12;box-shadow:0 4px 0 #b9862a88;border:2px solid #fff6d8}
   .farm-loading{position:absolute;inset:0;background:#b9d68c;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:35px;gap:16px}.farm-loading h2{font-size:30px}.farm-loading p{font-size:16px;color:#5c7543}.loading-sprout{font-size:80px;line-height:1;color:#f8dc7f;text-shadow:0 4px 0 #70964b}
-  .farm-pause{margin:auto;width:calc(100% - 40px);max-width:350px;border:3px solid #3a5839;border-radius:25px;padding:25px;background:#fff7e3;color:#294d35;box-shadow:0 7px 0 #3a583944}.farm-pause::backdrop{background:#223c2b99}.farm-pause h2{font-size:30px}.farm-pause p{font-size:14px;margin:12px 0 20px;color:#72815f}.farm-pause button{width:100%;margin-top:12px}.farm-pause .setting-row{background:#f1efd8;border-color:#cad3ae;font-size:16px}.farm-text-button{border:0;background:none;color:#5a7545;padding:9px;font-size:14px;min-height:40px}.save-warning{background:#fff0ba;border-radius:10px;font-size:12px;padding:8px;margin-bottom:8px;pointer-events:auto}
+  .farm-pause{margin:auto;width:calc(100% - 40px);max-width:350px;border:3px solid #3a5839;border-radius:25px;padding:25px;background:#fff7e3;color:#294d35;box-shadow:0 7px 0 #3a583944}.farm-pause::backdrop{background:#223c2b99}.farm-pause h2{font-size:30px}.farm-pause p{font-size:14px;margin:12px 0 20px;color:#72815f}.farm-pause button{width:100%;margin-top:12px}.farm-pause .setting-row{background:#f1efd8;border-color:#cad3ae;font-size:16px}.farm-text-button{border:0;background:none;color:#5a7545;padding:9px;font-size:14px;min-height:40px}.farm-pause .reset{margin-top:4px;font-size:12px;color:#9a7a5a;border-top:1px solid #e6dfc4;border-radius:0}.farm-pause .reset.confirm{color:#fff;background:#c9553f;border-radius:14px;border-top:0}.save-warning{background:#fff0ba;border-radius:10px;font-size:12px;padding:8px;margin-bottom:8px;pointer-events:auto}
   .farm-shop{position:absolute;left:12px;right:12px;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 8px);max-height:62%;display:flex;flex-direction:column;background:#fff8e9;border:2px solid #56703d;border-radius:20px;box-shadow:0 5px 0 #486a3766;animation:toast-pop .2s ease-out;z-index:3}
   .farm-shop header{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px 16px}.farm-shop h2{font-size:22px}
   .shop-scroll{overflow:auto;padding:0 12px 12px;touch-action:pan-y}.farm-shop h3{font-family:inherit;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#7b855e;margin:10px 4px 6px}

@@ -1,4 +1,4 @@
-import { createFarm, empty, makePlot, capacity, seedCapacity, total, onLand, DECOR, FIELDS, GROW, HELPER_LOAD, HELPER_PRICES, HIVE_SIZE, NEST_SIZE, PRODUCTS, PURCHASES, UPGRADES,
+import { createFarm, empty, makePlot, SPOTS, capacity, seedCapacity, total, onLand, DECOR, FIELDS, GROW, HELPER_LOAD, HELPER_PRICES, HIVE_SIZE, NEST_SIZE, PRODUCTS, PURCHASES, UPGRADES,
   type DecorId, type FarmState, type Inventory, type UpgradeId } from './model';
 export const SAVE_KEY = 'pocket-farm:v1';
 type Reader = Pick<Storage, 'getItem'>;
@@ -60,7 +60,8 @@ export function readFarm(storage: Reader): FarmState {
     fresh.stock = inventory(s.stock, BIG);
     if (s.helpers !== undefined) {
       if (!Array.isArray(s.helpers) || s.helpers.length > HELPER_PRICES.length) fail('Invalid helpers');
-      fresh.helpers = s.helpers.map(h => { if (!inside(h)) fail('Invalid helper'); return { x: h.x, z: h.z, carry: inventory(h.carry, HELPER_LOAD + 3) }; });
+      // A farmhand found somewhere odd walks back from the farmhouse rather than costing the whole save.
+      fresh.helpers = s.helpers.map(h => ({ ...(inside(h) ? { x: h.x, z: h.z } : { x: SPOTS.board.x + 0.6, z: SPOTS.board.z - 0.6 }), carry: inventory(h?.carry, HELPER_LOAD + 3) }));
     }
     if (s.nests !== undefined) {
       if (!Array.isArray(s.nests) || s.nests.length !== fresh.nests.length || s.nests.some(n => !number(n, NEST_SIZE))) fail('Invalid nests');

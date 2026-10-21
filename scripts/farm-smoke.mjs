@@ -115,6 +115,14 @@ try {
     await page.screenshot({ path: `test-results/farm-${viewport.width}.png` });
   }
   report.push('390×844, 375×667, and 1024×900 layouts remain upright and fit the viewport.');
+  // Starting over: two taps in the pause menu clear the farm and reload a fresh one.
+  await page.getByRole('button', { name: 'Pause game', exact: true }).click();
+  await page.locator('[data-reset]').click();
+  await Promise.all([page.waitForEvent('load'), page.locator('[data-reset]').click()]);
+  await page.locator('[data-ready="true"]').waitFor();
+  const fresh = JSON.parse(await page.evaluate(() => localStorage.getItem('pocket-farm:v1')) ?? '{"wallet":0,"purchased":0}');
+  assert.equal(fresh.wallet, 0); assert.equal(fresh.purchased ?? 0, 0);
+  report.push('Start a new farm (two taps) clears the save and reloads a fresh farm.');
   await context.close();
   assert.deepEqual(errors, []); assert.deepEqual(requests, []);
   await writeFile('test-results/farm-smoke.json', JSON.stringify({ report, errors, requests }, null, 2));

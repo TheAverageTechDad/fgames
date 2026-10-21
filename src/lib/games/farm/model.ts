@@ -86,29 +86,29 @@ export const HIVES: Point[] = [{ x: -6.8, z: 12.0 }, { x: -5.3, z: 12.0 }, { x: 
 // Bought one at a time; only the next one shows its price tile.
 export const PURCHASES: { kind: 'field' | 'basket' | 'coop' | 'orchard' | 'hives'; price: number; at: Point; field?: number }[] = [
   { kind: 'field', price: 40, at: FIELDS[1], field: 1 },
-  { kind: 'basket', price: 60, at: SPOTS.basket },
-  { kind: 'field', price: 120, at: FIELDS[2], field: 2 },
-  { kind: 'basket', price: 200, at: SPOTS.basket },
-  { kind: 'coop', price: 350, at: SPOTS.coopTile },
-  { kind: 'orchard', price: 600, at: SPOTS.orchardTile, field: 3 },
-  { kind: 'hives', price: 900, at: SPOTS.hiveTile }
+  { kind: 'basket', price: 80, at: SPOTS.basket },
+  { kind: 'field', price: 160, at: FIELDS[2], field: 2 },
+  { kind: 'basket', price: 300, at: SPOTS.basket },
+  { kind: 'coop', price: 500, at: SPOTS.coopTile },
+  { kind: 'orchard', price: 900, at: SPOTS.orchardTile, field: 3 },
+  { kind: 'hives', price: 1400, at: SPOTS.hiveTile }
 ];
 // Bought from the board by the farmhouse door.
 export const UPGRADES: Record<UpgradeId, { name: string; detail: string; prices: number[] }> = {
-  sprinkler: { name: 'Sprinklers', detail: 'Crops grow 15% faster', prices: [150, 300, 600] },
-  basket: { name: 'Big basket', detail: 'Carry 12 more', prices: [400, 900, 1800, 3500, 6000] },
-  stall: { name: 'Fancy stall', detail: '+1 coin for every item sold', prices: [200, 400, 800] },
-  boots: { name: 'Comfy boots', detail: 'Run 10% faster', prices: [100, 250, 500] },
-  pouch: { name: 'Seed pouch', detail: 'Carry 6 more seeds', prices: [80, 200] }
+  sprinkler: { name: 'Sprinklers', detail: 'Crops grow 15% faster', prices: [250, 500, 1000] },
+  basket: { name: 'Big basket', detail: 'Carry 12 more', prices: [600, 1400, 2800, 5000, 9000] },
+  stall: { name: 'Fancy stall', detail: '+1 coin for every item sold', prices: [300, 700, 1400] },
+  boots: { name: 'Comfy boots', detail: 'Run 10% faster', prices: [150, 400, 800] },
+  pouch: { name: 'Seed pouch', detail: 'Carry 6 more seeds', prices: [120, 300] }
 };
-export const HELPER_PRICES = [600, 1200];
+export const HELPER_PRICES = [1000, 2000];
 // Decorations make the farm lovelier: each brings shoppers a little sooner and adds to tips.
 export const DECOR: Record<DecorId, { name: string; price: number; at: Point }> = {
-  scarecrow: { name: 'Scarecrow', price: 120, at: { x: -1.25, z: -3.2 } },
-  arch: { name: 'Flower arch', price: 150, at: { x: 0, z: -6.1 } },
-  benches: { name: 'Garden benches', price: 180, at: { x: 1.4, z: 5.4 } },
-  fountain: { name: 'Fountain', price: 250, at: { x: 5.2, z: 5.2 } },
-  windmill: { name: 'Windmill', price: 500, at: { x: -8, z: -9.5 } }
+  scarecrow: { name: 'Scarecrow', price: 200, at: { x: -1.25, z: -3.2 } },
+  arch: { name: 'Flower arch', price: 250, at: { x: 0, z: -6.1 } },
+  benches: { name: 'Garden benches', price: 300, at: { x: 1.4, z: 5.4 } },
+  fountain: { name: 'Fountain', price: 450, at: { x: 5.2, z: 5.2 } },
+  windmill: { name: 'Windmill', price: 900, at: { x: -8, z: -9.5 } }
 };
 // Solid things she walks around: [centre x, centre z, half width, half depth].
 type Box = [number, number, number, number];
@@ -400,9 +400,17 @@ export function stepFarm(state: FarmState, delta: number, input: Point): FarmEve
 // through the yard and orchard entrances and walk around the same props she does.
 const HELPER_SPEED = 2.2;
 const GATES = { yard: { x: 6.75, z: 0 }, orchard: { x: 0, z: 6.75 } } as const;
+// Inside the orchard everything routes past the stand's front, where the shoppers' gate path runs.
+const ORCHARD_DOOR: Point = { x: 0, z: 9.4 };
+// Per-farmhand progress, kept out of the save: when one stops getting closer it sidesteps for a moment.
+// When each area was last worked, on a clock that only runs while farmhands do; not saved.
+const lastWorked = new Map<string, number>();
+let clock = 0;
+const progress = new WeakMap<Helper, { best: number; since: number; detour: Point | null; until: number; goal: string }>();
 const region = (p: Point) => p.x > 6.6 ? 'yard' : p.z > 6.6 ? 'orchard' : 'main';
 type Job = Point & ({ kind: 'cell'; cell: Cell; crop: Crop; trees: boolean } | { kind: 'store'; item: 'egg' | 'honey'; index: number } | { kind: 'stall'; stall: number } | { kind: 'rest' });
 function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'], at: Point, amount: number, crop?: Product, stall?: number) => void) {
+  clock += dt;
   const claimed = new Set<string>(), busy = new Set<string>(), walls = solids(state, false);
   state.helpers.forEach((h, index) => {
     const load = total(h.carry);
@@ -412,15 +420,16 @@ function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'
       ...(hasHives(state) ? HIVES.flatMap((n, i) => state.hives[i] >= 1 && !claimed.has(`honey${i}`) ? [{ ...n, kind: 'store' as const, item: 'honey' as const, index: i }] : []) : [])
     ];
     const deliverTo = STALLS.findIndex(st => st.accepts.some(i => h.carry[i] > 0));
-    // Work goes where most is waiting: group jobs by area, weigh how much each holds against the walk,
-    // and steer clear of an area another farmhand is already working, so they spread over the whole farm.
+    // Work goes round the whole farm: group jobs by area and favour the one left waiting longest, then the one
+    // holding most, against the walk; steer clear of an area another farmhand is already working.
     const area = (j: Job) => j.kind === 'cell' ? `plot:${j.cell.id.split('-')[0]}` : j.kind === 'store' ? `store:${j.item}` : '';
     const areas = new Map<string, Job[]>();
     for (const j of jobs) areas.set(area(j), [...(areas.get(area(j)) ?? []), j]);
     let best: Job | null = null, bestScore = -Infinity;
     for (const [key, list] of areas) {
       const closest = nearest(h, list)!, backlog = list.reduce((n, j) => n + (j.kind === 'cell' ? 3 : j.kind === 'store' ? (j.item === 'egg' ? state.nests : state.hives)[j.index] : 0), 0);
-      const score = backlog - distance(h, closest) * 0.6 - (busy.has(key) ? 6 : 0);
+      const waited = Math.min(60, clock - (lastWorked.get(key) ?? -60));
+      const score = waited + backlog * 0.3 - distance(h, closest) * 0.4 - (busy.has(key) ? 8 : 0);
       if (score > bestScore) { bestScore = score; best = closest; }
     }
     const target: Job = load >= HELPER_LOAD || (load > 0 && !jobs.length) ? { ...STALLS[deliverTo].sell, kind: 'stall', stall: deliverTo }
@@ -428,12 +437,25 @@ function stepHelpers(state: FarmState, dt: number, emit: (type: FarmEvent['type'
     if (target.kind === 'cell' || target.kind === 'store') busy.add(area(target));
     if (target.kind === 'cell') claimed.add(target.cell.id);
     if (target.kind === 'store') claimed.add(`${target.item}${target.index}`);
-    // Between areas by their entrance; one axis at a time, so they slide along a wall instead of sticking.
+    // Between areas by their entrance (and inside the orchard via the stand's front); one axis at a time,
+    // so they slide along a wall instead of sticking.
     const from = region(h), to = region(target), gate = from !== 'main' ? GATES[from] : to !== 'main' ? GATES[to] : null;
-    const via = from !== to && gate && distance(h, gate) > 0.3 ? gate : target;
+    const throughDoor = (from === 'orchard' && (to !== 'orchard' || target.kind === 'stall')) || (to === 'orchard' && from !== 'orchard' && distance(h, GATES.orchard) < 0.3);
+    let via: Point = throughDoor && distance(h, ORCHARD_DOOR) > 0.3 && h.x < -0.3 ? ORCHARD_DOOR : from !== to && gate && distance(h, gate) > 0.3 ? gate : target;
+    // Not getting any closer for a second? Step sideways for a moment, then try again.
+    const key = `${via.x.toFixed(1)},${via.z.toFixed(1)}`, track = progress.get(h) ?? { best: Infinity, since: 0, detour: null, until: 0, goal: '' };
+    if (track.goal !== key) Object.assign(track, { goal: key, best: Infinity, since: 0 });
+    track.since += dt;
+    const gap = distance(h, via);
+    if (gap < track.best - 0.05) { track.best = gap; track.since = 0; }
+    if (track.since > 1 && !track.detour) { const side = Math.sign(Math.sin(h.x * 7 + h.z * 3)) || 1; track.detour = { x: h.x + (via.z - h.z) / (gap || 1) * side * 1.2, z: h.z - (via.x - h.x) / (gap || 1) * side * 1.2 }; track.until = 0.8; track.since = 0; }
+    if (track.detour) { track.until -= dt; if (track.until <= 0) track.detour = null; else via = track.detour; }
+    progress.set(h, track);
     const d = distance(h, via), step = Math.min(d, HELPER_SPEED * dt);
     if (d > 0.001) { h.x += (via.x - h.x) / d * step; pushOut(h, walls, 0.2); h.z += (via.z - h.z) / d * step; pushOut(h, walls, 0.2); }
-    if (via !== target || distance(h, target) > 0.15) return;
+    // Nests and hives are worked from arm's length, like she does; plants and stalls from close by.
+    if (via !== target || distance(h, target) > (target.kind === 'store' ? 0.65 : 0.15)) return;
+    if (target.kind === 'cell' || target.kind === 'store') lastWorked.set(area(target), clock);
     if (target.kind === 'cell' && target.cell.stage === 'ripe') {
       h.carry[target.crop] += 3; state.stats.harvested[target.crop] += 3;
       target.cell.stage = 'growing'; target.cell.age = 0;

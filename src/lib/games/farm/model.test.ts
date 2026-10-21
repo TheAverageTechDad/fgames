@@ -237,6 +237,15 @@ describe('Pocket Farm loop', () => {
     const crops = (['tomato', 'cucumber', 'strawberry'] as const).filter(c => s.stats.harvested[c] > 0);
     expect(crops.length).toBeGreaterThanOrEqual(2);
   });
+  it('farmhands work every area in turn: fields, orchard, coop and hives, without getting stuck', () => {
+    const s = createFarm();
+    s.wallet = 100_000; while (purchaseNext(s));
+    hireHelper(s); hireHelper(s); s.player = { x: 0, z: -6 };
+    for (const plot of s.plots) for (const cell of plot.cells) { cell.stage = 'ripe'; cell.age = GROW[plot.crop]; }
+    for (let i = 0; i < 3600; i++) stepFarm(s, 0.05, stay);
+    for (const item of ['tomato', 'cucumber', 'strawberry', 'apple', 'egg', 'honey'] as const) expect(s.stats.harvested[item], item).toBeGreaterThan(0);
+    expect(s.stats.sold.apple + s.stock.apple).toBeGreaterThan(0);
+  });
   it('bounds movement and ignores non-finite input and time', () => {
     const s = createFarm();
     stepFarm(s, 1000, { x: 1, z: 1 });
