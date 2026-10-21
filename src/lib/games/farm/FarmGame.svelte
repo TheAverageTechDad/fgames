@@ -9,7 +9,7 @@
   import type { createFarmScene, ShopAction } from './scene';
 
   let host: HTMLDivElement;
-  let wallet: HTMLDivElement;
+  let wallet: HTMLDivElement, goalCard: HTMLDivElement;
   let pauseDialog: HTMLDialogElement;
   let engine: ReturnType<typeof createFarmScene> | undefined;
   let farm: FarmState = createFarm();
@@ -78,7 +78,10 @@
     if (e.type === 'purchase' || e.type === 'cash' || e.type === 'goal' || e.type === 'upgrade') {
       // Land is paid coin by coin while she stands on it (see pay), so a purchase needs no flight of its own.
       if (e.type === 'purchase') return;
-      const w = walletPoint(), spend = e.type === 'upgrade', start = spend ? w : target, end = spend ? target : w;
+      // A goal's reward comes from the goal card, not from wherever she happens to be standing.
+      const card = e.type === 'goal' ? goalCard.getBoundingClientRect() : null, h = host.getBoundingClientRect();
+      const from = card ? { x: card.left + card.width / 2 - h.left, y: card.top + card.height / 2 - h.top } : target;
+      const w = walletPoint(), spend = e.type === 'upgrade', start = spend ? w : from, end = spend ? target : w;
       flight = { fromX: start.x, fromY: start.y, dx: end.x - start.x, dy: end.y - start.y }; coinId++;
     }
   }
@@ -133,7 +136,7 @@
       <div class="farm-status">
         <h1>Pocket Farm</h1>
         <div class="farm-stars" aria-label={`Shop rating: ${hud.stars} of 5 stars`}>{#each [1, 2, 3, 4, 5] as n}<span class:half={hud.stars === n - 0.5} class:on={hud.stars >= n}>★</span>{/each}</div>
-        <div class="farm-goal" aria-label={`Goal: ${hud.goal}, ${Math.round(hud.progress * 100)}% done, reward ${hud.reward} coins`}>
+        <div class="farm-goal" bind:this={goalCard} aria-label={`Goal: ${hud.goal}, ${Math.round(hud.progress * 100)}% done, reward ${hud.reward} coins`}>
           <div><span data-goal>{hud.goal}</span><b>+${hud.reward}</b></div>
           <i><span style:transform={`scaleX(${hud.progress})`}></span></i>
         </div>
@@ -157,7 +160,7 @@
       {/key}
     {/if}
     {#each payCoins as c (c.id)}
-      <div class="money-flight pay" aria-hidden="true" style={`left:${c.x}px;top:${c.y}px;--dx:${c.dx}px;--dy:${c.dy}px`}>{@render coin()}</div>
+      <div class="money-flight pay" aria-hidden="true" style={`left:${c.x}px;top:${c.y}px;--dx:${c.dx}px;--dy:${c.dy}px`}>{@render coin('--delay:0ms')}</div>
     {/each}
     <div class="farm-bottom">
       <!-- The basket: a round floating badge whose ring fills as she picks; seeds ride on its shoulder while she has any. -->
