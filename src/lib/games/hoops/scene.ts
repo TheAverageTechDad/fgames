@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, POLE, RIM } from './court';
-import { createShootaround, jump, startShot, stepShootaround, type GameEvent } from './game';
+import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, GRAVITY, POLE, RIM } from './court';
+import { RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
+import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 
 const DAD = '/catcha/assets/chibi-dad.glb';
 // The court texture covers a little grass around the lines.
@@ -121,6 +122,10 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   ball.castShadow = true; scene.add(ball);
   const ballShadow = shadowDisc(BALL_R);
   let ballSquash = 0, ballPulse = 0;
+  // The aim: dots along the rising half of the arc the ball will fly.
+  const DOTS = 9, dots = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.055, 10, 6)), keep(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 })), DOTS);
+  dots.count = 0; dots.frustumCulled = false; scene.add(dots);
+  const dotMatrix = new THREE.Matrix4();
 
   // Dad, with a ground ring that marks the controlled player.
   const dad = new THREE.Group(), body = new THREE.Group(); dad.add(body); scene.add(dad);
@@ -128,8 +133,12 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const ring = new THREE.Mesh(keep(new THREE.RingGeometry(0.44, 0.52, 40)), keep(new THREE.MeshBasicMaterial({ color: '#ffcf3d', transparent: true, opacity: 0.9, depthWrite: false })));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.025; scene.add(ring);
   const joints: THREE.Object3D[] = [];
+  // The right hand: the bottom of the right arm in the arm's own space, measured in the rest pose.
+  let rightArm: THREE.Object3D | null = null;
+  const handLocal = new THREE.Vector3(), hand = new THREE.Vector3(), pickupFrom = new THREE.Vector3();
   let model: THREE.Object3D | null = null, disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), hudClock = 0;
-  let stepPhase = 0, squash = 1, followT = 0, lastPos = { x: state.player.x, z: state.player.z };
+  let stepPhase = 0, squash = 1, followT = 0, pickupT = 0, lean = 0, lastSpeed = 0;
+  const PICKUP = 0.28;
 
   const disposeObject = (root: THREE.Object3D) => root.traverse(o => {
     if (!(o instanceof THREE.Mesh)) return;
@@ -144,6 +153,13 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     model.position.y -= new THREE.Box3().setFromObject(model).min.y;
     model.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } else if (/^(arm-|leg-)/.test(o.name)) joints.push(o); });
     body.add(model);
+    // The model's arms are named as seen from its front, so 'arm-left' is Dad's right hand.
+    rightArm = joints.find(j => j.name === 'arm-left') ?? null;
+    if (rightArm) {
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(rightArm);
+      rightArm.worldToLocal(handLocal.set((box.min.x + box.max.x) / 2, box.min.y + 0.04, (box.min.z + box.max.z) / 2));
+    }
     return renderer.compileAsync(scene, camera);
   }).then(() => { if (!disposed) { loaded = true; previous = performance.now(); callbacks.update(); } });
 
@@ -156,12 +172,22 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     return { x: rect.left + (fx + 1) * rect.width / 2, y: (toY(fy) + toY(head.y)) / 2, radius: Math.max(28, 0.45 * (toY(fy) - toY(head.y))) };
   };
   const input = createHoopsInput(canvas, host, () => state.mode === 'held' ? dadScreen() : null);
+  /** The pull with the rim's on-screen direction from Dad, so aim is judged against the rim the player sees. */
+  const rimScreen = () => {
+    const rect = canvas.getBoundingClientRect(), rim = probe.set(RIM.x, RIM.y, RIM.z).project(camera);
+    return { x: rect.left + (rim.x + 1) * rect.width / 2, y: rect.top + (1 - rim.y) * rect.height / 2 };
+  };
+  const aimed = (pull: Pull): Pull => {
+    const from = dadScreen(), rim = rimScreen();
+    return { ...pull, rimAngle: Math.atan2(rim.y - from.y, rim.x - from.x) };
+  };
 
   function feedback(e: GameEvent) {
     if (e.type === 'floor' || e.type === 'dribble') ballSquash = 1;
     if (e.type === 'rim' || e.type === 'board' || e.type === 'pole') ballPulse = 1;
     if (e.type === 'score') swish = 1;
     if (e.type === 'shot') followT = 0.25;
+    if (e.type === 'pickup') { pickupT = PICKUP; pickupFrom.copy(ball.position); }
     callbacks.event(e);
   }
 
@@ -172,42 +198,64 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     frame = requestAnimationFrame(animate);
     const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
     if (paused || document.hidden || !loaded) return;
-    const swipe = input.takeShot();
-    if (swipe) {
-      const from = dadScreen(), rect = canvas.getBoundingClientRect(), rimOnScreen = probe.set(RIM.x, RIM.y, RIM.z).project(camera);
-      startShot(state, { ...swipe, rimAngle: Math.atan2(rect.top + (1 - rimOnScreen.y) * rect.height / 2 - from.y, rect.left + (rimOnScreen.x + 1) * rect.width / 2 - from.x) });
+    for (let e = input.next(); e; e = input.next()) {
+      if (e.type === 'aim') startAim(state);
+      if (e.type === 'cancel') cancelAim(state);
+      if (e.type === 'shoot') { const shot = shoot(state, aimed(e.pull)); if (shot) feedback(shot); }
     }
     if (input.jump()) jump(state);
     const events = stepShootaround(state, dt, input.read()); events.forEach(feedback);
 
-    // Dad: face where he runs (the hoop while shooting), walk, crouch and stretch in jumps, arms for the dribble and the shot.
-    const p = state.player, moved = Math.hypot(p.x - lastPos.x, p.z - lastPos.z) / Math.max(dt, 1e-6), moving = moved > 0.3;
-    lastPos = { x: p.x, z: p.z };
-    const shooting = state.mode === 'windup' || followT > 0;
+    // Dad: face where he runs (the hoop while aiming), lean into his speed, crouch and stretch in jumps, bend to pick up.
+    const p = state.player, speed = Math.hypot(p.vx, p.vz), moving = speed > 0.3;
+    const aiming = state.mode === 'aim', shooting = aiming || followT > 0;
     dad.position.set(p.x, p.y, p.z);
-    dad.rotation.y = turn(dad.rotation.y, shooting ? Math.atan2(RIM.x - p.x, RIM.z - p.z) : p.yaw, dt * 14);
-    stepPhase += dt * (moving ? 9 + 4 * Math.min(1, moved / 5) : 0);
-    const air = p.y > 0, crouching = p.jumpT >= 0;
-    squash += ((crouching ? 0.75 : air ? 1.1 : 1) - squash) * Math.min(1, dt * 14);
+    dad.rotation.y = turn(dad.rotation.y, shooting ? Math.atan2(RIM.x - p.x, RIM.z - p.z) : p.yaw, dt * 12);
+    stepPhase += dt * (moving ? 7 + 6 * Math.min(1.35, speed / RUN_SPEED) : 0);
+    const air = p.y > 0, crouching = p.jumpT >= 0, braking = Math.max(-1, Math.min(1, (speed - lastSpeed) / Math.max(dt, 1e-6) / 20));
+    lastSpeed = speed; followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt);
+    const bend = pickupT > 0 ? Math.sin((pickupT / PICKUP) * Math.PI) : 0;
+    squash += ((crouching ? 0.75 : air ? 1.1 : aiming ? 0.94 : 1 - bend * 0.12) - squash) * Math.min(1, dt * 14);
     body.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
-    body.rotation.x += ((moving && !air ? 0.12 : 0) - body.rotation.x) * Math.min(1, dt * 10);
-    followT = Math.max(0, followT - dt);
-    const dribbleReach = Math.abs(Math.cos(Math.PI * state.dribble));
+    lean += ((air ? 0 : 0.14 * Math.min(1.35, speed / RUN_SPEED) + 0.12 * braking + 0.6 * bend) - lean) * Math.min(1, dt * 10);
+    body.rotation.x = lean;
+    // The dribble: the hand rides the top of the ball, pushes it down, and is waiting when it comes back.
+    const beat = state.dribble - Math.floor(state.dribble);
     for (const joint of joints) {
       const isArm = joint.name.startsWith('arm'), right = joint.name.includes('right');
       const swing = moving && !air ? Math.sin(stepPhase) * 0.6 * (right ? 1 : -1) : 0;
       let to = isArm ? -swing * 0.7 : swing;
-      if (isArm && shooting) to = state.mode === 'windup' ? -2.7 : -2.3;
-      else if (isArm && right && state.mode === 'held') to = -0.45 - 0.55 * dribbleReach;
+      if (isArm && bend > 0) to = -1.3 * bend - 0.2;
+      else if (isArm && shooting) to = aiming ? -2.75 : -2.3;
+      else if (joint === rightArm && state.mode === 'held') to = -0.55 + 0.3 * Math.sin(2 * Math.PI * beat);
       else if (isArm && air) to = -2.0;
-      joint.rotation.x += (to - joint.rotation.x) * Math.min(1, dt * 18);
+      joint.rotation.x += (to - joint.rotation.x) * Math.min(1, dt * (joint === rightArm && state.mode === 'held' ? 30 : 18));
     }
     dadShadow.position.set(p.x, 0.02, p.z); dadShadow.scale.setScalar(1 - Math.min(0.4, p.y * 0.4));
     ring.position.set(p.x, 0.025, p.z);
 
-    // Ball: spin with its travel, squash on the floor, a small pulse off the rim and board.
+    // Ball: drawn at the hand while dribbling, scooped up from the floor on a pickup, otherwise where the physics has it.
     const b = state.ball.p;
     ball.position.set(b.x, b.y, b.z);
+    if (state.mode === 'held' && rightArm) {
+      dad.updateMatrixWorld(true); rightArm.localToWorld(hand.copy(handLocal));
+      // Out from his side and a little ahead, so it bounces clear of his legs.
+      const out = Math.hypot(hand.x - p.x, hand.z - p.z) || 1, fx = Math.sin(dad.rotation.y), fz = Math.cos(dad.rotation.y);
+      ball.position.set(hand.x + ((hand.x - p.x) / out) * 0.1 + fx * 0.12, BALL_R + (hand.y - 2 * BALL_R) * Math.abs(Math.cos(Math.PI * state.dribble)), hand.z + ((hand.z - p.z) / out) * 0.1 + fz * 0.12);
+      if (pickupT > 0) ball.position.lerpVectors(pickupFrom, ball.position, 1 - pickupT / PICKUP);
+    }
+    // The aim: dots up to the top of the arc the release will fly.
+    const pull = aiming ? input.pull() : null;
+    dots.count = 0;
+    if (pull && Math.hypot(pull.dx, pull.dy) >= MIN_PULL_PX) {
+      const from = releasePoint(state), v = shotVelocity(from, aimed(pull)), apex = Math.max(0.05, v.y / GRAVITY);
+      for (let i = 1; i <= DOTS; i++) {
+        const t = (apex * i) / DOTS, size = 1 - (i / DOTS) * 0.45;
+        dotMatrix.makeScale(size, size, size).setPosition(from.x + v.x * t, from.y + v.y * t - 0.5 * GRAVITY * t * t, from.z + v.z * t);
+        dots.setMatrixAt(dots.count++, dotMatrix);
+      }
+      dots.instanceMatrix.needsUpdate = true;
+    }
     const v = state.ball.v, spin = Math.hypot(v.x, v.z) * dt / BALL_R;
     if (spin > 0) ball.rotateOnWorldAxis(probe.set(v.z, 0, -v.x).normalize(), spin);
     ballSquash = Math.max(0, ballSquash - dt / 0.12); ballPulse = Math.max(0, ballPulse - dt / 0.15);
@@ -223,7 +271,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   frame = requestAnimationFrame(animate);
 
   return {
-    ready, state, dadScreen,
+    ready, state, dadScreen, rimScreen,
     setPaused(value: boolean) { paused = value; input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
     destroy() {
       if (disposed) return;

@@ -1,55 +1,81 @@
 import { createStickInput } from '#lib/stick-input';
 import type { Move } from './game';
-import { MIN_SHOT_PX, type Swipe } from './shot';
+import { MIN_PULL_PX, type Pull } from './shot';
 
 /** Dad's touch target in client px. */
 export type Target = { x: number; y: number; radius: number };
-export type ShotGesture = { kind: 'shot'; swipe: Swipe } | { kind: 'jump' } | { kind: 'none' };
-type Touch = { x: number; y: number; t: number };
+export type AimEvent = { type: 'aim' } | { type: 'shoot'; pull: Pull } | { type: 'cancel' };
+type Point = { x: number; y: number };
 
-export const claimsShot = (touch: { x: number; y: number }, dad: Target | null) =>
+// Holding still on Dad this long starts the aim; moving further than HOLD_SLOP first makes it ordinary movement.
+export const HOLD_MS = 150, HOLD_SLOP = 10;
+
+export const claimsShot = (touch: Point, dad: Target | null) =>
   dad !== null && Math.hypot(touch.x - dad.x, touch.y - dad.y) <= Math.max(28, dad.radius);
 
-export function readShotGesture(start: Touch, end: Touch, minSide: number): ShotGesture {
-  const dx = end.x - start.x, dy = end.y - start.y, travel = Math.hypot(dx, dy), ms = end.t - start.t;
-  if (travel >= MIN_SHOT_PX) return { kind: 'shot', swipe: { dx, dy, seconds: ms / 1000, minSide } };
-  return ms < 250 && travel <= 5 ? { kind: 'jump' } : { kind: 'none' };
+export function readPull(origin: Point, end: Point, minSide: number): { kind: 'shoot'; pull: Pull } | { kind: 'cancel' } {
+  const dx = end.x - origin.x, dy = end.y - origin.y;
+  return Math.hypot(dx, dy) < MIN_PULL_PX ? { kind: 'cancel' } : { kind: 'shoot', pull: { dx, dy, minSide } };
 }
 
-/** A touch that starts on Dad while he has the ball is a shot (or a jump, if it is a tap); every other touch is the farm's stick. */
+/**
+ * The farm's stick for moving, plus the shot: hold still on Dad (while he has the ball) to start aiming,
+ * pull back, let go. A touch on Dad that moves straight away stays movement.
+ */
 export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, dad: () => Target | null) {
-  let shot: (Touch & { id: number }) | null = null, queued: Swipe | null = null, tapJump = false, enabled = true;
+  let held: (Point & { id: number; t: number; owned: boolean; timer: ReturnType<typeof setTimeout> }) | null = null;
+  let aim: (Point & { id: number; now: Point }) | null = null, enabled = true, tapJump = false;
+  const queue: AimEvent[] = [];
+  // A finger on Dad: if the stick is already steering (a second finger), take it so it can't turn into the stick's jump.
   const claim = (e: PointerEvent) => {
-    if (shot || !claimsShot({ x: e.clientX, y: e.clientY }, dad())) return false;
-    e.preventDefault(); shot = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp };
-    canvas.setPointerCapture(e.pointerId);
-    return true;
+    if (held || aim || !claimsShot({ x: e.clientX, y: e.clientY }, dad())) return false;
+    const owned = stick.busy();
+    held = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, owned, timer: setTimeout(begin, HOLD_MS) };
+    if (owned) { e.preventDefault(); canvas.setPointerCapture(e.pointerId); }
+    return owned;
   };
   const stick = createStickInput(canvas, host, { className: 'hoops-joystick', claim });
-  const drop = () => {
-    if (shot && canvas.hasPointerCapture(shot.id)) canvas.releasePointerCapture(shot.id);
-    shot = null;
+  function begin() {
+    if (!held || !enabled || !dad()) { held = null; return; }
+    const { id, x, y, owned } = held; held = null;
+    if (!owned) { stick.releasePointer(); canvas.setPointerCapture(id); }
+    aim = { id, x, y, now: { x, y } }; queue.push({ type: 'aim' });
+  }
+  const forget = () => { if (held) clearTimeout(held.timer); held = null; };
+  const move = (e: PointerEvent) => {
+    if (aim && e.pointerId === aim.id) aim.now = { x: e.clientX, y: e.clientY };
+    else if (held && e.pointerId === held.id && Math.hypot(e.clientX - held.x, e.clientY - held.y) > HOLD_SLOP) forget();
   };
   const up = (e: PointerEvent) => {
-    if (!shot || e.pointerId !== shot.id) return;
-    const start = shot; drop();
-    if (e.type !== 'pointerup' || !enabled) return; // cancelled or lost: nothing fires
-    const gesture = readShotGesture(start, { x: e.clientX, y: e.clientY, t: e.timeStamp }, Math.min(innerWidth, innerHeight));
-    if (gesture.kind === 'shot') queued = gesture.swipe;
-    if (gesture.kind === 'jump') tapJump = true;
+    if (held && e.pointerId === held.id) {
+      // A quick tap on Dad by a second finger jumps, like a second finger anywhere else.
+      if (held.owned && e.type === 'pointerup' && e.timeStamp - held.t < 250) tapJump = true;
+      forget();
+    }
+    if (!aim || e.pointerId !== aim.id) return;
+    const { x, y, id } = aim; aim = null;
+    if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+    if (e.type !== 'pointerup' || !enabled) { queue.push({ type: 'cancel' }); return; }
+    const result = readPull({ x, y }, { x: e.clientX, y: e.clientY }, Math.min(innerWidth, innerHeight));
+    queue.push(result.kind === 'shoot' ? { type: 'shoot', pull: result.pull } : { type: 'cancel' });
   };
+  const drop = () => { forget(); if (aim) { aim = null; queue.push({ type: 'cancel' }); } tapJump = false; };
   const hidden = () => { if (document.hidden) drop(); };
-  const types = ['pointerup', 'pointercancel', 'lostpointercapture'];
-  for (const type of types) canvas.addEventListener(type, up as EventListener);
+  const ends = ['pointerup', 'pointercancel', 'lostpointercapture'];
+  canvas.addEventListener('pointermove', move);
+  for (const type of ends) canvas.addEventListener(type, up as EventListener);
   window.addEventListener('blur', drop); document.addEventListener('visibilitychange', hidden);
   return {
     read: (): Move => stick.read(),
     jump() { const jumped = stick.jump() || (tapJump && enabled); tapJump = false; return jumped; },
-    takeShot() { const swipe = queued; queued = null; return enabled ? swipe : null; },
-    setEnabled(value: boolean) { enabled = value; drop(); queued = null; tapJump = false; stick.setEnabled(value); },
+    /** The live pull while aiming (screen px from where the thumb held Dad), for drawing the arc. */
+    pull: (): Pull | null => aim ? { dx: aim.now.x - aim.x, dy: aim.now.y - aim.y, minSide: Math.min(innerWidth, innerHeight) } : null,
+    next: () => queue.shift() ?? null,
+    setEnabled(value: boolean) { enabled = value; drop(); stick.setEnabled(value); },
     destroy() {
       drop(); stick.destroy();
-      for (const type of types) canvas.removeEventListener(type, up as EventListener);
+      canvas.removeEventListener('pointermove', move);
+      for (const type of ends) canvas.removeEventListener(type, up as EventListener);
       window.removeEventListener('blur', drop); document.removeEventListener('visibilitychange', hidden);
     }
   };

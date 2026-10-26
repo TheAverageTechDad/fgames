@@ -62,6 +62,13 @@ export function createStickInput(canvas: HTMLCanvasElement, host: HTMLElement, o
     /** True once per jump press. */
     jump() { const jumped = jumpQueued && enabled; jumpQueued = false; return jumped; },
     setEnabled(value: boolean) { enabled = value; clear(); },
+    /** Whether a finger is steering right now. */
+    busy: () => pointer !== null,
+    /** Lets go of the steering finger without a jump, so a game can take that touch over for its own gesture. */
+    releasePointer() {
+      if (pointer !== null && canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+      pointer = null; movement = { x: 0, z: 0 }; sprint = false; stick.style.display = 'none';
+    },
     destroy() {
       clear(); stick.remove(); canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move);
       for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.removeEventListener(type, up as EventListener);

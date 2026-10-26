@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { claimsShot, readShotGesture } from './input';
+import { claimsShot, readPull } from './input';
 
 describe('hoops gestures', () => {
   const dad = { x: 200, y: 500, radius: 28 };
-  it('claims a touch on Dad only while he can shoot', () => {
+  it('claims a touch on Dad only while he has the ball', () => {
     expect(claimsShot({ x: 220, y: 510 }, dad)).toBe(true);
     expect(claimsShot({ x: 240, y: 500 }, dad)).toBe(false);
     expect(claimsShot({ x: 200, y: 500 }, null)).toBe(false);
   });
-  it('turns a swipe past 24 px into a shot, a quick tap into a jump, and a slow nudge into nothing', () => {
-    expect(readShotGesture({ x: 0, y: 0, t: 0 }, { x: 0, y: -120, t: 150 }, 390)).toEqual({ kind: 'shot', swipe: { dx: 0, dy: -120, seconds: 0.15, minSide: 390 } });
-    expect(readShotGesture({ x: 0, y: 0, t: 0 }, { x: 3, y: -3, t: 120 }, 390)).toEqual({ kind: 'jump' });
-    expect(readShotGesture({ x: 0, y: 0, t: 0 }, { x: 10, y: -10, t: 400 }, 390)).toEqual({ kind: 'none' });
+  it('shoots a pull of 20 px or more and cancels one slid back onto Dad', () => {
+    expect(readPull({ x: 100, y: 100 }, { x: 100, y: 180 }, 390)).toEqual({ kind: 'shoot', pull: { dx: 0, dy: 80, minSide: 390 } });
+    expect(readPull({ x: 100, y: 100 }, { x: 108, y: 110 }, 390)).toEqual({ kind: 'cancel' });
   });
 });

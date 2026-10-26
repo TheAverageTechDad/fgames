@@ -1,20 +1,21 @@
 import { BALL_R, GRAVITY, RIM, isTwoPointer, type Vec3 } from './court';
 
-/** A shot swipe in screen px (dy positive downward), its duration, the viewport's shorter side, and the screen angle from Dad to the rim (atan2(dy, dx)). */
-export type Swipe = { dx: number; dy: number; seconds: number; minSide: number; rimAngle?: number };
+/**
+ * A slingshot pull in screen px from where the thumb held Dad (dy positive downward): the ball goes the opposite way.
+ * minSide is the viewport's shorter side; rimAngle the screen angle from Dad to the rim (atan2(dy, dx)).
+ */
+export type Pull = { dx: number; dy: number; minSide: number; rimAngle?: number };
 
-export const S_IDEAL = 0.6, AIM_CONE = (25 * Math.PI) / 180, AIM_KEEP = 0.15, BAND_NEAR = 0.08, BAND_FAR = 0.05,
+// The ideal pull is a fifth of the screen from anywhere; MIN_PULL_PX or less cancels the shot.
+export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_CONE = (25 * Math.PI) / 180, AIM_KEEP = 0.15, BAND_NEAR = 0.08, BAND_FAR = 0.05,
   POWER_SLOPE = 0.35, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
 
-/** Travel as a fraction of the screen, times its speed: the same gesture means the same on every phone and frame rate. */
-export function strength({ dx, dy, seconds, minSide }: Swipe) {
-  const travel = Math.hypot(dx, dy) / minSide;
-  return travel * (travel / Math.max(seconds, 0.05));
-}
+/** The pull as a fraction of the screen, so the same pull means the same on every phone. */
+export const strength = ({ dx, dy, minSide }: Pull) => Math.min(MAX_PULL, Math.hypot(dx, dy) / minSide);
 
-/** How hard the ball goes compared with a clean make from here: 1 inside the sweet band, never softer for a stronger swipe. */
+/** How hard the ball goes compared with a clean make from here: 1 inside the sweet band, never softer for a longer pull. */
 export function power(s: number, twoPointer: boolean) {
-  const r = s / S_IDEAL, band = twoPointer ? BAND_FAR : BAND_NEAR;
+  const r = s / P_IDEAL, band = twoPointer ? BAND_FAR : BAND_NEAR;
   if (Math.abs(r - 1) <= band) return 1;
   return Math.min(1.45, Math.max(0.55, 1 + (r - 1 - Math.sign(r - 1) * band) * POWER_SLOPE));
 }
@@ -42,15 +43,15 @@ export function launchVelocity(from: Vec3, to: Vec3): Vec3 {
   return { x: ux * across, y: across * tan, z: uz * across };
 }
 
-export function shotVelocity(release: Vec3, swipe: Swipe): Vec3 {
-  // The player swipes at the rim they see. The error is measured on screen against the rim's on-screen direction,
+export function shotVelocity(release: Vec3, pull: Pull): Vec3 {
+  // The player aims at the rim they see. The error is measured on screen against the rim's on-screen direction,
   // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
-  const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(swipe.dy, swipe.dx);
-  const seen = swipe.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
+  const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(-pull.dy, -pull.dx);
+  const seen = pull.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
   const angle = toRim + (Math.abs(err) <= AIM_CONE ? err * AIM_KEEP : err);
   // Aim a touch past the centre: the centre is the short end of the window that drops through.
   const reach = Math.hypot(RIM.x - release.x, RIM.z - release.z) + AIM_LONG;
   const v = launchVelocity(release, { x: release.x + Math.cos(angle) * reach, y: RIM.y, z: release.z + Math.sin(angle) * reach });
-  const k = power(strength(swipe), isTwoPointer(release));
+  const k = power(strength(pull), isTwoPointer(release));
   return { x: v.x * k, y: v.y * k, z: v.z * k };
 }

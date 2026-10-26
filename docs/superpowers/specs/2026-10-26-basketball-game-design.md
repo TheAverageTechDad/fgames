@@ -17,13 +17,13 @@ As in the other games, the point is accessible touch controls and satisfying phy
 - Reuse the existing walk, sprint, jump and touch-control mechanics. Do not replace them with a new movement scheme.
 - Moving while holding possession dribbles automatically. No separate dribble gesture. Pleasing ball squash and stretch.
 - Tap a teammate to pass. Control follows possession: when the teammate catches the pass, that teammate becomes the controlled player.
-- Swipe toward the rim to shoot. Swipe speed and travel both contribute to strength; a swipe that is too fast or too long can overshoot.
-- The shot swipe starts on the controlled player; a drag starting elsewhere is movement. Accepted as the starting approach, subject to how it feels in play.
+- Shoot by holding the controlled player, pulling back and letting go (decided 26 October 2026 after the first phone playtest, replacing the original swipe, which couldn't be told apart from movement). A touch on the player that moves straight away is movement. While aiming, dots show the rising half of the arc; the ball flies exactly along it on release. It has to be quick enough to do under pressure.
+- The ball looks bounced by the character's hand, keeps bouncing when it goes out of bounds and then comes back to the player, and a bouncing ball on court can be run down and scooped up with a pickup motion. Movement has some weight: the player speeds up, slows down and leans.
 - AI defenders steal by staying very close to the ball carrier for a few seconds. Moving away and passing escape the pressure.
 - Ball physics supports bouncing and colliding with physically present objects.
 - The court has proper surface texture and markings; the models and overall presentation have good visual quality.
 - Simple, fun and easy to put down after a few minutes, like Catcha and Pocket Farm.
-- Shot power is distance-relative: a comfortable swipe scores from anywhere.
+- Shot power is distance-relative: the same comfortable pull scores from anywhere.
 - On the player's team only the controlled player can steal; AI teammates contest and block lanes.
 - No mid-match save: pause while the page is alive, lose the match if the page is killed.
 - Outdoor court. Dad plays; the rest of the family watches and cheers from the side.
@@ -64,7 +64,7 @@ Keep Pocket Farm's floating stick (`src/lib/games/farm/input.ts`): drag to walk,
 
 Each touch is assigned to one action at touch-down, and never fires a second action on release:
 
-1. **On the controlled player, with possession:** a possible shot. A swipe past the shot threshold launches on release. A tap that never passes the threshold jumps.
+1. **On the controlled player, with possession:** held still for 0.15 s (within 10 px), it becomes the aim: the player gathers the ball overhead, plants his feet, and the arc dots appear. Pulling back sets the shot; releasing shoots; sliding back within 20 px of the start cancels. If it moves past 10 px first, it is the stick, exactly as a drag anywhere else. A quick tap jumps.
 2. **On a teammate:** a pass during possession, or a switch of control otherwise. A drag past tap tolerance becomes movement anchored at the original touch; it must not also pass, jump or shoot.
 3. **Anywhere else:** the existing stick and sprint. A quick tap that never steered jumps.
 4. **A second finger** while the first holds movement follows the same priorities: a teammate passes, the controlled player starts a shot, empty court jumps. One-finger play supports every essential action by lifting the movement thumb first.
@@ -99,13 +99,13 @@ Contact with a dribbled ball does not bypass the meter. A released pass, a shot 
 
 Aim and power are separate, so the player has one thing to judge.
 
-**Aim.** A swipe within 25° of the line from the shooter to the rim (in court space, mapped from the camera) is aimed at the rim, with the leftover angle kept as a small sideways error that can still rim out. A swipe outside that cone goes where it was swiped. No auto-aim on purpose: a sideways swipe is a bad shot, not a corrected one.
+**Aim.** The ball goes opposite the pull, like a slingshot. A pull within 25° of straight away from the rim, as the rim appears on screen, is aimed at the rim, with the leftover angle kept as a small sideways error that can still rim out. Outside that cone the error carries over in full. No auto-aim on purpose: a sideways pull is a bad shot, not a corrected one.
 
-**Power.** Strength is one number, `s = travel × speed`, each normalized: travel by the viewport's shorter side, speed by elapsed time, so the same gesture behaves the same on every phone and frame rate. `s` is judged **relative to the shot the player is taking**: the game solves the launch velocity that drops the ball through the rim from the release point at a fixed arc, and scales it by `s / s_ideal`. The same comfortable swipe scores from anywhere, which is what a player learns in a casual game; it is still a physical shot that can fall short or clang off the back of the rim. A sweet band of about ±8% at the rim, narrowing to about ±5% beyond the arc, makes two-pointers harder. Tune `s_ideal` and the bands on real phones.
+**Power.** Strength is the pull's length as a fraction of the viewport's shorter side (capped at 0.45), so the same pull behaves the same on every phone. It is judged **relative to the shot the player is taking**: the game solves the launch that drops the ball through the rim from the release point (entering at 45° or steeper, and clearing the front of the ring) and scales it by the pull against the ideal of 0.2. The same comfortable pull scores from anywhere; a short pull falls short and a long one overshoots. A sweet band of about ±8% at the rim, narrowing to about ±5% beyond the arc, makes two-pointers harder.
 
-Minimum swipe travel to shoot: 24 px. No power meter and no release-timing minigame. Show the shot value (`+1`/`+2`) only after it scores.
+The arc dots show only the rising half, so the player still judges where it comes down. No power meter and no release-timing minigame. Show the shot value (`+1`/`+2`) only after it scores.
 
-**Release.** Ball release syncs with the hand. Every shot includes a small automatic shooting rise using the existing jump presentation, so no jump input is needed to score. A shot can also release during a second-finger jump.
+**Release.** The ball leaves the moment the thumb lets go, from where it sat overhead, along the arc the dots showed; the player then hops through the shot. A shot can also release during a second-finger jump.
 
 ## Passing, rebounds and physics
 
@@ -157,7 +157,7 @@ Persist only preferences and, optionally, a win/loss tally. Target smooth phone 
 
 ## Build sequence after approval
 
-1. **Shootaround.** Dad, a ball and a hoop on a basic court, with the reused stick, sprint and jump. Dribbling, swipe shooting, collisions and scoring. Tune short, ideal and excessive swipes from several spots. Confirm movement and shot gestures never conflict. This slice decides whether the game is fun; judge it on a phone before going on.
+1. **Shootaround.** Dad, a ball and a hoop on a basic court, with the reused stick, sprint and jump. Dribbling, hold-and-pull shooting, collisions and scoring. Tune short, ideal and excessive pulls from several spots. Confirm movement and shot gestures never conflict. This slice decides whether the game is fun; judge it on a phone before going on.
 2. Two teammates, tap to pass, control at the catch, loose-ball recovery.
 3. The opposing team, guarding and steals, defensive selection, rebounds, the clock, buzzer and match rules.
 4. Court art, basketball actions, net, audio, haptics, pause, result card, offline, phone verification.
@@ -166,7 +166,7 @@ Persist only preferences and, optionally, a win/loss tally. Target smooth phone 
 
 - One thumb can move, sprint, jump, dribble, pass, shoot, defend and finish a match; a second finger is optional.
 - A movement drag or sprint never shoots; a pass never also jumps. Shot targets stay usable while characters move, including under the rim on a large phone.
-- The same swipe behaves the same on representative portrait phone sizes; a comfortable swipe scores from different spots, harder swipes overshoot and weak swipes fall short.
+- The same pull behaves the same on representative portrait phone sizes; a comfortable pull scores from different spots, longer pulls overshoot and short ones fall short. A drag that starts on the player moves him.
 - Pass control changes at the catch, passes can be intercepted, and the controlled player is always clear.
 - Guarding gives readable warning and a real escape and cannot produce repeated instant steals. On the player's team, only the controlled player ever steals from a dribble.
 - Dribbling looks attached to the moving character; squash and stretch recovers; released balls collide and rebound convincingly.
@@ -192,3 +192,4 @@ Consequence for scope: the five other players are Dad variants (glasses on/off, 
 - Made the first build step a shootaround that decides whether the game is fun before the rest is built.
 - Recorded the user's decisions: relative shot power, controlled-player-only steals for the player's team, no mid-match save, two-minute matches, and an outdoor court where Dad plays with neighbourhood teammates and opponents while the family cheers from the sideline.
 - The five other players are variations of Dad (glasses, beard, skin, hair, jersey, slight scale) from the existing model, sharing its rig.
+- After the first phone playtest: hold-pull-release shooting with the rising half of the arc shown, a hand-driven dribble, out-of-bounds balls that keep bouncing and are tossed back, a pickup motion, and movement with momentum.

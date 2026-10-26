@@ -10,15 +10,15 @@
   let pauseDialog: HTMLDialogElement;
   let engine: ReturnType<typeof createHoopsScene> | undefined;
   let made = $state(0), shots = $state(0), pop = $state(''), popId = $state(0);
-  let loading = $state(true), error = $state('');
-  let popTimer: ReturnType<typeof setTimeout>;
+  let loading = $state(true), error = $state(''), hint = $state(false);
+  let popTimer: ReturnType<typeof setTimeout>, hintTimer: ReturnType<typeof setTimeout>;
 
   function update() {
     if (!engine) return;
-    const s = engine.state, dad = engine.dadScreen();
+    const s = engine.state, dad = engine.dadScreen(), rim = engine.rimScreen();
     made = s.made; shots = s.shots;
     // ponytail: smoke hooks (scripts/hoops-smoke.mjs reads these).
-    Object.assign(host.dataset, { shots: String(s.shots), score: String(s.score), mode: s.mode, dadX: String(Math.round(dad.x)), dadY: String(Math.round(dad.y)) });
+    Object.assign(host.dataset, { shots: String(s.shots), score: String(s.score), mode: s.mode, dadX: String(Math.round(dad.x)), dadY: String(Math.round(dad.y)), rimX: String(Math.round(rim.x)), rimY: String(Math.round(rim.y)) });
   }
   function event(e: GameEvent) {
     if (e.type !== 'score' || !engine) return;
@@ -41,7 +41,7 @@
         if (cancelled) return;
         engine = createHoopsScene(host, { update, event });
         await engine.ready;
-        if (!cancelled) { loading = false; host.dataset.ready = 'true'; }
+        if (!cancelled) { loading = false; host.dataset.ready = 'true'; hint = true; hintTimer = setTimeout(() => { hint = false; }, 4500); }
       } catch (err) {
         console.error('Hoops failed to load', err);
         engine?.destroy();
@@ -49,7 +49,7 @@
       }
     })();
     return () => {
-      cancelled = true; clearTimeout(popTimer); engine?.destroy(); removeHaptics();
+      cancelled = true; clearTimeout(popTimer); clearTimeout(hintTimer); engine?.destroy(); removeHaptics();
       document.documentElement.style.setProperty('--screen-bg', previousBg);
     };
   });
@@ -63,6 +63,7 @@
       <div class="hoops-count" aria-label={`Made ${made} of ${shots}`}><strong>{made}</strong><span>/ {shots}</span><small>made</small></div>
       <button class="hoops-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
     </header>
+    {#if hint}<div class="hoops-hint" role="status">Hold Dad · pull back · let go</div>{/if}
     {#if pop}{#key popId}<div class="hoops-pop" role="status">{pop}</div>{/key}{/if}
     {#if loading || error}
       <div class="hoops-loading" role="status">
@@ -73,7 +74,7 @@
     {/if}
     <dialog class="hoops-pause" bind:this={pauseDialog} onclose={resume}>
       <h2>Paused</h2>
-      <p>Swipe up from Dad to shoot. Drag anywhere else to move.</p>
+      <p>Hold Dad, pull back and let go to shoot. Drag anywhere else to move.</p>
       <button class="toy-button" onclick={() => pauseDialog.close()}>Keep shooting</button>
       <button class="toy-button" onclick={() => { pauseDialog.close(); home(); }}>Home</button>
     </dialog>
@@ -89,10 +90,12 @@
   .pause-symbol{width:14px;height:16px;border-left:5px solid currentColor;border-right:5px solid currentColor}
   .hoops-count{display:flex;align-items:baseline;gap:5px;padding:6px 16px;border-radius:20px;background:#fff6dfe6;box-shadow:0 3px 0 #6b4a2f44;font-variant-numeric:tabular-nums}.hoops-count strong{font-size:26px;font-weight:400}.hoops-count span{font-size:16px}.hoops-count small{font-size:12px;color:#8a6a4c}
   .hoops-pop{position:absolute;top:18%;left:50%;transform:translateX(-50%);font-size:44px;color:#fff;text-shadow:0 4px 0 #c4502a,0 0 18px #ff9a4a99;animation:pop .9s ease-out both;pointer-events:none}
+  .hoops-hint{position:absolute;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 18%);left:50%;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 16px;border-radius:18px;background:#fff6dfe6;color:#5a3d26;font-size:15px;box-shadow:0 3px 0 #6b4a2f44;pointer-events:none;animation:hint 4.5s ease both}
+  @keyframes hint{0%{opacity:0;translate:0 8px}8%,85%{opacity:1;translate:0 0}100%{opacity:0}}
   .hoops-loading{position:absolute;inset:0;background:#f2cf98;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:35px;gap:16px}.hoops-loading h2{font-size:34px}.hoops-loading p{font-size:16px;color:#8a6a4c}
   .hoops-pause{margin:auto;width:calc(100% - 40px);max-width:350px;border:3px solid #6b4a2f;border-radius:25px;padding:25px;background:#fff7e3;color:#3b2a1d;box-shadow:0 7px 0 #6b4a2f44}.hoops-pause::backdrop{background:#3b2a1d99}.hoops-pause h2{font-size:30px}.hoops-pause p{font-size:14px;margin:12px 0 20px;color:#8a6a4c}.hoops-pause button{width:100%;margin-top:12px}
   .hoops-world :global(.hoops-joystick){position:absolute;display:none;width:100px;height:100px;margin:-50px;border:2px solid #fff8e899;background:#fff8e82b;border-radius:50%;pointer-events:none;z-index:4}.hoops-world :global(.hoops-joystick>div){position:absolute;left:30px;top:30px;width:36px;height:36px;background:#fff8e8c9;border:2px solid #ffffffc9;border-radius:50%}
   @keyframes pop{0%{opacity:0;scale:.6}20%{opacity:1;scale:1.15}70%{opacity:1;scale:1}100%{opacity:0;translate:0 -20px}}
   @media(min-width:600px){.hoops-surround{padding:14px}.hoops-shell{height:min(960px,calc(100dvh - 28px));border-radius:28px;box-shadow:0 12px 50px #3b2a1d66;border:3px solid #6b4a2f}}
-  @media(prefers-reduced-motion:reduce){.hoops-pop{animation:none}}
+  @media(prefers-reduced-motion:reduce){.hoops-pop,.hoops-hint{animation:none}}
 </style>
