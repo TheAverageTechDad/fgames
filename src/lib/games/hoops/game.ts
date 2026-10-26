@@ -18,7 +18,7 @@ const DRIBBLE_RATE = { still: 1.6, moving: 2.2, sprint: 2.8 }; // bounces per se
 
 export function createShootaround(): Shootaround {
   const s: Shootaround = {
-    player: { x: 0, y: 0, z: 5.5, yaw: Math.PI, vy: 0, jumpT: -1 },
+    player: { x: 0, y: 0, z: 4, yaw: Math.PI, vy: 0, jumpT: -1 },
     ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', dribble: 0, windupT: 0, pending: null, resetT: 0,
     value: 1, score: 0, shots: 0, made: 0
   };
@@ -31,9 +31,9 @@ export function heldBallPosition(s: Shootaround): Vec3 {
   const { player } = s, fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
   if (s.mode === 'windup') return { x: player.x + fx * 0.2, y: RELEASE_HEIGHT + player.y, z: player.z + fz * 0.2 };
   return {
-    x: player.x + fx * 0.35 - fz * 0.25,
+    x: player.x + fx * 0.2 - fz * 0.4,
     y: BALL_R + (HAND_HEIGHT + player.y - BALL_R) * Math.abs(Math.cos(Math.PI * s.dribble)),
-    z: player.z + fz * 0.35 + fx * 0.25
+    z: player.z + fz * 0.2 + fx * 0.4
   };
 }
 

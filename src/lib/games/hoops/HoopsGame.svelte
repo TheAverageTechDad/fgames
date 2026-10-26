@@ -1,0 +1,98 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import Icon from '#lib/components/Icon.svelte';
+  import { haptic, installHaptics } from '#lib/haptics';
+  import type { GameEvent } from './game';
+  import type { createHoopsScene } from './scene';
+
+  let host: HTMLDivElement;
+  let pauseDialog: HTMLDialogElement;
+  let engine: ReturnType<typeof createHoopsScene> | undefined;
+  let made = $state(0), shots = $state(0), pop = $state(''), popId = $state(0);
+  let loading = $state(true), error = $state('');
+  let popTimer: ReturnType<typeof setTimeout>;
+
+  function update() {
+    if (!engine) return;
+    const s = engine.state, dad = engine.dadScreen();
+    made = s.made; shots = s.shots;
+    // ponytail: smoke hooks (scripts/hoops-smoke.mjs reads these).
+    Object.assign(host.dataset, { shots: String(s.shots), score: String(s.score), mode: s.mode, dadX: String(Math.round(dad.x)), dadY: String(Math.round(dad.y)) });
+  }
+  function event(e: GameEvent) {
+    if (e.type !== 'score' || !engine) return;
+    pop = `+${engine.state.value}`; popId++; haptic('land');
+    clearTimeout(popTimer); popTimer = setTimeout(() => { pop = ''; }, 900);
+  }
+  function pause() { engine?.setPaused(true); pauseDialog.showModal(); }
+  function resume() { engine?.setPaused(false); }
+  async function home() { await goto('/'); }
+
+  onMount(() => {
+    let cancelled = false;
+    const previousBg = document.documentElement.style.getPropertyValue('--screen-bg');
+    document.documentElement.style.setProperty('--screen-bg', '#f2cf98');
+    const removeHaptics = installHaptics();
+    void (async () => {
+      try {
+        await document.fonts.ready;
+        const { createHoopsScene } = await import('./scene');
+        if (cancelled) return;
+        engine = createHoopsScene(host, { update, event });
+        await engine.ready;
+        if (!cancelled) { loading = false; host.dataset.ready = 'true'; }
+      } catch (err) {
+        console.error('Hoops failed to load', err);
+        engine?.destroy();
+        if (!cancelled) { loading = false; error = 'The court couldn’t load. Try opening it again.'; }
+      }
+    })();
+    return () => {
+      cancelled = true; clearTimeout(popTimer); engine?.destroy(); removeHaptics();
+      document.documentElement.style.setProperty('--screen-bg', previousBg);
+    };
+  });
+</script>
+
+<div class="hoops-surround">
+  <main class="hoops-shell" aria-label="Hoops">
+    <div class="hoops-world" bind:this={host}></div>
+    <header class="hoops-header">
+      <button class="hoops-round" aria-label="Back to arcade" onclick={home}><Icon name="arrow-left" size={24}/></button>
+      <div class="hoops-count" aria-label={`Made ${made} of ${shots}`}><strong>{made}</strong><span>/ {shots}</span><small>made</small></div>
+      <button class="hoops-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
+    </header>
+    {#if pop}{#key popId}<div class="hoops-pop" role="status">{pop}</div>{/key}{/if}
+    {#if loading || error}
+      <div class="hoops-loading" role="status">
+        <h2>Hoops</h2>
+        <p>{error || 'Warming up…'}</p>
+        {#if error}<button class="toy-button" onclick={() => location.reload()}>Try again</button>{/if}
+      </div>
+    {/if}
+    <dialog class="hoops-pause" bind:this={pauseDialog} onclose={resume}>
+      <h2>Paused</h2>
+      <p>Swipe up from Dad to shoot. Drag anywhere else to move.</p>
+      <button class="toy-button" onclick={() => pauseDialog.close()}>Keep shooting</button>
+      <button class="toy-button" onclick={() => { pauseDialog.close(); home(); }}>Home</button>
+    </dialog>
+  </main>
+</div>
+
+<style>
+  .hoops-surround{height:100dvh;overflow:hidden;display:flex;justify-content:center;background:#7d5a3c;color:#3b2a1d}
+  .hoops-shell{position:relative;width:100%;max-width:500px;height:100%;isolation:isolate;overflow:hidden;background:#f2cf98;touch-action:none;-webkit-user-select:none;user-select:none;--hoops-top:max(12px,env(safe-area-inset-top))}
+  .hoops-world{position:absolute;inset:0;overflow:hidden}.hoops-world :global(canvas){display:block;width:100%;height:100%;outline:none;touch-action:none}
+  .hoops-header{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:var(--hoops-top) 15px 12px;pointer-events:none}.hoops-header>*{pointer-events:auto}
+  .hoops-round{width:43px;height:43px;min-width:43px;border:2px solid #6b4a2f;border-radius:50%;background:#fff6df;box-shadow:0 3px 0 #6b4a2f66;display:grid;place-items:center;color:#5a3d26;padding:8px}.hoops-round:active{transform:translateY(2px);box-shadow:none}.hoops-round.small{width:38px;height:38px;min-width:38px}
+  .pause-symbol{width:14px;height:16px;border-left:5px solid currentColor;border-right:5px solid currentColor}
+  .hoops-count{display:flex;align-items:baseline;gap:5px;padding:6px 16px;border-radius:20px;background:#fff6dfe6;box-shadow:0 3px 0 #6b4a2f44;font-variant-numeric:tabular-nums}.hoops-count strong{font-size:26px;font-weight:400}.hoops-count span{font-size:16px}.hoops-count small{font-size:12px;color:#8a6a4c}
+  .hoops-pop{position:absolute;top:18%;left:50%;transform:translateX(-50%);font-size:44px;color:#fff;text-shadow:0 4px 0 #c4502a,0 0 18px #ff9a4a99;animation:pop .9s ease-out both;pointer-events:none}
+  .hoops-loading{position:absolute;inset:0;background:#f2cf98;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:35px;gap:16px}.hoops-loading h2{font-size:34px}.hoops-loading p{font-size:16px;color:#8a6a4c}
+  .hoops-pause{margin:auto;width:calc(100% - 40px);max-width:350px;border:3px solid #6b4a2f;border-radius:25px;padding:25px;background:#fff7e3;color:#3b2a1d;box-shadow:0 7px 0 #6b4a2f44}.hoops-pause::backdrop{background:#3b2a1d99}.hoops-pause h2{font-size:30px}.hoops-pause p{font-size:14px;margin:12px 0 20px;color:#8a6a4c}.hoops-pause button{width:100%;margin-top:12px}
+  .hoops-world :global(.hoops-joystick){position:absolute;display:none;width:100px;height:100px;margin:-50px;border:2px solid #fff8e899;background:#fff8e82b;border-radius:50%;pointer-events:none;z-index:4}.hoops-world :global(.hoops-joystick>div){position:absolute;left:30px;top:30px;width:36px;height:36px;background:#fff8e8c9;border:2px solid #ffffffc9;border-radius:50%}
+  @keyframes pop{0%{opacity:0;scale:.6}20%{opacity:1;scale:1.15}70%{opacity:1;scale:1}100%{opacity:0;translate:0 -20px}}
+  @media(min-width:600px){.hoops-surround{padding:14px}.hoops-shell{height:min(960px,calc(100dvh - 28px));border-radius:28px;box-shadow:0 12px 50px #3b2a1d66;border:3px solid #6b4a2f}}
+  @media(prefers-reduced-motion:reduce){.hoops-pop{animation:none}}
+</style>

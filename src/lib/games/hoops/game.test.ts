@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RIM, BALL_R } from './court';
+import { ARC_R, BALL_R, COURT, RIM } from './court';
 import { createShootaround, heldBallPosition, jump, startShot, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
@@ -22,7 +22,7 @@ describe('shootaround', () => {
   it('keeps Dad on the court', () => {
     const s = createShootaround();
     run(s, 5, { x: 1, z: 1, sprint: true });
-    expect(s.player.x).toBeLessThanOrEqual(4.5); expect(s.player.z).toBeLessThanOrEqual(8);
+    expect(s.player.x).toBeLessThanOrEqual(COURT.halfWidth); expect(s.player.z).toBeLessThanOrEqual(COURT.depth);
   });
   it('releases after the windup and scores a good shot once, worth one inside the arc', () => {
     const s = createShootaround();
@@ -34,7 +34,7 @@ describe('shootaround', () => {
     expect([s.score, s.made, s.shots]).toEqual([1, 1, 1]);
   });
   it('scores two from beyond the arc', () => {
-    const s = createShootaround(); s.player.z = RIM.z + 5;
+    const s = createShootaround(); s.player.z = RIM.z + ARC_R + 0.8;
     startShot(s, good); run(s, 3);
     expect(s.score).toBe(2);
   });

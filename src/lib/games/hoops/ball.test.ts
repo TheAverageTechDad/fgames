@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createBall, stepBall, type Ball, type BallEvent } from './ball';
-import { BALL_R, BOARD, RIM, inBounds, isTwoPointer } from './court';
+import { ARC_R, BALL_R, BOARD, COURT, RIM, inBounds, isTwoPointer } from './court';
 
 // Whole frame counts: summing a float dt can add a frame and break the fps comparison.
 const run = (ball: Ball, seconds: number, dt = 1 / 60) => { const events: BallEvent[] = []; for (let i = 0; i < Math.round(seconds / dt); i++) events.push(...stepBall(ball, dt)); return events; };
 
 describe('court', () => {
   it('scores two beyond the arc and one inside', () => {
-    expect(isTwoPointer({ x: 0, z: RIM.z + 4.6 })).toBe(true);
-    expect(isTwoPointer({ x: 0, z: RIM.z + 4.4 })).toBe(false);
+    expect(isTwoPointer({ x: 0, z: RIM.z + ARC_R + 0.1 })).toBe(true);
+    expect(isTwoPointer({ x: 0, z: RIM.z + ARC_R - 0.1 })).toBe(false);
   });
   it('knows the boundaries', () => {
-    expect(inBounds({ x: 4.4, z: 7.9 })).toBe(true);
+    expect(inBounds({ x: COURT.halfWidth - 0.1, z: COURT.depth - 0.1 })).toBe(true);
     expect(inBounds({ x: 0, z: -0.1 })).toBe(false);
   });
 });
