@@ -1,26 +1,28 @@
 import { createBall, stepBall, type Ball, type BallEvent } from './ball';
-import { BALL_R, FENCE, POLE, RIM, isTwoPointer, type Vec3 } from './court';
+import { BALL_R, FENCE, POSTS, RIM, isTwoPointer, type Vec3 } from './court';
 import { shotVelocity, type Pull } from './shot';
 
 export type Mode = 'held' | 'aim' | 'flight' | 'loose';
 export type Move = { x: number; z: number; sprint: boolean };
-export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump'; at: Vec3 } | { type: 'shot'; value: 1 | 2; at: Vec3 };
+export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump' | 'dash' | 'skid' | 'tired'; at: Vec3 } | { type: 'shot'; value: 1 | 2; at: Vec3 };
 export type Shootaround = {
-  player: { x: number; y: number; z: number; vx: number; vz: number; yaw: number; vy: number; jumpT: number }; // jumpT < 0 when not crouching
-  ball: Ball; mode: Mode; dribble: number;
+  // jumpT < 0 when not crouching; dashT: seconds into a sprint, < 0 when not sprinting; skidT: the skid after one.
+  player: { x: number; y: number; z: number; vx: number; vz: number; yaw: number; vy: number; jumpT: number; dashT: number; skidT: number };
+  ball: Ball; mode: Mode; dribble: number; stamina: number; staminaRest: number; tired: boolean;
   value: 1 | 2; score: number; shots: number; made: number;
 };
 
-// Pocket Farm's run speed and Catcha's sprint; the jump is the farm's (a 0.09 s crouch, then up).
+// Pocket Farm's run speed and Catcha's sprint and stamina; the jump is the farm's (a 0.09 s crouch, then up).
 // ACCEL/DECEL: how quickly he gets up to speed and pulls up (per second, exponential).
-export const RUN_SPEED = 3.6, SPRINT = 1.35, ACCEL = 9, DECEL = 12, PICKUP_REACH = 0.6, HAND_HEIGHT = 1.0, RELEASE_HEIGHT = 1.85,
+// SPRINT_TIME: seconds of flat-out sprinting before he's out of puff (Catcha's Medium is 9, Hard 7).
+export const RUN_SPEED = 3.6, SPRINT = 1.35, SPRINT_TIME = 7, DASH_WINDUP = 0.1, ACCEL = 9, DECEL = 12, PICKUP_REACH = 0.6, HAND_HEIGHT = 1.0, RELEASE_HEIGHT = 1.85,
   SHOT_HOP = 3, CROUCH = 0.09, JUMP_V = 7.5, JUMP_GRAVITY = 30;
 const DRIBBLE_RATE = { still: 1.6, moving: 2.2, sprint: 2.8 }; // bounces per second
 
 export function createShootaround(): Shootaround {
   const s: Shootaround = {
-    player: { x: 0, y: 0, z: 4, vx: 0, vz: 0, yaw: Math.PI, vy: 0, jumpT: -1 },
-    ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', dribble: 0,
+    player: { x: 0, y: 0, z: 4, vx: 0, vz: 0, yaw: Math.PI, vy: 0, jumpT: -1, dashT: -1, skidT: 0 },
+    ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', dribble: 0, stamina: 1, staminaRest: 0, tired: false,
     value: 1, score: 0, shots: 0, made: 0
   };
   s.ball.p = heldBallPosition(s);
@@ -82,9 +84,22 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
   }
 
   // Movement in screen directions (the camera faces the hoop squarely), with momentum; feet planted while aiming.
-  const amount = s.mode === 'aim' ? 0 : Math.min(1, Math.hypot(move.x, move.z));
-  const top = RUN_SPEED * (move.sprint ? SPRINT : 1) * amount, len = Math.hypot(move.x, move.z) || 1;
-  const k = Math.min(1, dt * (amount > 0.05 ? ACCEL : DECEL));
+  const amount = s.mode === 'aim' ? 0 : Math.min(1, Math.hypot(move.x, move.z)), at = { x: p.x, y: 0, z: p.z };
+  // Catcha's sprint is a little move, not a switch: a 0.1 s crouch, a burst to ~1.55x that settles at 1.35x, a skid when it ends.
+  const wantSprint = move.sprint && amount > 0.05 && !s.tired;
+  if (wantSprint && p.dashT < 0) p.dashT = 0;
+  else if (!wantSprint && p.dashT >= 0) { if (p.dashT > 0.3) { p.skidT = 0.28; events.push({ type: 'skid', at }); } p.dashT = -1; }
+  if (p.dashT >= 0) { const before = p.dashT; p.dashT += dt; if (before < DASH_WINDUP && p.dashT >= DASH_WINDUP) events.push({ type: 'dash', at }); }
+  p.skidT = Math.max(0, p.skidT - dt);
+  const t = p.dashT, boost = t < 0 ? 1 : t < DASH_WINDUP ? 0.8 : SPRINT + 0.2 * Math.max(0, 1 - (t - DASH_WINDUP) / 0.3);
+  // Stamina: it drains while sprinting and refills at a quarter a second once he has eased off for half a second.
+  if (t >= 0) {
+    s.stamina = Math.max(0, s.stamina - dt / SPRINT_TIME); s.staminaRest = 0.5;
+    if (s.stamina === 0 && !s.tired) { s.tired = true; events.push({ type: 'tired', at }); }
+  } else if ((s.staminaRest -= dt) <= 0) s.stamina = Math.min(1, s.stamina + dt * 0.25);
+  if (s.tired && s.stamina >= 0.35) s.tired = false;
+  const top = RUN_SPEED * boost * amount, len = Math.hypot(move.x, move.z) || 1;
+  const k = Math.min(1, dt * (amount > 0.05 ? (t >= 0 ? ACCEL * 1.8 : ACCEL) : DECEL));
   p.vx += ((amount > 0.05 ? (move.x / len) * top : 0) - p.vx) * k;
   p.vz += ((amount > 0.05 ? (move.z / len) * top : 0) - p.vz) * k;
   if (Math.hypot(p.vx, p.vz) < 0.02) p.vx = p.vz = 0;
@@ -92,8 +107,11 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
   // He can leave the court to fetch a ball, as far as the fence (and the open grass at the near side).
   p.x = Math.max(-FENCE.side + 0.35, Math.min(FENCE.side - 0.35, x)); if (p.x !== x) p.vx = 0;
   p.z = Math.max(FENCE.back + 0.35, Math.min(FENCE.front - 0.35, z)); if (p.z !== z) p.vz = 0;
-  const px = p.x - POLE.x, pz = p.z - POLE.z, pd = Math.hypot(px, pz), clear = POLE.radius + 0.3;
-  if (pd < clear) { const k = pd > 1e-6 ? clear / pd : 1; p.x = POLE.x + (pd > 1e-6 ? px * k : clear); p.z = POLE.z + pz * k; }
+  for (const post of POSTS) {
+    const px = p.x - post.x, pz = p.z - post.z, pd = Math.hypot(px, pz), clear = post.radius + 0.3;
+    if (pd >= clear) continue;
+    if (pd < 1e-6) p.x = post.x + clear; else { p.x = post.x + (px * clear) / pd; p.z = post.z + (pz * clear) / pd; }
+  }
   if (amount > 0.05) p.yaw = Math.atan2(move.x, move.z);
   if (s.mode === 'aim') faceRim(s);
 

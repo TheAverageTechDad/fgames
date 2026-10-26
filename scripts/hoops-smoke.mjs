@@ -23,11 +23,16 @@ try {
   }
 
   // 1. A drag that starts on Dad and moves straight away is movement, even a sprint; so is one on empty court.
+  // Touches through CDP, with the touch-down and the first move sent together as a real finger's are: the headless
+  // renderer can take longer than the aim's hold between two separate round trips.
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([id, x, y]) => ({ id, x, y })) });
   for (const offset of [0, 120]) {
     await holding(); const s = await read();
-    await page.mouse.move(s.x - offset, s.y + offset); await page.mouse.down();
-    const dir = s.x > 195 ? -80 : 80; // toward the middle, never into a sideline
-    await page.mouse.move(s.x - offset + dir, s.y + offset, { steps: 3 }); await page.waitForTimeout(600); await page.mouse.up();
+    const x0 = s.x - offset, y = s.y + offset, dir = s.x > 195 ? -80 : 80; // toward the middle, never into a sideline
+    await Promise.all([touch('touchStart', [[1, x0, y]]), touch('touchMove', [[1, x0 + dir / 3, y]])]);
+    await touch('touchMove', [[1, x0 + (dir * 2) / 3, y]]); await touch('touchMove', [[1, x0 + dir, y]]);
+    await page.waitForTimeout(600); await touch('touchEnd', []);
     const after = await read();
     assert.equal(after.shots, s.shots, 'a drag must not shoot');
     assert.ok(Math.abs(after.x - s.x) > 20, `Dad should move (${s.x} → ${after.x})`);
@@ -53,8 +58,6 @@ try {
 
   // 5. Two fingers: the first steers, a second held on Dad aims and shoots (it must not become a jump).
   await holding(); s = await read();
-  const cdp = await context.newCDPSession(page);
-  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([id, x, y]) => ({ id, x, y })) });
   const stick = [1, s.x - 110, s.y + 220], to = away(s, 78);
   await touch('touchStart', [stick]);
   await touch('touchStart', [stick, [2, s.x, s.y]]);

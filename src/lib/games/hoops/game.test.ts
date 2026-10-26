@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ARC_R, BALL_R, FENCE, POLE, RIM } from './court';
-import { RUN_SPEED, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
+import { RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
 const ideal = { dx: 0, dy: 78, minSide: 390 }; // pull straight back: Dad starts straight out from the rim
@@ -26,6 +26,42 @@ describe('shootaround', () => {
     run(s, 0.6, right); expect(speed(s)).toBeGreaterThan(RUN_SPEED * 0.95);
     run(s, 1 / 60); expect(speed(s)).toBeGreaterThan(RUN_SPEED * 0.5);
     run(s, 0.6); expect(speed(s)).toBeLessThan(0.05);
+  });
+  it('sprints after a short crouch: a burst, then a fast run', () => {
+    const s = createShootaround(), dash = { x: 1, z: 0, sprint: true };
+    const events = run(s, 0.6, dash);
+    expect(events.filter(e => e.type === 'dash')).toHaveLength(1);
+    expect(speed(s)).toBeGreaterThan(RUN_SPEED * 1.3);
+  });
+  it('skids when a real sprint ends, not after a quick one', () => {
+    const quick = createShootaround(); run(quick, 0.2, { x: 1, z: 0, sprint: true });
+    expect(run(quick, 0.1, { x: 1, z: 0, sprint: false }).some(e => e.type === 'skid')).toBe(false);
+    const long = createShootaround(); run(long, 0.6, { x: 1, z: 0, sprint: true });
+    expect(run(long, 0.1, { x: 1, z: 0, sprint: false }).some(e => e.type === 'skid')).toBe(true);
+  });
+  it('runs out of puff after SPRINT_TIME of sprinting, and only runs until rested', () => {
+    const s = createShootaround();
+    let tired = 0;
+    for (let i = 0; i < Math.round((SPRINT_TIME + 0.5) * 60); i++) {
+      // back and forth across the court so he never pins against the fence
+      const dir = Math.floor(i / 90) % 2 ? -1 : 1;
+      tired += stepShootaround(s, 1 / 60, { x: dir, z: 0, sprint: true }).filter(e => e.type === 'tired').length;
+    }
+    expect(tired).toBe(1); expect(s.tired).toBe(true);
+    run(s, 0.6, { x: 1, z: 0, sprint: true });
+    expect(speed(s)).toBeLessThan(RUN_SPEED * 1.02);
+    run(s, 2.5); expect(s.tired).toBe(false);
+  });
+  it('does not tire from ordinary running', () => {
+    const s = createShootaround();
+    run(s, 4, { x: 0.3, z: 0.2, sprint: false });
+    expect(s.stamina).toBe(1);
+  });
+  it('walks around the family on the sideline, not through them', () => {
+    const s = createShootaround(), fan = FAMILY[0];
+    s.player.x = fan.x; s.player.z = fan.z + 2;
+    run(s, 3, { x: 0, z: -1, sprint: false });
+    for (const f of FAMILY) expect(Math.hypot(s.player.x - f.x, s.player.z - f.z)).toBeGreaterThan(f.radius + 0.25);
   });
   it('keeps Dad inside the fence and out of the pole', () => {
     const s = createShootaround();

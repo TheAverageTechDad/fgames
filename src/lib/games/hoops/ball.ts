@@ -1,6 +1,6 @@
-import { BALL_R, BOARD, FENCE, GRAVITY, POLE, RIM, inBounds, onAsphalt, type Vec3 } from './court';
+import { BALL_R, BOARD, FENCE, GRAVITY, POSTS, RIM, inBounds, onAsphalt, type Vec3 } from './court';
 
-export type BallEvent = { type: 'floor' | 'rim' | 'board' | 'pole' | 'fence' | 'score' | 'out'; speed: number; at: Vec3 };
+export type BallEvent = { type: 'floor' | 'rim' | 'board' | 'pole' | 'fan' | 'fence' | 'score' | 'out'; speed: number; at: Vec3 };
 export type Ball = { p: Vec3; v: Vec3; acc: number; scored: boolean; out: boolean };
 
 // A fixed 120 Hz step, so a shot flies the same at any frame rate; fast balls substep so they cannot tunnel.
@@ -56,11 +56,12 @@ function substep(ball: Ball, h: number, events: BallEvent[]) {
     hit('board', bounce(ball, c, n, BALL_R, BOARD_E));
   }
 
-  // Pole: a vertical cylinder.
-  d = Math.hypot(p.x - POLE.x, p.z - POLE.z);
-  if (p.y < POLE.top && d < BALL_R + POLE.radius) {
-    const n = d > 1e-9 ? { x: (p.x - POLE.x) / d, y: 0, z: (p.z - POLE.z) / d } : { x: 0, y: 0, z: 1 };
-    hit('pole', bounce(ball, { x: POLE.x, y: p.y, z: POLE.z }, n, BALL_R + POLE.radius, POLE_E));
+  // The pole and the family: vertical cylinders.
+  for (const post of POSTS) {
+    d = Math.hypot(p.x - post.x, p.z - post.z);
+    if (p.y > post.top || d >= BALL_R + post.radius) continue;
+    const n = d > 1e-9 ? { x: (p.x - post.x) / d, y: 0, z: (p.z - post.z) / d } : { x: 0, y: 0, z: 1 };
+    hit(post.kind, bounce(ball, { x: post.x, y: p.y, z: post.z }, n, BALL_R + post.radius, POLE_E));
   }
 
   // Rim: a torus. The nearest point of the ring circle, then a sphere against that point.

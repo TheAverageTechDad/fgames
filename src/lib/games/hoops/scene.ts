@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FENCE, GRAVITY, POLE, RIM } from './court';
+import { createPuffs } from '../farm/juice';
+import { createHoopsAudio } from './audio';
+import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
 import { RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
 import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 
 const DAD = '/catcha/assets/chibi-dad.glb';
+// The family on the sideline: Catcha's Mom and the two girls.
+const FAMILY_ASSETS = { mom: '/catcha/assets/chibi-mom.glb', girl: '/catcha/assets/chibi-sibling-sample.glb', toddler: '/catcha/assets/chibi-toddler.glb' };
+type Mood = 'idle' | 'watch' | 'cheer' | 'aww' | 'flinch';
+const CHEER_Z = 2.3;
 // The court texture covers the asphalt: the lines plus a dark border.
 const PAD = { minX: -COURT.halfWidth - 0.4, maxX: COURT.halfWidth + 0.4, minZ: -0.6, maxZ: COURT.depth + 0.3 }, PX = 100;
 const turn = (from: number, to: number, k: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * Math.min(1, k);
@@ -156,6 +162,32 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const dadShadow = shadowDisc(0.36);
   const ring = new THREE.Mesh(keep(new THREE.RingGeometry(0.44, 0.52, 40)), keep(new THREE.MeshBasicMaterial({ color: '#ffcf3d', transparent: true, opacity: 0.9, depthWrite: false })));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.025; scene.add(ring);
+  // Catcha's stamina gauge around the ring: neon green while it drains, red when he's out of puff. One segment per 1/64.
+  const gauge = new THREE.Mesh(keep(new THREE.RingGeometry(0.56, 0.65, 64, 1, Math.PI / 2, Math.PI * 2)), keep(new THREE.MeshBasicMaterial({ color: '#3dff8a', transparent: true, opacity: 0.95, depthWrite: false })));
+  gauge.rotation.x = -Math.PI / 2; gauge.position.y = 0.027; gauge.visible = false; scene.add(gauge);
+  // Catcha's soft dust: kicked up while running, a burst on a sprint, thrown forward in a skid.
+  const puffs = createPuffs(scene);
+  const dust = (x: number, z: number, n: number, push = { x: 0, z: 0 }, spread = 0.25) => {
+    const hex = onAsphalt({ x, z }) ? '#ddd6c8' : '#e6f5c0';
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = 0.4 + Math.random() * 0.6;
+      puffs.spawn(x + Math.cos(a) * spread, 0.12, z + Math.sin(a) * spread, Math.cos(a) * s + push.x, 0.5 + Math.random() * 0.5, Math.sin(a) * s + push.z, 0.55, 0.55 + Math.random() * 0.4, hex);
+    }
+  };
+  const audio = createHoopsAudio();
+  // The family: each faces Dad, sways, claps while a shot is up, jumps and cheers a basket, slumps at a near miss, flinches if hit.
+  const fans = FAMILY.map((spec, i) => {
+    const group = new THREE.Group(), body = new THREE.Group(); group.add(body); group.position.set(spec.x, 0, spec.z); scene.add(group);
+    shadowDisc(spec.radius + 0.06).position.set(spec.x, 0.02, spec.z);
+    return { spec, group, body, joints: [] as THREE.Object3D[], model: null as THREE.Object3D | null, mood: 'idle' as Mood, moodT: 0, hop: 0, y: 0, vy: 0, phase: i * 1.7 };
+  });
+  const setMood = (mood: Mood, seconds: number, hop = false) => fans.forEach((f, i) => {
+    f.mood = mood; f.moodT = seconds;
+    if (hop) f.hop = 0.04 + i * 0.07 + Math.random() * 0.05;
+  });
+  // ?fans=cheer (or watch, aww, flinch) holds the family in one mood, for tuning poses like the farm's ?time=.
+  const holdMood = new URLSearchParams(location.search).get('fans') as Mood | null;
+  let shotLive = false, rimTouched = false, clock = 0, wasAir = false, runDust = 0;
   const joints: THREE.Object3D[] = [];
   // The right hand: the bottom of the right arm in the arm's own space, measured in the rest pose.
   let rightArm: THREE.Object3D | null = null;
@@ -169,13 +201,18 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     o.geometry.dispose();
     for (const m of Array.isArray(o.material) ? o.material : [o.material]) { for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose(); m.dispose(); }
   });
-  const ready = new GLTFLoader().loadAsync(DAD).then(gltf => {
-    if (disposed) { disposeObject(gltf.scene); return; }
-    model = gltf.scene;
-    const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
-    model.scale.multiplyScalar(DAD_HEIGHT / size.y);
-    model.position.y -= new THREE.Box3().setFromObject(model).min.y;
-    model.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } else if (/^(arm-|leg-)/.test(o.name)) joints.push(o); });
+  /** Scales a loaded character to a height, feet on the ground, and collects its arm and leg pivots. */
+  const fit = (root: THREE.Object3D, height: number, into: THREE.Object3D[]) => {
+    root.scale.multiplyScalar(height / new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y);
+    root.position.y -= new THREE.Box3().setFromObject(root).min.y;
+    root.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } else if (/^(arm-|leg-)/.test(o.name)) into.push(o); });
+    return root;
+  };
+  const loader = new GLTFLoader();
+  const ready = Promise.all([loader.loadAsync(DAD), ...fans.map(f => loader.loadAsync(FAMILY_ASSETS[f.spec.who]))]).then(([gltf, ...family]) => {
+    if (disposed) { [gltf, ...family].forEach(g => disposeObject(g.scene)); return; }
+    family.forEach((g, i) => { const f = fans[i]; f.model = fit(g.scene, f.spec.height, f.joints); f.body.add(f.model); });
+    model = fit(gltf.scene, DAD_HEIGHT, joints);
     body.add(model);
     // The model's arms are named as seen from its front, so 'arm-left' is Dad's right hand.
     rightArm = joints.find(j => j.name === 'arm-left') ?? null;
@@ -207,6 +244,17 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   };
 
   function feedback(e: GameEvent) {
+    audio.play(e);
+    // The family follows each shot: clapping while it's up, a cheer if it drops, an "aww" if it rims out.
+    if (e.type === 'shot') { shotLive = true; rimTouched = false; setMood('watch', 3); }
+    if (e.type === 'rim' && shotLive) rimTouched = true;
+    if (e.type === 'score' && shotLive) { shotLive = false; audio.cheer(state.value); setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); }
+    if (e.type === 'floor' && shotLive) { shotLive = false; setMood('aww', 0.9); if (rimTouched) audio.aww(); }
+    if (e.type === 'fan') { const hit = fans.reduce((a, f) => Math.hypot(f.spec.x - e.at.x, f.spec.z - e.at.z) < Math.hypot(a.spec.x - e.at.x, a.spec.z - e.at.z) ? f : a); hit.mood = 'flinch'; hit.moodT = 0.45; }
+    const p = state.player, back = { x: -Math.sin(dad.rotation.y) * 1.2, z: -Math.cos(dad.rotation.y) * 1.2 };
+    if (e.type === 'dash') dust(p.x, p.z, 6, back);
+    if (e.type === 'skid') dust(p.x + Math.sin(dad.rotation.y) * 0.3, p.z + Math.cos(dad.rotation.y) * 0.3, 5, { x: -back.x, z: -back.z });
+    if (e.type === 'jump') dust(p.x, p.z, 3, undefined, 0.15);
     if (e.type === 'floor' || e.type === 'dribble') ballSquash = 1;
     if (e.type === 'rim' || e.type === 'board' || e.type === 'pole') ballPulse = 1;
     if (e.type === 'score') swish = 1;
@@ -222,6 +270,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     frame = requestAnimationFrame(animate);
     const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
     if (paused || document.hidden || !loaded) return;
+    input.tick();
     for (let e = input.next(); e; e = input.next()) {
       if (e.type === 'aim') startAim(state);
       if (e.type === 'cancel') cancelAim(state);
@@ -238,18 +287,34 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     dad.rotation.y = turn(dad.rotation.y, shooting ? Math.atan2(RIM.x - p.x, RIM.z - p.z) : p.yaw, dt * 12);
     stepPhase += dt * (moving ? 7 + 6 * Math.min(1.35, speed / RUN_SPEED) : 0);
     const air = p.y > 0, crouching = p.jumpT >= 0, braking = Math.max(-1, Math.min(1, (speed - lastSpeed) / Math.max(dt, 1e-6) / 20));
-    lastSpeed = speed; followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt);
+    lastSpeed = speed; followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt); clock += dt;
+    if (wasAir && !air) { audio.land(); dust(p.x, p.z, 5, undefined, 0.2); }
+    wasAir = air;
+    // Catcha's sprint body language: crouch and lean back in the wind-up, lean hard into the sprint, sit back in the skid.
+    const winding = p.dashT >= 0 && p.dashT < 0.1, sprinting = p.dashT >= 0.1, skidding = p.skidT > 0;
     const bend = pickupT > 0 ? Math.sin((pickupT / PICKUP) * Math.PI) : 0;
-    squash += ((crouching ? 0.75 : air ? 1.1 : aiming ? 0.94 : 1 - bend * 0.12) - squash) * Math.min(1, dt * 14);
+    squash += ((crouching ? 0.75 : air ? 1.1 : winding ? 0.86 : skidding ? 0.92 : aiming ? 0.94 : 1 - bend * 0.12) - squash) * Math.min(1, dt * 14);
     body.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
-    lean += ((air ? 0 : 0.14 * Math.min(1.35, speed / RUN_SPEED) + 0.12 * braking + 0.6 * bend) - lean) * Math.min(1, dt * 10);
+    const leanTo = air ? 0 : winding ? -0.2 : skidding ? -0.22 : 0.14 * Math.min(1.35, speed / RUN_SPEED) + (sprinting ? 0.12 : 0) + 0.12 * braking + 0.6 * bend;
+    lean += (leanTo - lean) * Math.min(1, dt * 10);
     body.rotation.x = lean;
+    // Dust from his feet as he runs, more the faster he goes.
+    runDust = moving && !air ? runDust + dt * (2 + 6 * Math.min(1.5, speed / RUN_SPEED) ** 2) : 0;
+    for (; runDust >= 1; runDust--) dust(p.x - Math.sin(dad.rotation.y) * 0.25, p.z - Math.cos(dad.rotation.y) * 0.25, 1, { x: -p.vx * 0.15, z: -p.vz * 0.15 }, 0.12);
+    // The stamina gauge, only while it matters.
+    gauge.visible = p.dashT >= 0 || state.stamina < 1;
+    if (gauge.visible) {
+      gauge.geometry.setDrawRange(0, Math.max(1, Math.round(state.stamina * 64)) * 6);
+      (gauge.material as THREE.MeshBasicMaterial).color.set(state.tired ? '#ff6b5b' : '#3dff8a');
+      gauge.position.set(p.x, 0.027, p.z);
+    }
     // The dribble: the hand rides the top of the ball, pushes it down, and is waiting when it comes back.
     const beat = state.dribble - Math.floor(state.dribble);
     for (const joint of joints) {
       const isArm = joint.name.startsWith('arm'), right = joint.name.includes('right');
-      const swing = moving && !air ? Math.sin(stepPhase) * 0.6 * (right ? 1 : -1) : 0;
-      let to = isArm ? -swing * 0.7 : swing;
+      // Sprinting arms pump harder and sit a little back, like a real run.
+      const swing = moving && !air ? Math.sin(stepPhase) * (sprinting ? 0.85 : 0.6) * (right ? 1 : -1) : 0;
+      let to = isArm ? -swing * (sprinting ? 1.1 : 0.7) + (sprinting ? 0.25 : winding ? 0.6 : 0) : swing;
       if (isArm && bend > 0) to = -1.3 * bend - 0.2;
       else if (isArm && shooting) to = aiming ? -2.75 : -2.3;
       else if (joint === rightArm && state.mode === 'held') to = -0.55 + 0.3 * Math.sin(2 * Math.PI * beat);
@@ -289,6 +354,36 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     ballShadow.position.set(b.x, 0.021, b.z); ballShadow.scale.setScalar(Math.max(0.4, 1 - b.y * 0.15));
 
     swish = Math.max(0, swish - dt / 0.3); net.scale.y = 1 + Math.sin(swish * Math.PI) * 0.35;
+    puffs.step(dt);
+    for (const f of fans) {
+      if (holdMood) { f.mood = holdMood; f.moodT = 1; }
+      if ((f.moodT -= dt) <= 0) f.mood = 'idle';
+      const t = clock + f.phase, toddler = f.spec.who === 'toddler';
+      f.group.rotation.y = turn(f.group.rotation.y, Math.atan2(p.x - f.spec.x, p.z - f.spec.z), dt * 4);
+      if (f.hop > 0 && (f.hop -= dt) <= 0) f.vy = toddler ? 3 : 2.5;
+      if (f.y > 0 || f.vy > 0) {
+        f.vy -= 14 * dt; f.y += f.vy * dt;
+        // The toddler can't stop bouncing while everyone cheers.
+        if (f.y <= 0) { f.y = 0; f.vy = toddler && f.mood === 'cheer' && f.moodT > 0.35 ? 2.4 : 0; }
+      }
+      f.group.position.y = f.y;
+      const tilt = f.mood === 'aww' ? 0.32 : f.mood === 'flinch' ? -0.35 : f.mood === 'watch' ? 0.12 : 0;
+      f.body.rotation.x += (tilt - f.body.rotation.x) * Math.min(1, dt * 8);
+      f.body.rotation.z = Math.sin(t * (f.mood === 'cheer' ? 9 : 1.6)) * (f.mood === 'cheer' ? 0.1 : 0.04);
+      const stretch = f.y > 0 ? 1.08 : f.mood === 'aww' ? 0.95 : 1;
+      f.body.scale.set(1 / Math.sqrt(stretch), stretch, 1 / Math.sqrt(stretch));
+      for (const joint of f.joints) {
+        const arm = joint.name.startsWith('arm'), side = joint.name.includes('right') ? 1 : -1;
+        const to = !arm ? (f.y > 0 ? side * 0.4 : 0)
+          : f.mood === 'cheer' ? 0
+          : f.mood === 'watch' ? -1.2 + Math.sin(t * 20) * 0.22
+          : f.mood === 'flinch' ? -1.6 : f.mood === 'aww' ? 0.15 : Math.sin(t * 2 + side) * 0.08;
+        joint.rotation.x += (to - joint.rotation.x) * Math.min(1, dt * 14);
+        // Arms thrown up and out to the sides for a cheer, waving (the pivots aren't mirrored, so the sides rotate opposite ways);
+        // raised forward they'd point at the camera and hide behind those big heads.
+        if (arm) joint.rotation.z += ((f.mood === 'cheer' ? side * (CHEER_Z + Math.sin(t * 14) * 0.25) : 0) - joint.rotation.z) * Math.min(1, dt * 14);
+      }
+    }
     renderer.render(scene, camera);
     hudClock += dt;
     if (hudClock > 0.1 || events.length) { hudClock = 0; callbacks.update(); }
@@ -300,9 +395,10 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     setPaused(value: boolean) { paused = value; input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
     destroy() {
       if (disposed) return;
-      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy();
+      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy(); audio.destroy(); puffs.dispose();
       document.removeEventListener('visibilitychange', visibility);
       if (model) disposeObject(model);
+      for (const f of fans) if (f.model) disposeObject(f.model);
       disposables.forEach(d => d.dispose()); sun.shadow.map?.dispose(); renderer.dispose(); renderer.forceContextLoss(); canvas.remove();
     }
   };

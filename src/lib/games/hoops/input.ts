@@ -24,14 +24,14 @@ export function readPull(origin: Point, end: Point, minSide: number): { kind: 's
  * pull back, let go. A touch on Dad that moves straight away stays movement.
  */
 export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, dad: () => Target | null) {
-  let held: (Point & { id: number; t: number; owned: boolean; timer: ReturnType<typeof setTimeout> }) | null = null;
+  let held: (Point & { id: number; t: number; owned: boolean }) | null = null;
   let aim: (Point & { id: number; now: Point }) | null = null, enabled = true, tapJump = false;
   const queue: AimEvent[] = [];
   // A finger on Dad: if the stick is already steering (a second finger), take it so it can't turn into the stick's jump.
   const claim = (e: PointerEvent) => {
     if (held || aim || !claimsShot({ x: e.clientX, y: e.clientY }, dad())) return false;
     const owned = stick.busy();
-    held = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, owned, timer: setTimeout(begin, HOLD_MS) };
+    held = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, owned };
     if (owned) { e.preventDefault(); canvas.setPointerCapture(e.pointerId); }
     return owned;
   };
@@ -42,7 +42,7 @@ export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, d
     if (!owned) { stick.releasePointer(); canvas.setPointerCapture(id); }
     aim = { id, x, y, now: { x, y } }; queue.push({ type: 'aim' });
   }
-  const forget = () => { if (held) clearTimeout(held.timer); held = null; };
+  const forget = () => { held = null; };
   const move = (e: PointerEvent) => {
     if (aim && e.pointerId === aim.id) aim.now = { x: e.clientX, y: e.clientY };
     else if (held && e.pointerId === held.id && Math.hypot(e.clientX - held.x, e.clientY - held.y) > HOLD_SLOP) forget();
@@ -67,6 +67,12 @@ export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, d
   for (const type of ends) canvas.addEventListener(type, up as EventListener);
   window.addEventListener('blur', drop); document.addEventListener('visibilitychange', hidden);
   return {
+    /**
+     * Once per frame, before reading: starts the aim if the finger has stayed still on Dad for HOLD_MS. Deciding here,
+     * after the browser has delivered every pending move, rather than on a timer, means a busy main thread (the first
+     * touch starting audio, a slow frame) can never turn a drag into an aim.
+     */
+    tick(now = performance.now()) { if (held && now - held.t >= HOLD_MS) begin(); },
     read: (): Move => stick.read(),
     jump() { const jumped = stick.jump() || (tapJump && enabled); tapJump = false; return jumped; },
     /** The live pull while aiming (screen px from where the thumb held Dad), for drawing the arc. */

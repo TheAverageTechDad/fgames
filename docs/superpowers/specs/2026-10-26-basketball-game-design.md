@@ -26,7 +26,9 @@ As in the other games, the point is accessible touch controls and satisfying phy
 - Shot power is distance-relative: the same comfortable pull scores from anywhere.
 - On the player's team only the controlled player can steal; AI teammates contest and block lanes.
 - No mid-match save: pause while the page is alive, lose the match if the page is killed.
-- Outdoor court. Dad plays; the rest of the family watches and cheers from the side.
+- Outdoor court. Dad plays; the rest of the family watches and cheers from the side. They stand just behind the baseline, left of the hoop, inside the fence: in view, clear of the thumb, never blocking the rim. They face the player, clap while a shot is up, jump and cheer a basket (arms up and out, the toddler bouncing), slump at a miss with a soft "aww" if it rimmed out, and flinch if the ball hits them; the ball bounces off them and the player walks around them.
+- Catcha's sprint, as in Catcha: push the stick to its edge for a 0.1 s crouch, a burst to about 1.55× that settles at 1.35×, dust kicked up behind, and a skid with dust thrown forward when a real sprint ends. Sprinting drains stamina over 7 seconds (refilling once he eases off); run it dry and he's out of puff until it is back to 35%, shown by Catcha's neon gauge around his ring.
+- Sound and vibration bring it alive: a soft tap for every dribble, a thunk for a bounce (duller on grass), a wooden thwack off the backboard, a metal ting off the rim, a swish through the net with a small chime (bigger for two points) and the family's claps, plus whooshes for the shot, sprint, skid and jump. Tiny vibrations accompany the dribble, pickup, shot, rim, backboard, sprint and baskets on Android (and on iOS where the browser allows). Sound and vibration follow the arcade-wide switches, also in the pause card.
 - The other five players are variations of Dad: with or without a beard, with or without glasses, and so on.
 - Two-minute matches with the simplified rules below.
 
@@ -194,3 +196,4 @@ Consequence for scope: the five other players are Dad variants (glasses on/off, 
 - The five other players are variations of Dad (glasses, beard, skin, hair, jersey, slight scale) from the existing model, sharing its rig.
 - After the first phone playtest: hold-pull-release shooting with the rising half of the arc shown, a hand-driven dribble, out-of-bounds balls that keep bouncing and are tossed back, a pickup motion, and movement with momentum.
 - After the second playtest: a bigger court with a fence and a following camera, no toss back from out of bounds, a wider and quicker touch on the player to aim, and aim help that eases off instead of snapping.
+- After the second playtest's follow-up: Catcha's sprint with stamina, dust and skid; sound and vibration for every ball contact; the family watching and reacting from behind the baseline.

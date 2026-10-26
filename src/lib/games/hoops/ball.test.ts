@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBall, stepBall, type Ball, type BallEvent } from './ball';
-import { ARC_R, BALL_R, BOARD, COURT, FENCE, RIM, inBounds, isTwoPointer } from './court';
+import { ARC_R, BALL_R, BOARD, COURT, FAMILY, FENCE, RIM, inBounds, isTwoPointer } from './court';
 
 // Whole frame counts: summing a float dt can add a frame and break the fps comparison.
 const run = (ball: Ball, seconds: number, dt = 1 / 60) => { const events: BallEvent[] = []; for (let i = 0; i < Math.round(seconds / dt); i++) events.push(...stepBall(ball, dt)); return events; };
@@ -72,6 +72,12 @@ describe('ball', () => {
         expect(ball.p.z).toBeGreaterThan(FENCE.back); expect(ball.p.z).toBeLessThan(FENCE.front);
       }
     }
+  });
+  it('bounces off a family member rather than through them', () => {
+    const fan = FAMILY[0], ball = createBall({ x: fan.x, y: 0.6, z: fan.z + 2 }, { x: 0, y: 0, z: -8 });
+    const events = run(ball, 0.6);
+    expect(events.some(e => e.type === 'fan')).toBe(true);
+    expect(ball.p.z).toBeGreaterThan(fan.z);
   });
   it('rolls to a stop sooner on grass than on the court', () => {
     const court = createBall({ x: 0, y: BALL_R, z: 2 }, { x: 0, y: 0, z: 3 }), grass = createBall({ x: 0, y: BALL_R, z: COURT.depth + 0.6 }, { x: 0, y: 0, z: 3 });
