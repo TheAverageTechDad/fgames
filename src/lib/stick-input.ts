@@ -1,12 +1,13 @@
-import type { Point } from './model';
+type Point = { x: number; z: number };
 
-export function createFarmInput(canvas: HTMLCanvasElement, host: HTMLElement) {
+// Pocket Farm's floating stick, shared. `claim` lets a game take a pointer for its own gesture (it then never anchors, captures or jumps).
+export function createStickInput(canvas: HTMLCanvasElement, host: HTMLElement, options: { className?: string; claim?: (e: PointerEvent) => boolean } = {}) {
   let pointer: number | null = null, anchor = { x: 0, y: 0 }, movement: Point = { x: 0, z: 0 }, enabled = true;
   // Catcha's jump controls: a quick tap that never steered, a second finger, or Space.
   let jumpQueued = false, downAt = 0, steered = false, sprint = false;
   const keys = new Set<string>();
   const stick = document.createElement('div');
-  stick.className = 'farm-joystick'; stick.setAttribute('aria-hidden', 'true');
+  stick.className = options.className ?? 'farm-joystick'; stick.setAttribute('aria-hidden', 'true');
   const thumb = document.createElement('div'); stick.append(thumb); host.append(stick);
   const clear = () => {
     if (pointer !== null && canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
@@ -14,6 +15,7 @@ export function createFarmInput(canvas: HTMLCanvasElement, host: HTMLElement) {
   };
   const down = (e: PointerEvent) => {
     if (!enabled || e.button !== 0) return;
+    if (options.claim?.(e)) return;
     if (pointer !== null) { e.preventDefault(); jumpQueued = true; return; }
     e.preventDefault(); pointer = e.pointerId; anchor = { x: e.clientX, y: e.clientY }; downAt = e.timeStamp; steered = false;
     canvas.setPointerCapture(pointer);

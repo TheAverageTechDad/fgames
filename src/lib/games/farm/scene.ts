@@ -4,7 +4,7 @@ import { FARM_ASSETS } from './assets';
 import { COLORS, SHELF_X, coinIcon, cropIcon, createFarmProps, mergeByMaterial, seeded, tile, tileText } from './props';
 import { buildFarmWorld, groundTile, LAMPS } from './world';
 import { createPuffs, createSky } from './juice';
-import { createFarmInput } from './input';
+import { createStickInput } from '#lib/stick-input';
 import { createFarmAudio } from './audio';
 import { stepFarm, farmGoal, nextPurchase, speed, canSprint, total, distance, hasCoop, hasOrchard, hasHives, stallFor, boardOpen, buyUpgrade, buyDecor, hireHelper,
   BOUNDS, PRODUCTS, PURCHASES, FIELDS, GROW, SPOTS, NESTS, HIVES, STALLS, YARD, ORCHARD, DECOR, ARRIVE_SECONDS, PATIENCE_SECONDS, RUN_SPEED,
@@ -63,7 +63,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.04;
   const canvas = renderer.domElement; canvas.tabIndex = 0; canvas.setAttribute('aria-label', 'Farm. Drag to move, or use arrow keys. Tap or press Space to jump.');
   canvas.dataset.farmCanvas = ''; host.append(canvas);
-  const input = createFarmInput(canvas, host), audio = createFarmAudio(state), props = createFarmProps();
+  const input = createStickInput(canvas, host), audio = createFarmAudio(state), props = createFarmProps();
   const scene = new THREE.Scene(); scene.background = new THREE.Color(COLORS.grass);
   const hemi = new THREE.HemisphereLight('#fffaf0', '#6f9450', 1.45); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff1d6', 2.5); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
