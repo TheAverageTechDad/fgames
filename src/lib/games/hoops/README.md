@@ -1,6 +1,6 @@
 # Hoops
 
-Working title for the basketball game. Build step 1, the shootaround: Dad alone on a half court with a ball and a hoop. Open `/hoops` (not linked from the arcade yet). Design: `docs/superpowers/specs/2026-10-26-basketball-game-design.md`.
+Working title for the basketball game. Build step 1, the shootaround: Dad alone on a half court with a ball and a hoop. First card on the arcade home screen, or open `/hoops`. Design: `docs/superpowers/specs/2026-10-26-basketball-game-design.md`.
 
 - `court.ts`: court axes and sizes (Dad is 1.7 units tall), the arc and the boundaries.
 - `ball.ts`: the only physics body. A fixed 120 Hz step with substeps, against the floor, backboard box, rim torus and pole. A basket counts once, downward through the ring.
