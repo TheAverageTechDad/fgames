@@ -1,7 +1,7 @@
 import { BALL_R, GRAVITY, RIM, isTwoPointer, type Vec3 } from './court';
 
-/** A shot swipe in screen px (dy positive downward), its duration, and the viewport's shorter side. */
-export type Swipe = { dx: number; dy: number; seconds: number; minSide: number };
+/** A shot swipe in screen px (dy positive downward), its duration, the viewport's shorter side, and the screen angle from Dad to the rim (atan2(dy, dx)). */
+export type Swipe = { dx: number; dy: number; seconds: number; minSide: number; rimAngle?: number };
 
 export const S_IDEAL = 0.6, AIM_CONE = (25 * Math.PI) / 180, AIM_KEEP = 0.15, BAND_NEAR = 0.08, BAND_FAR = 0.05,
   POWER_SLOPE = 0.35, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
@@ -43,10 +43,11 @@ export function launchVelocity(from: Vec3, to: Vec3): Vec3 {
 }
 
 export function shotVelocity(release: Vec3, swipe: Swipe): Vec3 {
-  // ponytail: assumes the camera faces the hoop squarely (screen right = +x, up = -z); project through the camera if it ever yaws.
+  // The player swipes at the rim they see. The error is measured on screen against the rim's on-screen direction,
+  // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
   const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(swipe.dy, swipe.dx);
-  const err = Math.atan2(Math.sin(swiped - toRim), Math.cos(swiped - toRim));
-  const angle = Math.abs(err) <= AIM_CONE ? toRim + err * AIM_KEEP : swiped;
+  const seen = swipe.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
+  const angle = toRim + (Math.abs(err) <= AIM_CONE ? err * AIM_KEEP : err);
   // Aim a touch past the centre: the centre is the short end of the window that drops through.
   const reach = Math.hypot(RIM.x - release.x, RIM.z - release.z) + AIM_LONG;
   const v = launchVelocity(release, { x: release.x + Math.cos(angle) * reach, y: RIM.y, z: release.z + Math.sin(angle) * reach });

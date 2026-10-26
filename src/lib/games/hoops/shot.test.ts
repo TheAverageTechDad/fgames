@@ -46,6 +46,12 @@ describe('shot', () => {
       if (len > 2.5) expect(events.findIndex(e => e.type === 'rim') < 0 || events.findIndex(e => e.type === 'rim') > events.findIndex(e => e.type === 'score'), `clean from ${x}, ${z}`).toBe(true);
     }
   });
+  it('aims by where the rim is on screen, not by court directions', () => {
+    // From the wing the rim sits up the screen even though on court it is almost straight across.
+    const release = { x: 3, y: 2.1, z: 1.5 };
+    const events = fly(release, shotVelocity(release, { dx: 0, dy: -117, seconds: 0.15, minSide: 390, rimAngle: -Math.PI / 2 }));
+    expect(events.some(e => e.type === 'score')).toBe(true);
+  });
   it('falls short on a weak swipe and misses on a sideways one', () => {
     const release = { x: 0, y: 2.1, z: 5 };
     expect(fly(release, shotVelocity(release, { dx: 0, dy: -40, seconds: 0.2, minSide: 390 })).some(e => e.type === 'score')).toBe(false);

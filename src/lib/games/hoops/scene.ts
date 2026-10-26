@@ -173,7 +173,10 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
     if (paused || document.hidden || !loaded) return;
     const swipe = input.takeShot();
-    if (swipe) startShot(state, swipe);
+    if (swipe) {
+      const from = dadScreen(), rect = canvas.getBoundingClientRect(), rimOnScreen = probe.set(RIM.x, RIM.y, RIM.z).project(camera);
+      startShot(state, { ...swipe, rimAngle: Math.atan2(rect.top + (1 - rimOnScreen.y) * rect.height / 2 - from.y, rect.left + (rimOnScreen.x + 1) * rect.width / 2 - from.x) });
+    }
     if (input.jump()) jump(state);
     const events = stepShootaround(state, dt, input.read()); events.forEach(feedback);
 
