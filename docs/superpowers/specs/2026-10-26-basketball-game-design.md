@@ -27,6 +27,7 @@ As in the other games, the point is accessible touch controls and satisfying phy
 - On the player's team only the controlled player can steal; AI teammates contest and block lanes.
 - No mid-match save: pause while the page is alive, lose the match if the page is killed.
 - Outdoor court. Dad plays; the rest of the family watches and cheers from the side.
+- The other five players are variations of Dad: with or without a beard, with or without glasses, and so on.
 - Two-minute matches with the simplified rules below.
 
 ## First-version rules
@@ -47,7 +48,15 @@ As in the other games, the point is accessible touch controls and satisfying phy
 | End of match | The shared result card with the score and a one-tap rematch | Reuse the arcade's result flow; one more match is one tap. |
 | Interruptions | Pause play and the clock when hidden or blurred; resume where it stopped while the page is alive. Do not persist a match in progress | A two-minute match is cheap to lose if the OS kills the page; a mid-flight save/restore is not cheap to build. |
 
-One court, fixed teams. Dad and two neighbourhood teammates play three neighbourhood opponents. Mom, the eldest daughter (`chibi-sibling-sample`) and the toddler (`chibi-toddler`) watch from the sideline and cheer: idle bounce and clapping, a jump-and-cheer on Dad's team's baskets, a groan on a steal against him. They are scenery with reactions, not players or physics bodies. The five other players are new to the project: build them as variants of one chibi base (jerseys, hair, skin tone, height) in the style of the family models; the boy models (`chibi-older-boy`, `chibi-younger-boy`) can seed the younger-looking ones. Team colour comes from jerseys. Dad stays recognizable. Progression, upgrades, online play, tournaments and more venues are out of scope.
+One court, fixed teams. Dad and two neighbourhood teammates play three neighbourhood opponents. Mom, the eldest daughter (`chibi-sibling-sample`) and the toddler (`chibi-toddler`) watch from the sideline and cheer: idle bounce and clapping, a jump-and-cheer on Dad's team's baskets, a groan on a steal against him. They are scenery with reactions, not players or physics bodies. The five other players are variants of Dad, built from `chibi-dad.glb` at load time, not new models. The file already separates what needs to vary: the glasses are their own mesh (`head-dad charcoal glasses`), and skin, hair, shirt, trousers and shoes each have their own material. Each variant picks:
+
+- glasses on or off (hide the mesh);
+- a beard or none: a small new beard mesh (stubble, short, full) parented to the head pivot so it follows the head, the only new geometry;
+- skin tone and hair colour (material colour swaps);
+- the team jersey colour (the shirt material) and shorts (the trousers material);
+- a slight height and build change (scale within about ±8%, so silhouettes differ without breaking shared animation).
+
+All six share Dad's rig, pivots and animations. The real Dad is the only player with his exact face (glasses, no beard, his skin and hair); no variant copies that combination, and the controlled player's ground ring does the rest. Team colour comes from jerseys. Progression, upgrades, online play, tournaments and more venues are out of scope.
 
 ## Controls and gesture ownership
 
@@ -168,9 +177,9 @@ Persist only preferences and, optionally, a win/loss tally. Target smooth phone 
 
 ## Decisions
 
-Settled with the user on 26 October 2026: distance-relative shot power; only the controlled player steals for the player's team; no mid-match save; an outdoor court with Dad playing and the family cheering from the sideline; two-minute matches with the simplified scoring and restarts. Numeric values remain the builder's tuning choices.
+Settled with the user on 26 October 2026: the other five players are variations of Dad; distance-relative shot power; only the controlled player steals for the player's team; no mid-match save; an outdoor court with Dad playing and the family cheering from the sideline; two-minute matches with the simplified scoring and restarts. Numeric values remain the builder's tuning choices.
 
-Consequence for scope: the five other players are new characters (variants of one base), the main new asset work alongside the court.
+Consequence for scope: the five other players are Dad variants (glasses on/off, beard or none, skin, hair, jersey, slight scale), so the new character art is a beard mesh and material swaps.
 
 ## Changes in this revision
 
@@ -182,3 +191,4 @@ Consequence for scope: the five other players are new characters (variants of on
 - An outdoor court that reuses the farm's lighting.
 - Made the first build step a shootaround that decides whether the game is fun before the rest is built.
 - Recorded the user's decisions: relative shot power, controlled-player-only steals for the player's team, no mid-match save, two-minute matches, and an outdoor court where Dad plays with neighbourhood teammates and opponents while the family cheers from the sideline.
+- The five other players are variations of Dad (glasses, beard, skin, hair, jersey, slight scale) from the existing model, sharing its rig.
