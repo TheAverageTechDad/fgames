@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createBall, stepBall, type Ball, type BallEvent } from './ball';
-import { ARC_R, BALL_R, BOARD, COURT, RIM, inBounds, isTwoPointer } from './court';
+import { ARC_R, BALL_R, BOARD, COURT, FENCE, RIM, inBounds, isTwoPointer } from './court';
 
 // Whole frame counts: summing a float dt can add a frame and break the fps comparison.
 const run = (ball: Ball, seconds: number, dt = 1 / 60) => { const events: BallEvent[] = []; for (let i = 0; i < Math.round(seconds / dt); i++) events.push(...stepBall(ball, dt)); return events; };
@@ -63,8 +63,23 @@ describe('ball', () => {
     run(ball, 3);
     expect(ball.p.y).toBeLessThan(RIM.y - 0.5);
   });
+  it('stays inside the fence however hard it flies', () => {
+    for (const v of [{ x: 30, y: 4, z: 0 }, { x: -30, y: 4, z: 0 }, { x: 0, y: 6, z: -30 }, { x: 0, y: 3, z: 30 }]) {
+      const ball = createBall({ x: 0, y: 2, z: 4 }, v);
+      for (let i = 0; i < 600; i++) {
+        stepBall(ball, 1 / 60);
+        expect(Math.abs(ball.p.x)).toBeLessThan(FENCE.side);
+        expect(ball.p.z).toBeGreaterThan(FENCE.back); expect(ball.p.z).toBeLessThan(FENCE.front);
+      }
+    }
+  });
+  it('rolls to a stop sooner on grass than on the court', () => {
+    const court = createBall({ x: 0, y: BALL_R, z: 2 }, { x: 0, y: 0, z: 3 }), grass = createBall({ x: 0, y: BALL_R, z: COURT.depth + 0.6 }, { x: 0, y: 0, z: 3 });
+    run(court, 0.5); run(grass, 0.5);
+    expect(grass.p.z - (COURT.depth + 0.6)).toBeLessThan(0.6 * (court.p.z - 2));
+  });
   it('reports out of bounds once when it lands outside', () => {
-    const ball = createBall({ x: 0, y: 1, z: 9 });
+    const ball = createBall({ x: 0, y: 1, z: COURT.depth + 0.8 });
     expect(run(ball, 2).filter(e => e.type === 'out')).toHaveLength(1);
   });
 });

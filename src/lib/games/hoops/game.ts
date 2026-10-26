@@ -1,26 +1,26 @@
 import { createBall, stepBall, type Ball, type BallEvent } from './ball';
-import { BALL_R, BOARD, COURT, GRAVITY, RIM, isTwoPointer, type Vec3 } from './court';
+import { BALL_R, FENCE, POLE, RIM, isTwoPointer, type Vec3 } from './court';
 import { shotVelocity, type Pull } from './shot';
 
-export type Mode = 'held' | 'aim' | 'flight' | 'loose' | 'reset';
+export type Mode = 'held' | 'aim' | 'flight' | 'loose';
 export type Move = { x: number; z: number; sprint: boolean };
 export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump'; at: Vec3 } | { type: 'shot'; value: 1 | 2; at: Vec3 };
 export type Shootaround = {
   player: { x: number; y: number; z: number; vx: number; vz: number; yaw: number; vy: number; jumpT: number }; // jumpT < 0 when not crouching
-  ball: Ball; mode: Mode; dribble: number; resetT: number;
+  ball: Ball; mode: Mode; dribble: number;
   value: 1 | 2; score: number; shots: number; made: number;
 };
 
 // Pocket Farm's run speed and Catcha's sprint; the jump is the farm's (a 0.09 s crouch, then up).
 // ACCEL/DECEL: how quickly he gets up to speed and pulls up (per second, exponential).
 export const RUN_SPEED = 3.6, SPRINT = 1.35, ACCEL = 9, DECEL = 12, PICKUP_REACH = 0.6, HAND_HEIGHT = 1.0, RELEASE_HEIGHT = 1.85,
-  SHOT_HOP = 3, OUT_RESET = 1.2, CROUCH = 0.09, JUMP_V = 7.5, JUMP_GRAVITY = 30;
+  SHOT_HOP = 3, CROUCH = 0.09, JUMP_V = 7.5, JUMP_GRAVITY = 30;
 const DRIBBLE_RATE = { still: 1.6, moving: 2.2, sprint: 2.8 }; // bounces per second
 
 export function createShootaround(): Shootaround {
   const s: Shootaround = {
     player: { x: 0, y: 0, z: 4, vx: 0, vz: 0, yaw: Math.PI, vy: 0, jumpT: -1 },
-    ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', dribble: 0, resetT: 0,
+    ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', dribble: 0,
     value: 1, score: 0, shots: 0, made: 0
   };
   s.ball.p = heldBallPosition(s);
@@ -71,14 +71,6 @@ export function jump(s: Shootaround) {
   if (grounded(s) && s.player.jumpT < 0) s.player.jumpT = 0;
 }
 
-/** A high toss from `from` that comes down on `to`, clearing the backboard when it starts behind it. */
-function lob(from: Vec3, to: Vec3): Vec3 {
-  const behind = from.z < BOARD.z + 0.3 && Math.abs(from.x) < BOARD.halfWidth + 0.5;
-  const apex = Math.max(from.y, to.y) + 1.2, top = behind ? Math.max(apex, BOARD.top + 1.5) : apex;
-  const vy = Math.sqrt(2 * GRAVITY * (top - from.y)), time = vy / GRAVITY + Math.sqrt((2 * (top - to.y)) / GRAVITY);
-  return { x: (to.x - from.x) / time, y: vy, z: (to.z - from.z) / time };
-}
-
 export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEvent[] {
   const events: GameEvent[] = [], p = s.player;
 
@@ -97,8 +89,11 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
   p.vz += ((amount > 0.05 ? (move.z / len) * top : 0) - p.vz) * k;
   if (Math.hypot(p.vx, p.vz) < 0.02) p.vx = p.vz = 0;
   const x = p.x + p.vx * dt, z = p.z + p.vz * dt;
-  p.x = Math.max(-COURT.halfWidth + 0.3, Math.min(COURT.halfWidth - 0.3, x)); if (p.x !== x) p.vx = 0;
-  p.z = Math.max(0.3, Math.min(COURT.depth, z)); if (p.z !== z) p.vz = 0;
+  // He can leave the court to fetch a ball, as far as the fence (and the open grass at the near side).
+  p.x = Math.max(-FENCE.side + 0.35, Math.min(FENCE.side - 0.35, x)); if (p.x !== x) p.vx = 0;
+  p.z = Math.max(FENCE.back + 0.35, Math.min(FENCE.front - 0.35, z)); if (p.z !== z) p.vz = 0;
+  const px = p.x - POLE.x, pz = p.z - POLE.z, pd = Math.hypot(px, pz), clear = POLE.radius + 0.3;
+  if (pd < clear) { const k = pd > 1e-6 ? clear / pd : 1; p.x = POLE.x + (pd > 1e-6 ? px * k : clear); p.z = POLE.z + pz * k; }
   if (amount > 0.05) p.yaw = Math.atan2(move.x, move.z);
   if (s.mode === 'aim') faceRim(s);
 
@@ -109,17 +104,11 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
   }
   if (s.mode === 'held' || s.mode === 'aim') { s.ball.p = heldBallPosition(s); s.ball.v = { x: 0, y: 0, z: 0 }; return events; }
 
-  // In flight, loose or out of bounds, physics alone moves the ball. Any contact or a basket makes it a rebound Dad can grab.
+  // In flight or loose, physics alone moves the ball. Any contact or a basket makes it a rebound Dad can grab, wherever it ends up.
   for (const e of stepBall(s.ball, dt)) {
     events.push(e);
     if (e.type === 'score') { s.score += s.value; s.made++; }
-    if (e.type === 'out') { s.mode = 'reset'; s.resetT = OUT_RESET; }
     if (s.mode === 'flight') s.mode = 'loose';
-  }
-  // Out of bounds it keeps bouncing, then comes back to him in a high toss that can't count as a basket.
-  if (s.mode === 'reset' && (s.resetT -= dt) <= 0) {
-    s.ball = createBall(s.ball.p, lob(s.ball.p, { x: p.x, y: HAND_HEIGHT, z: p.z }));
-    s.ball.scored = true; s.mode = 'loose';
   }
   if (s.mode === 'loose' && Math.hypot(s.ball.p.x - p.x, s.ball.p.z - p.z) < PICKUP_REACH && s.ball.p.y < 1.2 + p.y) {
     s.mode = 'held'; s.dribble = 0; s.ball.p = heldBallPosition(s);

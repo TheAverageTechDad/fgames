@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, GRAVITY, POLE, RIM } from './court';
+import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FENCE, GRAVITY, POLE, RIM } from './court';
 import { RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
 import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 
 const DAD = '/catcha/assets/chibi-dad.glb';
-// The court texture covers a little grass around the lines.
-const PAD = { minX: -4.6, maxX: 4.6, minZ: -1.2, maxZ: 7.9 }, PX = 100;
+// The court texture covers the asphalt: the lines plus a dark border.
+const PAD = { minX: -COURT.halfWidth - 0.4, maxX: COURT.halfWidth + 0.4, minZ: -0.6, maxZ: COURT.depth + 0.3 }, PX = 100;
 const turn = (from: number, to: number, k: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * Math.min(1, k);
 
 function canvasTexture(width: number, height: number, paint: (c: CanvasRenderingContext2D) => void) {
@@ -20,17 +20,16 @@ function canvasTexture(width: number, height: number, paint: (c: CanvasRendering
 function courtTexture() {
   return canvasTexture((PAD.maxX - PAD.minX) * PX, (PAD.maxZ - PAD.minZ) * PX, c => {
     const X = (x: number) => (x - PAD.minX) * PX, Z = (z: number) => (z - PAD.minZ) * PX;
-    c.fillStyle = '#7fa65a'; c.fillRect(0, 0, c.canvas.width, c.canvas.height);
-    c.fillStyle = '#62666d'; c.fillRect(X(-COURT.halfWidth - 0.4), Z(-0.6), (COURT.halfWidth * 2 + 0.8) * PX, (COURT.depth + 0.9) * PX);
+    c.fillStyle = '#62666d'; c.fillRect(0, 0, c.canvas.width, c.canvas.height);
     // Asphalt grit: a fine speckle of light and dark stones.
-    for (let i = 0; i < 26000; i++) {
+    for (let i = 0; i < 34000; i++) {
       c.fillStyle = Math.random() < 0.5 ? '#ffffff14' : '#00000018';
-      c.fillRect(X(-COURT.halfWidth - 0.4) + Math.random() * (COURT.halfWidth * 2 + 0.8) * PX, Z(-0.6) + Math.random() * (COURT.depth + 0.9) * PX, 2, 2);
+      c.fillRect(Math.random() * c.canvas.width, Math.random() * c.canvas.height, 2, 2);
     }
     c.strokeStyle = '#f4f1e8'; c.lineWidth = 6;
     c.strokeRect(X(-COURT.halfWidth), Z(0), COURT.halfWidth * 2 * PX, COURT.depth * PX);
-    c.fillStyle = '#c9603c55'; c.fillRect(X(-1.2), Z(0), 2.4 * PX, 3.4 * PX); c.strokeRect(X(-1.2), Z(0), 2.4 * PX, 3.4 * PX); // the key
-    c.beginPath(); c.arc(X(0), Z(3.4), 1 * PX, 0, Math.PI); c.stroke();
+    c.fillStyle = '#c9603c55'; c.fillRect(X(-1.45), Z(0), 2.9 * PX, 3.5 * PX); c.strokeRect(X(-1.45), Z(0), 2.9 * PX, 3.5 * PX); // the key
+    c.beginPath(); c.arc(X(0), Z(3.5), 1.1 * PX, 0, Math.PI); c.stroke();
     c.beginPath(); c.arc(X(RIM.x), Z(RIM.z), ARC_R * PX, 0, Math.PI); c.stroke(); // the arc
   });
 }
@@ -52,30 +51,34 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.04;
   const canvas = renderer.domElement; canvas.tabIndex = 0;
-  canvas.setAttribute('aria-label', 'Basketball court. Drag to move, push far to sprint, tap to jump. Swipe up from Dad to shoot.');
+  canvas.setAttribute('aria-label', 'Basketball court. Drag to move, push far to sprint, tap to jump. Hold Dad, pull back and let go to shoot.');
   canvas.dataset.hoopsCanvas = ''; host.append(canvas);
 
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6d7a4'); scene.fog = new THREE.Fog('#f6d7a4', 30, 60);
   const hemi = new THREE.HemisphereLight('#fff4e0', '#6f8a55', 1.4); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffe2b0', 2.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 40 });
+  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
   sun.position.set(-6, 12, 9); sun.target.position.set(0, 0, 4); scene.add(sun, sun.target);
 
-  // An elevated view looking at the hoop squarely (shot.ts relies on no yaw), pulled back until the whole court width fits.
+  // An elevated view facing the hoop squarely (shot.ts relies on no yaw) that slides after Dad, never turning.
+  // WIDE: how much court shows across at the point it looks at; the rim stays in view wherever he goes.
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-  const target = new THREE.Vector3(0, 1.1, 3.2), VIEW = new THREE.Vector3(0, Math.sin(0.6), Math.cos(0.6));
-  const corners = [new THREE.Vector3(-COURT.halfWidth, 0, COURT.depth), new THREE.Vector3(COURT.halfWidth, 0, COURT.depth), new THREE.Vector3(-COURT.halfWidth, 0, 0), new THREE.Vector3(COURT.halfWidth, 0, 0)];
+  const target = new THREE.Vector3(), aim = new THREE.Vector3(), VIEW = new THREE.Vector3(0, Math.sin(0.62), Math.cos(0.62)), WIDE = 7.4;
   const probe = new THREE.Vector3();
+  let distance = 14;
+  const follow = (k: number) => {
+    const p = state.player;
+    aim.set(Math.max(-2.3, Math.min(2.3, p.x * 0.55)), 1, Math.max(2.6, Math.min(6.4, p.z - 0.4)));
+    target.lerp(aim, k);
+    camera.position.copy(target).addScaledVector(VIEW, distance); camera.lookAt(target); camera.updateMatrixWorld();
+  };
   const resize = () => {
     const { width, height } = host.getBoundingClientRect();
     if (!width || !height) return;
-    renderer.setSize(width, height); camera.aspect = width / height;
-    // ponytail: a linear search for the framing distance, run only on resize.
-    for (let distance = 8; distance < 60; distance += 0.25) {
-      camera.position.copy(target).addScaledVector(VIEW, distance); camera.lookAt(target); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-      if (corners.every(c => Math.abs(probe.copy(c).project(camera).x) <= 0.96 && probe.y > -0.9)) break;
-    }
+    renderer.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix();
+    distance = Math.max(10, WIDE / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
+    follow(1);
   };
   const observer = new ResizeObserver(resize); observer.observe(host); resize();
 
@@ -89,6 +92,27 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   // Grass runs out past the edges of the view, under the thumb.
   const lawn = new THREE.Mesh(keep(new THREE.PlaneGeometry(80, 80)), mat('#7fa65a', { roughness: 1 }));
   lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.01; lawn.receiveShadow = true; scene.add(lawn);
+  // Chain-link fence on the back and sides: posts, a top rail and a see-through mesh. The ball bounces off it (ball.ts).
+  {
+    const H = 2.4, link = keep(canvasTexture(64, 64, c => {
+      c.strokeStyle = '#d8dde0cc'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(0, 32); c.lineTo(32, 0); c.lineTo(64, 32); c.lineTo(32, 64); c.closePath(); c.stroke();
+    }));
+    link.wrapS = link.wrapT = THREE.RepeatWrapping;
+    const steel = mat('#5d6a63', { metalness: 0.5, roughness: 0.5 }), post = keep(new THREE.CylinderGeometry(0.05, 0.05, H, 8));
+    const runs: [number, number, number, number][] = [[-FENCE.side, FENCE.back, FENCE.side, FENCE.back], [-FENCE.side, FENCE.back, -FENCE.side, FENCE.front], [FENCE.side, FENCE.back, FENCE.side, FENCE.front]];
+    for (const [x0, z0, x1, z1] of runs) {
+      const length = Math.hypot(x1 - x0, z1 - z0), angle = Math.atan2(x1 - x0, z1 - z0), mid = [(x0 + x1) / 2, (z0 + z1) / 2];
+      const texture = keep(link.clone()); texture.repeat.set(length / 0.35, H / 0.35);
+      const panel = new THREE.Mesh(keep(new THREE.PlaneGeometry(length, H)), keep(new THREE.MeshStandardMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false, roughness: 0.6 })));
+      panel.position.set(mid[0], H / 2, mid[1]); panel.rotation.y = angle - Math.PI / 2; scene.add(panel);
+      const rail = new THREE.Mesh(keep(new THREE.BoxGeometry(0.06, 0.06, length)), steel);
+      rail.position.set(mid[0], H, mid[1]); rail.rotation.y = angle; scene.add(rail);
+      for (let i = 0, n = Math.ceil(length / 2); i <= n; i++) {
+        const m = new THREE.Mesh(post, steel); m.position.set(x0 + ((x1 - x0) * i) / n, H / 2, z0 + ((z1 - z0) * i) / n); m.castShadow = true; scene.add(m);
+      }
+    }
+  }
 
   // Hoop: pole, arm, board, rim and a net that stretches on a basket.
   const steel = mat('#3c4651', { metalness: 0.4, roughness: 0.5 });
@@ -169,7 +193,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const feet = probe.set(p.x, p.y, p.z).project(camera), fy = feet.y, fx = feet.x;
     const head = probe.set(p.x, p.y + DAD_HEIGHT, p.z).project(camera);
     const toY = (y: number) => rect.top + (1 - y) * rect.height / 2;
-    return { x: rect.left + (fx + 1) * rect.width / 2, y: (toY(fy) + toY(head.y)) / 2, radius: Math.max(28, 0.45 * (toY(fy) - toY(head.y))) };
+    return { x: rect.left + (fx + 1) * rect.width / 2, y: (toY(fy) + toY(head.y)) / 2, radius: 0.8 * (toY(fy) - toY(head.y)) };
   };
   const input = createHoopsInput(canvas, host, () => state.mode === 'held' ? dadScreen() : null);
   /** The pull with the rim's on-screen direction from Dad, so aim is judged against the rim the player sees. */
@@ -205,6 +229,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     }
     if (input.jump()) jump(state);
     const events = stepShootaround(state, dt, input.read()); events.forEach(feedback);
+    follow(Math.min(1, dt * 3.5));
 
     // Dad: face where he runs (the hoop while aiming), lean into his speed, crouch and stretch in jumps, bend to pick up.
     const p = state.player, speed = Math.hypot(p.vx, p.vz), moving = speed > 0.3;

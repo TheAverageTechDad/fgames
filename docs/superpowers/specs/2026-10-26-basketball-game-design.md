@@ -18,7 +18,7 @@ As in the other games, the point is accessible touch controls and satisfying phy
 - Moving while holding possession dribbles automatically. No separate dribble gesture. Pleasing ball squash and stretch.
 - Tap a teammate to pass. Control follows possession: when the teammate catches the pass, that teammate becomes the controlled player.
 - Shoot by holding the controlled player, pulling back and letting go (decided 26 October 2026 after the first phone playtest, replacing the original swipe, which couldn't be told apart from movement). A touch on the player that moves straight away is movement. While aiming, dots show the rising half of the arc; the ball flies exactly along it on release. It has to be quick enough to do under pressure.
-- The ball looks bounced by the character's hand, keeps bouncing when it goes out of bounds and then comes back to the player, and a bouncing ball on court can be run down and scooped up with a pickup motion. Movement has some weight: the player speeds up, slows down and leans.
+- The ball looks bounced by the character's hand. A ball that goes out keeps bouncing and stays where it ends up; a fence on the back and sides keeps it within walking distance, and the player walks over to fetch it (no automatic toss back: tried after the first playtest, dropped after the second as finicky). A bouncing ball can be run down and scooped up with a pickup motion. Movement has some weight: the player speeds up, slows down and leans.
 - AI defenders steal by staying very close to the ball carrier for a few seconds. Moving away and passing escape the pressure.
 - Ball physics supports bouncing and colliding with physically present objects.
 - The court has proper surface texture and markings; the models and overall presentation have good visual quality.
@@ -99,7 +99,7 @@ Contact with a dribbled ball does not bypass the meter. A released pass, a shot 
 
 Aim and power are separate, so the player has one thing to judge.
 
-**Aim.** The ball goes opposite the pull, like a slingshot. A pull within 25° of straight away from the rim, as the rim appears on screen, is aimed at the rim, with the leftover angle kept as a small sideways error that can still rim out. Outside that cone the error carries over in full. No auto-aim on purpose: a sideways pull is a bad shot, not a corrected one.
+**Aim.** The ball goes opposite the pull, like a slingshot. The error is measured against straight away from the rim as it appears on screen. Up to 20° off, only a tenth of the error is kept; the help then eases out smoothly to none at 80°, so the arc never snaps between helped and unhelped (the hard 25° cone snapped visibly in the second playtest). No auto-aim on purpose: a sideways pull is a bad shot, not a corrected one.
 
 **Power.** Strength is the pull's length as a fraction of the viewport's shorter side (capped at 0.45), so the same pull behaves the same on every phone. It is judged **relative to the shot the player is taking**: the game solves the launch that drops the ball through the rim from the release point (entering at 45° or steeper, and clearing the front of the ring) and scales it by the pull against the ideal of 0.2. The same comfortable pull scores from anywhere; a short pull falls short and a long one overshoots. A sweet band of about ±8% at the rim, narrowing to about ±5% beyond the arc, makes two-pointers harder.
 
@@ -124,14 +124,14 @@ The chibi characters are short and Catcha's jump is big (peak 1.5 units at 0.25 
 | Value | Start |
 | --- | --- |
 | Rim height | 1.8 × Dad's height (a jump reaches the rim for blocks, not for dunks) |
-| Court | about 9 m wide × 8 m deep in court units scaled to the characters, arc at about 4.5 m |
+| Court | 9 wide × 8.5 deep, arc 4.2 (the 7.5 × 7 tried first felt small); fence 1.3 beyond the sides and 1.6 behind the baseline |
 | Ball diameter | about 0.4 × Dad's head height, enough to read at phone size |
 | Match | 2:00 active play |
 | Guarding | 0.9 m reach, 2 s fill, 2× drain |
 | Protection after catch/steal | 0.5 s |
 | Tap | under 250 ms and under the stick's 5 px deadzone (the farm input's values) |
-| Shot | at least 24 px travel; aim cone ±25° |
-| Character tap target | at least 56 px |
+| Shot | hold 0.12 s within 14 px to aim; at least 20 px of pull to shoot; aim help full to 20°, none past 80° |
+| Character tap target | radius at least 44 px, or 0.8 × the player's height on screen (the second playtest found the smaller target too fiddly) |
 
 ## Character and asset work
 
@@ -143,7 +143,7 @@ Build one polished ball, hoop, backboard, net and half court. **Art direction:**
 
 ## Presentation, feedback and AI
 
-Camera: a steady elevated view looking toward the hoop, framed for portrait with the full half court in view (see "Reach"). Characters, pass targets and the rim stay readable on a small phone. Keep the bottom of the screen clear for the thumb.
+Camera: an elevated view facing the hoop squarely that slides after the controlled player (never rotating), showing about 7.4 units across where it looks, so the player and court are large on a phone while the rim stays in the top third. Characters, pass targets and the rim stay readable on a small phone. Keep the bottom of the screen clear for the thumb.
 
 HUD: score, time left, pause, and the steal meter. Clear team colours and distinct silhouettes. The first match opens with a short contextual introduction (move, pass, shoot), shown once, not a tutorial screen. Passes, dribbles, rim hits, backboard hits, steals and baskets each have their own animation, sound and optional haptic, through the existing sound and haptic preferences.
 
@@ -193,3 +193,4 @@ Consequence for scope: the five other players are Dad variants (glasses on/off, 
 - Recorded the user's decisions: relative shot power, controlled-player-only steals for the player's team, no mid-match save, two-minute matches, and an outdoor court where Dad plays with neighbourhood teammates and opponents while the family cheers from the sideline.
 - The five other players are variations of Dad (glasses, beard, skin, hair, jersey, slight scale) from the existing model, sharing its rig.
 - After the first phone playtest: hold-pull-release shooting with the rising half of the arc shown, a hand-driven dribble, out-of-bounds balls that keep bouncing and are tossed back, a pickup motion, and movement with momentum.
+- After the second playtest: a bigger court with a fence and a following camera, no toss back from out of bounds, a wider and quicker touch on the player to aim, and aim help that eases off instead of snapping.

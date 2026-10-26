@@ -1,12 +1,13 @@
-import { BALL_R, BOARD, GRAVITY, POLE, RIM, inBounds, type Vec3 } from './court';
+import { BALL_R, BOARD, FENCE, GRAVITY, POLE, RIM, inBounds, onAsphalt, type Vec3 } from './court';
 
-export type BallEvent = { type: 'floor' | 'rim' | 'board' | 'pole' | 'score' | 'out'; speed: number; at: Vec3 };
+export type BallEvent = { type: 'floor' | 'rim' | 'board' | 'pole' | 'fence' | 'score' | 'out'; speed: number; at: Vec3 };
 export type Ball = { p: Vec3; v: Vec3; acc: number; scored: boolean; out: boolean };
 
 // A fixed 120 Hz step, so a shot flies the same at any frame rate; fast balls substep so they cannot tunnel.
 export const STEP = 1 / 120;
 // REST: below this impact speed (a ~5 cm hop) the ball stops bouncing and rolls.
-const FLOOR_E = 0.78, FLOOR_GRIP = 0.9, BOARD_E = 0.6, RIM_E = 0.55, POLE_E = 0.5, QUIET = 0.3, REST = 1;
+// Grass bounces lower and grips harder than asphalt.
+const FLOOR_E = 0.78, GRASS_E = 0.5, FLOOR_GRIP = 0.9, GRASS_GRIP = 0.7, ROLL = 2, GRASS_ROLL = 5, BOARD_E = 0.6, RIM_E = 0.55, POLE_E = 0.5, FENCE_E = 0.4, QUIET = 0.3, REST = 1;
 
 export function createBall(p: Vec3, v: Vec3 = { x: 0, y: 0, z: 0 }): Ball {
   return { p: { ...p }, v: { ...v }, acc: 0, scored: false, out: false };
@@ -30,10 +31,17 @@ function substep(ball: Ball, h: number, events: BallEvent[]) {
 
   if (p.y < BALL_R) {
     p.y = BALL_R;
-    const impact = -v.y;
-    if (impact > REST) { v.y = impact * FLOOR_E; v.x *= FLOOR_GRIP; v.z *= FLOOR_GRIP; hit('floor', impact); }
-    else { v.y = 0; v.x *= 1 - 2 * h; v.z *= 1 - 2 * h; }
+    const impact = -v.y, asphalt = onAsphalt(p), grip = asphalt ? FLOOR_GRIP : GRASS_GRIP;
+    if (impact > REST) { v.y = impact * (asphalt ? FLOOR_E : GRASS_E); v.x *= grip; v.z *= grip; hit('floor', impact); }
+    else { const roll = 1 - (asphalt ? ROLL : GRASS_ROLL) * h; v.y = 0; v.x *= roll; v.z *= roll; }
     if (!ball.out && !inBounds(p)) { ball.out = true; events.push({ type: 'out', speed: impact, at: { ...p } }); }
+  }
+
+  // Fence: three walls (sides and back) and an unseen one past the near grass.
+  for (const [axis, at, sign] of [['x', FENCE.side, 1], ['x', -FENCE.side, -1], ['z', FENCE.back, -1], ['z', FENCE.front, 1]] as const) {
+    if ((p[axis] + sign * BALL_R - at) * sign <= 0) continue;
+    p[axis] = at - sign * BALL_R;
+    if (v[axis] * sign > 0) { hit('fence', Math.abs(v[axis])); v[axis] *= -FENCE_E; }
   }
 
   // Backboard: the closest point of the box.

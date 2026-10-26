@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARC_R, BALL_R, COURT, RIM } from './court';
+import { ARC_R, BALL_R, FENCE, POLE, RIM } from './court';
 import { RUN_SPEED, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
@@ -27,10 +27,15 @@ describe('shootaround', () => {
     run(s, 1 / 60); expect(speed(s)).toBeGreaterThan(RUN_SPEED * 0.5);
     run(s, 0.6); expect(speed(s)).toBeLessThan(0.05);
   });
-  it('keeps Dad on the court', () => {
+  it('keeps Dad inside the fence and out of the pole', () => {
     const s = createShootaround();
     run(s, 5, { x: 1, z: 1, sprint: true });
-    expect(s.player.x).toBeLessThanOrEqual(COURT.halfWidth); expect(s.player.z).toBeLessThanOrEqual(COURT.depth);
+    expect(s.player.x).toBeLessThan(FENCE.side); expect(s.player.z).toBeLessThan(FENCE.front);
+    s.player.x = 1; run(s, 4, { x: 0, z: -1, sprint: false });
+    expect(s.player.z).toBeLessThan(0); // he can walk behind the baseline
+    s.player.x = POLE.x; run(s, 2, { x: 0, z: 1, sprint: false }); run(s, 4, { x: 0, z: -1, sprint: false });
+    expect(Math.hypot(s.player.x - POLE.x, s.player.z - POLE.z)).toBeGreaterThan(0.3);
+    expect(s.player.z).toBeGreaterThan(FENCE.back);
   });
   it('plants his feet and faces the rim while aiming', () => {
     const s = createShootaround(); s.player.x = 2;
@@ -70,16 +75,18 @@ describe('shootaround', () => {
     expect(run(s, 0.1).some(e => e.type === 'pickup')).toBe(true);
     expect(s.mode).toBe('held');
   });
-  for (const [where, p] of [['behind the backboard', { x: 0.3, y: 1.5, z: -0.6 }], ['off the side', { x: 4.3, y: 1.5, z: 3 }]] as const) {
-    it(`keeps bouncing out of bounds ${where}, then lobs the ball back to Dad`, () => {
+  for (const [where, p] of [['off the side', { x: FENCE.side - 0.6, y: 1.5, z: 3 }], ['behind the backboard', { x: 1.5, y: 1.5, z: -1 }]] as const) {
+    it(`leaves a ball that goes out ${where} for Dad to walk over and fetch`, () => {
       const s = createShootaround();
       s.mode = 'loose'; s.ball.p = { ...p }; s.ball.v = { x: 0, y: 0, z: 0 };
-      run(s, 0.8);
-      expect(s.mode).toBe('reset');
-      expect(Math.hypot(s.ball.v.x, s.ball.v.y, s.ball.v.z)).toBeGreaterThan(0.5); // still bouncing, not frozen
-      const back = run(s, 5);
-      expect(back.some(e => e.type === 'pickup')).toBe(true);
-      expect(back.some(e => e.type === 'score')).toBe(false);
+      run(s, 4); // no toss back: it settles where it went and waits
+      expect(Math.hypot(s.ball.p.x - s.player.x, s.ball.p.z - s.player.z)).toBeGreaterThan(2);
+      let picked = false;
+      for (let i = 0; i < 480 && !picked; i++) {
+        const dx = s.ball.p.x - s.player.x, dz = s.ball.p.z - s.player.z, len = Math.hypot(dx, dz) || 1;
+        picked = stepShootaround(s, 1 / 60, { x: dx / len, z: dz / len, sprint: false }).some(e => e.type === 'pickup');
+      }
+      expect(picked).toBe(true);
     });
   }
   it('jumps with a crouch first and lands', () => {

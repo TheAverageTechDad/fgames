@@ -44,6 +44,12 @@ describe('shot', () => {
       if (Math.hypot(x - RIM.x, z - RIM.z) > 2.5) expect(rim < 0 || rim > score, `clean from ${x}, ${z}`).toBe(true);
     }
   });
+  it('eases the aim help off gradually instead of snapping', () => {
+    const release = { x: 0, y: 2.1, z: 5 };
+    const heading = (deg: number) => { const a = (deg * Math.PI) / 180, v = shotVelocity(release, { dx: Math.sin(a) * ideal, dy: Math.cos(a) * ideal, minSide: 390 }); return Math.atan2(v.x, -v.z) * 180 / Math.PI; };
+    for (let deg = -85; deg < 85; deg++) expect(Math.abs(heading(deg + 1) - heading(deg))).toBeLessThan(2);
+    expect(Math.abs(heading(15))).toBeLessThan(2); // a little off still goes at the rim
+  });
   it('aims by where the rim is on screen, not by court directions', () => {
     // From the wing the rim sits up the screen even though on court it is almost straight across: pull straight down.
     const release = { x: 3, y: 2.1, z: 1.5 };

@@ -8,10 +8,11 @@ export type AimEvent = { type: 'aim' } | { type: 'shoot'; pull: Pull } | { type:
 type Point = { x: number; y: number };
 
 // Holding still on Dad this long starts the aim; moving further than HOLD_SLOP first makes it ordinary movement.
-export const HOLD_MS = 150, HOLD_SLOP = 10;
+// TOUCH_R: the smallest touch radius around Dad, generous because he is small on a phone.
+export const HOLD_MS = 120, HOLD_SLOP = 14, TOUCH_R = 44;
 
 export const claimsShot = (touch: Point, dad: Target | null) =>
-  dad !== null && Math.hypot(touch.x - dad.x, touch.y - dad.y) <= Math.max(28, dad.radius);
+  dad !== null && Math.hypot(touch.x - dad.x, touch.y - dad.y) <= Math.max(TOUCH_R, dad.radius);
 
 export function readPull(origin: Point, end: Point, minSide: number): { kind: 'shoot'; pull: Pull } | { kind: 'cancel' } {
   const dx = end.x - origin.x, dy = end.y - origin.y;

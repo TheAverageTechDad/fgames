@@ -7,7 +7,7 @@ import { BALL_R, GRAVITY, RIM, isTwoPointer, type Vec3 } from './court';
 export type Pull = { dx: number; dy: number; minSide: number; rimAngle?: number };
 
 // The ideal pull is a fifth of the screen from anywhere; MIN_PULL_PX or less cancels the shot.
-export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_CONE = (25 * Math.PI) / 180, AIM_KEEP = 0.15, BAND_NEAR = 0.08, BAND_FAR = 0.05,
+export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_FULL = (20 * Math.PI) / 180, AIM_NONE = (80 * Math.PI) / 180, AIM_KEEP = 0.1, BAND_NEAR = 0.08, BAND_FAR = 0.05,
   POWER_SLOPE = 0.35, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
 
 /** The pull as a fraction of the screen, so the same pull means the same on every phone. */
@@ -48,7 +48,9 @@ export function shotVelocity(release: Vec3, pull: Pull): Vec3 {
   // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
   const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(-pull.dy, -pull.dx);
   const seen = pull.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
-  const angle = toRim + (Math.abs(err) <= AIM_CONE ? err * AIM_KEEP : err);
+  // Aim help: within AIM_FULL only a tenth of the error is kept; it eases out to none at AIM_NONE, so the arc never snaps.
+  const t = Math.max(0, Math.min(1, (AIM_NONE - Math.abs(err)) / (AIM_NONE - AIM_FULL))), help = t * t * (3 - 2 * t);
+  const angle = toRim + err * (1 - (1 - AIM_KEEP) * help);
   // Aim a touch past the centre: the centre is the short end of the window that drops through.
   const reach = Math.hypot(RIM.x - release.x, RIM.z - release.z) + AIM_LONG;
   const v = launchVelocity(release, { x: release.x + Math.cos(angle) * reach, y: RIM.y, z: release.z + Math.sin(angle) * reach });
