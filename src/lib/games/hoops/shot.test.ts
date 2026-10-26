@@ -37,6 +37,15 @@ describe('shot', () => {
       expect(fly(release, shotVelocity(release, swipe)).some(e => e.type === 'score')).toBe(true);
     }
   });
+  it('scores a perfect swipe from close in, the wings and beyond the arc, cleanly from mid-range', () => {
+    const spots = [[0, 1.9], [1, 2.1], [-1.2, 1.7], [-2.5, 2], [3, 1.5], [0, 4], [2, 3], [3, 5], [-2.5, 5.5]];
+    for (const [x, z] of spots) {
+      const release = { x, y: 2.1, z }, dz = RIM.z - z, dx = RIM.x - x, len = Math.hypot(dx, dz);
+      const events = fly(release, shotVelocity(release, { dx: (dx / len) * 117, dy: (dz / len) * 117, seconds: 0.15, minSide: 390 }));
+      expect(events.some(e => e.type === 'score'), `scores from ${x}, ${z}`).toBe(true);
+      if (len > 2.5) expect(events.findIndex(e => e.type === 'rim') < 0 || events.findIndex(e => e.type === 'rim') > events.findIndex(e => e.type === 'score'), `clean from ${x}, ${z}`).toBe(true);
+    }
+  });
   it('falls short on a weak swipe and misses on a sideways one', () => {
     const release = { x: 0, y: 2.1, z: 5 };
     expect(fly(release, shotVelocity(release, { dx: 0, dy: -40, seconds: 0.2, minSide: 390 })).some(e => e.type === 'score')).toBe(false);
