@@ -37,6 +37,10 @@ describe('ball', () => {
     const ball = createBall({ x: RIM.x, y: RIM.y - 1, z: RIM.z }, { x: 0, y: 5, z: 0 });
     expect(run(ball, 0.4).filter(e => e.type === 'score')).toHaveLength(0);
   });
+  it('never scores a ball that came up through the ring, even on the way back down', () => {
+    const ball = createBall({ x: RIM.x, y: RIM.y - 1, z: RIM.z }, { x: 0, y: 6, z: 0 });
+    expect(run(ball, 3).filter(e => e.type === 'score')).toHaveLength(0);
+  });
   it('bounces off the rim when dropped on its front edge', () => {
     const ball = createBall({ x: RIM.x, y: RIM.y + 1, z: RIM.z + RIM.radius });
     const events = run(ball, 1);

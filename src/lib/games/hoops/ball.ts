@@ -67,8 +67,11 @@ function substep(ball: Ball, h: number, events: BallEvent[]) {
     if (Math.hypot(v.x, v.y, v.z) < 0.2) { v.x += out.x * 0.3; v.z += out.z * 0.3; }
   }
 
-  // A basket: the centre crosses the rim plane downward inside the ring, once per ball.
-  if (!ball.scored && y0 > RIM.y && p.y <= RIM.y && v.y < 0 && Math.hypot(p.x - RIM.x, p.z - RIM.z) < RIM.radius) {
+  // A basket: the centre crosses the rim plane downward inside the ring, once per ball. Coming up through
+  // the ring spends that chance, so a flick from underneath can't drop back in for points.
+  const inside = Math.hypot(p.x - RIM.x, p.z - RIM.z) < RIM.radius;
+  if (inside && y0 < RIM.y && p.y >= RIM.y) ball.scored = true;
+  if (!ball.scored && y0 > RIM.y && p.y <= RIM.y && v.y < 0 && inside) {
     ball.scored = true; events.push({ type: 'score', speed: -v.y, at: { ...p } });
   }
 }
