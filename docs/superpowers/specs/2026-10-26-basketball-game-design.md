@@ -2,7 +2,7 @@
 
 Date: 26 October 2026. Revised the same day after review (see "Changes in this revision").
 
-Status: discussion draft for review. The agreed mechanics below are established; everything labelled as a proposal is a recommendation. This document does not authorize implementation. No final name yet; working route `/hoops`.
+Status: design decisions settled with the user (see "Decisions"); numeric values remain tuning choices. This document does not authorize implementation. No final name yet; working route `/hoops`.
 
 ## Intent
 
@@ -23,12 +23,15 @@ As in the other games, the point is accessible touch controls and satisfying phy
 - Ball physics supports bouncing and colliding with physically present objects.
 - The court has proper surface texture and markings; the models and overall presentation have good visual quality.
 - Simple, fun and easy to put down after a few minutes, like Catcha and Pocket Farm.
+- Shot power is distance-relative: a comfortable swipe scores from anywhere.
+- On the player's team only the controlled player can steal; AI teammates contest and block lanes.
+- No mid-match save: pause while the page is alive, lose the match if the page is killed.
+- Outdoor court. Dad plays; the rest of the family watches and cheers from the side.
+- Two-minute matches with the simplified rules below.
 
-The user has not chosen the player's own stealing action. Automatic stealing for both teams is the current recommendation, not a settled decision.
+## First-version rules
 
-## Proposed first-version rules
-
-| Decision | Proposed rule | Purpose |
+| Decision | Rule | Purpose |
 | --- | --- | --- |
 | Opponent | One human controlling a team against an AI team | The casual game before any multiplayer. |
 | Match length | Two minutes of active play; higher score wins; ties allowed | A predictable short session, no overtime. |
@@ -39,12 +42,12 @@ The user has not chosen the player's own stealing action. Automatic stealing for
 | After a basket | The other team restarts at the top of the arc after a brief automatic reset that spaces players | Readable changes of possession. |
 | Out of bounds | The other team restarts at a marked point near where the ball went out | Boundaries matter without an inbound sequence. |
 | No-calls | No fouls, free throws, shot clock, travelling or double dribble | Walking, jumping, dribbling and shooting stay playful. |
-| Stealing | Sustained close guarding works automatically for either team | Defence uses existing movement, not another gesture. |
+| Stealing | Sustained close guarding steals automatically. Every opponent can; on the player's team only the controlled player can | Defence uses existing movement, not another gesture, and needs the player. |
 | Difficulty | One approachable AI setting | Tune one coherent experience before modes. |
 | End of match | The shared result card with the score and a one-tap rematch | Reuse the arcade's result flow; one more match is one tap. |
 | Interruptions | Pause play and the clock when hidden or blurred; resume where it stopped while the page is alive. Do not persist a match in progress | A two-minute match is cheap to lose if the OS kills the page; a mid-flight save/restore is not cheap to build. |
 
-One court, fixed teams. Proposed roster: Dad, Mom and the eldest daughter (`chibi-sibling-sample`) against a team built from the boy variants (`chibi-older-boy`, `chibi-younger-boy`) plus a jersey-recoloured adult. Team colour comes from jerseys, not new models. Dad stays recognizable. Progression, upgrades, online play, tournaments and more venues are out of scope.
+One court, fixed teams. Dad and two neighbourhood teammates play three neighbourhood opponents. Mom, the eldest daughter (`chibi-sibling-sample`) and the toddler (`chibi-toddler`) watch from the sideline and cheer: idle bounce and clapping, a jump-and-cheer on Dad's team's baskets, a groan on a steal against him. They are scenery with reactions, not players or physics bodies. The five other players are new to the project: build them as variants of one chibi base (jerseys, hair, skin tone, height) in the style of the family models; the boy models (`chibi-older-boy`, `chibi-younger-boy`) can seed the younger-looking ones. Team colour comes from jerseys. Dad stays recognizable. Progression, upgrades, online play, tournaments and more venues are out of scope.
 
 ## Controls and gesture ownership
 
@@ -79,7 +82,7 @@ Holding the ball always means dribbling: lower and slower when standing still, f
 
 Steal rule: a grounded defender facing the carrier within reach (start at 0.9 m), with no other player between them, builds a guarding meter. Fill time starts at 2 s. Out of reach, the meter drains at twice the fill rate; beyond twice the reach it resets. Jumping does not clear progress. Several defenders do not stack: the strongest eligible meter counts. A teammate standing between the defender and carrier blocks the meter, which makes a natural screen.
 
-Show the meter as a small ring segment over the carrier while it builds. When full, play a short steal animation and transfer possession. The same reach and timing apply to every defender, AI or human. After any catch or steal, the new carrier has 0.5 s of protection to prevent ping-pong. A pass clears the meter. A stationary carrier can still be robbed.
+Show the meter as a small ring segment over the carrier while it builds. When full, play a short steal animation and transfer possession. Every opponent builds a meter; on the player's team only the controlled player does. AI teammates still guard: they shadow opponents, contest shots and can intercept passes by contact, but never steal from a dribble. Reach and timing are identical for every defender that can steal. After any catch or steal, the new carrier has 0.5 s of protection to prevent ping-pong. A pass clears the meter. A stationary carrier can still be robbed.
 
 Contact with a dribbled ball does not bypass the meter. A released pass, a shot or a loose ball is different: anyone can intercept or recover it by physical contact.
 
@@ -99,7 +102,7 @@ Minimum swipe travel to shoot: 24 px. No power meter and no release-timing minig
 
 Passes aim at the receiver's catch point with modest lead on their motion. They fly through space and can be intercepted. Catching and loose-ball pickup are automatic for any eligible player within reach. AI teammates get open, move to catch passes and compete for rebounds.
 
-**Physics, proposed.** No new dependency: the ball is the only dynamic body, and everything it touches is a simple shape. Hand-roll sphere collisions against the floor plane, backboard box, rim (a torus: distance to the ring circle), pole, and vertical capsules for players, on a fixed 120 Hz step with substeps when the ball is fast. A physics engine (Rapier and similar) adds hundreds of kilobytes of WebAssembly to the offline cache for one moving sphere. The net is animation only.
+**Physics.** No new dependency: the ball is the only dynamic body, and everything it touches is a simple shape. Hand-roll sphere collisions against the floor plane, backboard box, rim (a torus: distance to the ring circle), pole, and vertical capsules for players, on a fixed 120 Hz step with substeps when the ball is fast. A physics engine (Rapier and similar) adds hundreds of kilobytes of WebAssembly to the offline cache for one moving sphere. The net is animation only.
 
 The ball is always in exactly one state: held, dribbling, in flight (pass or shot), loose, or resetting after a stoppage. In flight and loose, physics alone moves it; no animation pulls it toward a hand. A basket counts once, when the ball's centre crosses the rim plane downward inside the ring. Fast shots must not tunnel through the rim or backboard. Test glancing rim hits, backboard rebounds, floor bounces and out of bounds together.
 
@@ -127,7 +130,7 @@ Dad is `static/catcha/assets/chibi-dad.glb`. Catcha's `characters.js` loads the 
 
 Add basketball actions around the existing locomotion: moving and standing dribble, receive, pass, shoot and follow-through, defensive stance, steal, and rebound/catch. Gameplay events and hand attachment points drive animation timing so the ball never visibly leaves early, clips through the hands or teleports on a catch.
 
-Build one polished ball, hoop, backboard, net and half court. **Proposed art direction:** an outdoor driveway or park court at golden hour. A textured asphalt surface gives the grit and wear the user asked for, painted lines read clearly, it suits a family playing outside, and Pocket Farm's outdoor lighting keyframes (`farm/juice.ts`) and blob shadows can be reused. The net reacts visibly to a basket; a lightweight animation is enough.
+Build one polished ball, hoop, backboard, net and half court. **Art direction:** an outdoor neighbourhood court at golden hour, with a sideline bench or kerb for the watching family. A textured asphalt surface gives the grit and wear the user asked for, painted lines read clearly, and Pocket Farm's outdoor lighting keyframes (`farm/juice.ts`) and blob shadows can be reused. The net reacts visibly to a basket; a lightweight animation is enough.
 
 ## Presentation, feedback and AI
 
@@ -135,7 +138,7 @@ Camera: a steady elevated view looking toward the hoop, framed for portrait with
 
 HUD: score, time left, pause, and the steal meter. Clear team colours and distinct silhouettes. The first match opens with a short contextual introduction (move, pass, shoot), shown once, not a tutorial screen. Passes, dribbles, rim hits, backboard hits, steals and baskets each have their own animation, sound and optional haptic, through the existing sound and haptic preferences.
 
-AI teammates find space, offer for passes, chase loose balls and defend after a turnover. Opponents pressure the carrier, pass and shoot. Everyone obeys the same physics and steal rules. Lightweight steering and decision timing; no plays, tactics or player stats. Tune the AI to leave readable openings rather than swarm the carrier.
+AI teammates find space, offer for passes, chase loose balls and defend after a turnover. Opponents pressure the carrier, pass and shoot. Everyone obeys the same physics; the steal rule is as above. The sideline family reacts to baskets, steals and the final buzzer, with a bigger cheer when Dad scores himself. Lightweight steering and decision timing; no plays, tactics or player stats. Tune the AI to leave readable openings rather than swarm the carrier.
 
 ## Existing-app integration
 
@@ -156,26 +159,18 @@ Persist only preferences and, optionally, a win/loss tally. Target smooth phone 
 - A movement drag or sprint never shoots; a pass never also jumps. Shot targets stay usable while characters move, including under the rim on a large phone.
 - The same swipe behaves the same on representative portrait phone sizes; a comfortable swipe scores from different spots, harder swipes overshoot and weak swipes fall short.
 - Pass control changes at the catch, passes can be intercepted, and the controlled player is always clear.
-- Guarding gives readable warning and a real escape, follows the same rules for both teams, and cannot produce repeated instant steals.
+- Guarding gives readable warning and a real escape and cannot produce repeated instant steals. On the player's team, only the controlled player ever steals from a dribble.
 - Dribbling looks attached to the moving character; squash and stretch recovers; released balls collide and rebound convincingly.
 - A basket cannot double-count or count from below. Fast shots cannot pass through the rim or backboard. A shot released before the buzzer counts.
 - Six players fit the portrait view with tappable teammates, useful spacing and readable team colours.
 - A match ends on the result card, rematch is one tap, and hiding the page pauses it.
 - Catcha and Pocket Farm keep their movement and input behaviour, and the new game works offline once cached.
 
-## Decisions for review
+## Decisions
 
-Established: the controls, control following possession, automatic dribble, physical ball, Dad reuse and the casual half-court format.
+Settled with the user on 26 October 2026: distance-relative shot power; only the controlled player steals for the player's team; no mid-match save; an outdoor court with Dad playing and the family cheering from the sideline; two-minute matches with the simplified scoring and restarts. Numeric values remain the builder's tuning choices.
 
-For the user to confirm:
-
-1. **Distance-relative shot power** (a comfortable swipe scores from anywhere) versus absolute power (deeper shots need harder swipes, which is more "physical" but much harder to learn on a phone).
-2. **Who steals for the player's team.** With the same automatic rule for everyone, AI teammates may win the ball back without the player's help, and defence can feel like it plays itself. The alternative: on the player's team only the controlled defender builds a meter, while AI teammates contest and block passing lanes.
-3. **No mid-match save.** Pausing works while the page is alive; a killed page loses the current two-minute match.
-4. **Outdoor golden-hour court** and the roster (Dad, Mom and the eldest daughter against the boys and a recoloured adult).
-5. Two-minute matches and the simplified scoring and restarts.
-
-Numeric values remain the builder's tuning choices.
+Consequence for scope: the five other players are new characters (variants of one base), the main new asset work alongside the court.
 
 ## Changes in this revision
 
@@ -184,6 +179,6 @@ Numeric values remain the builder's tuning choices.
 - Added first possession, the buzzer-beater rule, the shared result card with rematch, and a thumb-reach check for shots under the rim.
 - Dropped the resumable mid-match save: pause while alive, nothing persisted mid-match.
 - Proposed hand-rolled ball physics instead of a physics engine dependency.
-- Proposed a roster from the existing family and boy models, and an outdoor court that reuses the farm's lighting.
-- Named the defence-agency question about AI teammates stealing.
+- An outdoor court that reuses the farm's lighting.
 - Made the first build step a shootaround that decides whether the game is fun before the rest is built.
+- Recorded the user's decisions: relative shot power, controlled-player-only steals for the player's team, no mid-match save, two-minute matches, and an outdoor court where Dad plays with neighbourhood teammates and opponents while the family cheers from the sideline.
