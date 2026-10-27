@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPuffs } from '../farm/juice';
+import { createFarmProps } from '../farm/props';
+import { buildHoopsWorld, createBirds } from './world';
 import { createHoopsAudio } from './audio';
 import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
 import { DASH_WINDUP, JUMP_V, RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
@@ -63,7 +65,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6d7a4'); scene.fog = new THREE.Fog('#f6d7a4', 30, 60);
   const hemi = new THREE.HemisphereLight('#fff4e0', '#6f8a55', 1.4); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffe2b0', 2.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
+  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 50 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
   sun.position.set(-6, 12, 9); sun.target.position.set(0, 0, 4); scene.add(sun, sun.target);
 
@@ -95,9 +97,9 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   // Court
   const ground = new THREE.Mesh(keep(new THREE.PlaneGeometry(PAD.maxX - PAD.minX, PAD.maxZ - PAD.minZ)), keep(new THREE.MeshStandardMaterial({ map: keep(courtTexture()), roughness: 0.95 })));
   ground.rotation.x = -Math.PI / 2; ground.position.set((PAD.minX + PAD.maxX) / 2, 0, (PAD.minZ + PAD.maxZ) / 2); ground.receiveShadow = true; scene.add(ground);
-  // Grass runs out past the edges of the view, under the thumb.
-  const lawn = new THREE.Mesh(keep(new THREE.PlaneGeometry(80, 80)), mat('#7fa65a', { roughness: 1 }));
-  lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.01; lawn.receiveShadow = true; scene.add(lawn);
+  // The neighbourhood around the court (Pocket Farm's props) and its birds.
+  const props = createFarmProps(), world = new THREE.Group(); scene.add(world);
+  const worldGeometry = buildHoopsWorld(props, world), birds = createBirds(scene, props, sun.position.clone().sub(sun.target.position));
   // Chain-link fence on the back and sides: posts, a top rail and a see-through mesh. The ball bounces off it (ball.ts).
   {
     const H = 2.4, link = keep(canvasTexture(64, 64, c => {
@@ -359,7 +361,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     ballShadow.position.set(b.x, 0.021, b.z); ballShadow.scale.setScalar(Math.max(0.4, 1 - b.y * 0.15));
 
     swish = Math.max(0, swish - dt / 0.3); net.scale.y = 1 + Math.sin(swish * Math.PI) * 0.35;
-    puffs.step(dt);
+    puffs.step(dt); birds.update(dt, target);
     for (const f of fans) {
       if (holdMood) { f.mood = holdMood; f.moodT = 1; }
       if ((f.moodT -= dt) <= 0) f.mood = 'idle';
@@ -400,7 +402,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     setPaused(value: boolean) { paused = value; input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
     destroy() {
       if (disposed) return;
-      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy(); audio.destroy(); puffs.dispose();
+      disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy(); audio.destroy(); puffs.dispose(); birds.dispose(); worldGeometry.forEach(g => g.dispose()); props.dispose();
       document.removeEventListener('visibilitychange', visibility);
       if (model) disposeObject(model);
       for (const f of fans) if (f.model) disposeObject(f.model);
