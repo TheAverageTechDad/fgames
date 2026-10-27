@@ -4,7 +4,7 @@ import { shotVelocity, type Pull } from './shot';
 
 export type Mode = 'held' | 'aim' | 'flight' | 'loose';
 export type Move = { x: number; z: number; sprint: boolean };
-export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump' | 'dash' | 'skid' | 'tired'; at: Vec3 } | { type: 'shot'; value: 1 | 2; at: Vec3 };
+export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump' | 'dash' | 'skid' | 'tired'; at: Vec3 } | { type: 'shot'; value: 1 | 2; release: number; at: Vec3 };
 export type Shootaround = {
   // jumpT < 0 when not crouching; dashT: seconds into a sprint, < 0 when not sprinting; skidT: the skid after one.
   player: { x: number; y: number; z: number; vx: number; vz: number; yaw: number; vy: number; jumpT: number; dashT: number; skidT: number };
@@ -57,16 +57,20 @@ export function startAim(s: Shootaround) {
 }
 export function cancelAim(s: Shootaround) { if (s.mode === 'aim') s.mode = 'held'; }
 
-/** Lets go: the ball leaves from where it sat, at once, and Dad hops through the shot. */
+/**
+ * Lets go: the ball leaves from where it sat, at once, and Dad hops through a set shot. In the air it's a jump shot:
+ * `release` rates it from 0 (a set shot, or leaving the ground) to 1 (right at the top of the jump), and a clean one is more forgiving.
+ */
 export function shoot(s: Shootaround, pull: Pull): GameEvent | null {
   if (s.mode !== 'aim' && s.mode !== 'held') return null;
   if (s.mode === 'held') faceRim(s);
+  const air = !grounded(s), quality = air ? Math.max(0, 1 - Math.abs(s.player.vy) / JUMP_V) : 0;
   const release = releasePoint(s);
   s.value = isTwoPointer(s.player) ? 2 : 1;
-  s.ball = createBall(release, shotVelocity(release, pull));
+  s.ball = createBall(release, shotVelocity(release, pull, quality));
   s.mode = 'flight'; s.shots++; s.player.vx = s.player.vz = 0;
-  if (grounded(s)) s.player.vy = SHOT_HOP;
-  return { type: 'shot', value: s.value, at: release };
+  if (!air) s.player.vy = SHOT_HOP;
+  return { type: 'shot', value: s.value, release: quality, at: release };
 }
 
 export function jump(s: Shootaround) {

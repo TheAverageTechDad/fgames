@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
-import { RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
 const ideal = { dx: 0, dy: 78, minSide: 390 }; // pull straight back: Dad starts straight out from the rim
@@ -94,6 +94,20 @@ describe('shootaround', () => {
     const events = run(s, 3);
     expect(events.filter(e => e.type === 'score')).toHaveLength(1);
     expect([s.score, s.made, s.shots]).toEqual([1, 1, 1]);
+  });
+  it('jumps while aiming and lets go higher, with a clean release at the top', () => {
+    const s = createShootaround(); startAim(s); jump(s);
+    run(s, 0.33); // the 0.09 s crouch, then a quarter second up to the top
+    expect(s.mode).toBe('aim'); expect(s.player.y).toBeGreaterThan(0.6);
+    const event = shoot(s, ideal);
+    expect(event?.type === 'shot' && event.release).toBeGreaterThan(0.85);
+    expect(s.ball.p.y).toBeGreaterThan(RELEASE_HEIGHT + 0.6);
+    expect(run(s, 3).some(e => e.type === 'score')).toBe(true);
+  });
+  it('rates a set shot as no jump at all', () => {
+    const s = createShootaround(); startAim(s);
+    const event = shoot(s, ideal);
+    expect(event?.type === 'shot' && event.release).toBe(0);
   });
   it('scores two from beyond the arc', () => {
     const s = createShootaround(); s.player.z = RIM.z + ARC_R + 0.8;

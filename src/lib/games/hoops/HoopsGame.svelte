@@ -22,7 +22,9 @@
     Object.assign(host.dataset, { shots: String(s.shots), score: String(s.score), mode: s.mode, dadX: String(Math.round(dad.x)), dadY: String(Math.round(dad.y)), rimX: String(Math.round(rim.x)), rimY: String(Math.round(rim.y)) });
   }
   function event(e: GameEvent) {
-    if (e.type === 'tired') { note = 'Out of puff! Catch your breath'; clearTimeout(noteTimer); noteTimer = setTimeout(() => { note = ''; }, 1600); }
+    const say = (text: string) => { note = text; clearTimeout(noteTimer); noteTimer = setTimeout(() => { note = ''; }, 1600); };
+    if (e.type === 'tired') say('Out of puff! Catch your breath');
+    if (e.type === 'shot' && e.release > 0.85) say('Perfect release!');
     if (e.type !== 'score' || !engine) return;
     pop = `+${engine.state.value}`; popId++;
     clearTimeout(popTimer); popTimer = setTimeout(() => { pop = ''; }, 900);
@@ -77,7 +79,7 @@
     {/if}
     <dialog class="hoops-pause" bind:this={pauseDialog} onclose={resume}>
       <h2>Paused</h2>
-      <p>Hold Dad, pull back and let go to shoot. Drag anywhere else to move.</p>
+      <p>Hold Dad, pull back and let go to shoot; tap with another finger while aiming to jump, and let go at the top for a jump shot. Drag anywhere else to move; push to the edge to sprint.</p>
       <div class="hoops-switches">
         <button class="hoops-switch" role="switch" aria-checked={!muted} onclick={() => { muted = sound.toggleMute(); }}>Sound <b>{muted ? 'Off' : 'On'}</b></button>
         <button class="hoops-switch" role="switch" aria-checked={buzz} onclick={() => { buzz = !buzz; setHapticsEnabled(buzz); if (buzz) haptic('tick'); }}>Vibration <b>{buzz ? 'On' : 'Off'}</b></button>

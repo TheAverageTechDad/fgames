@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPuffs } from '../farm/juice';
 import { createHoopsAudio } from './audio';
 import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
-import { RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
+import { DASH_WINDUP, JUMP_V, RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
 import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 
@@ -193,7 +193,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   let rightArm: THREE.Object3D | null = null;
   const handLocal = new THREE.Vector3(), hand = new THREE.Vector3(), pickupFrom = new THREE.Vector3();
   let model: THREE.Object3D | null = null, disposed = false, paused = false, loaded = false, frame = 0, previous = performance.now(), hudClock = 0;
-  let stepPhase = 0, squash = 1, followT = 0, pickupT = 0, lean = 0, lastSpeed = 0;
+  let stepPhase = 0, squash = 1, followT = 0, pickupT = 0, lean = 0, landT = 0;
   const PICKUP = 0.28;
 
   const disposeObject = (root: THREE.Object3D) => root.traverse(o => {
@@ -280,24 +280,29 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const events = stepShootaround(state, dt, input.read()); events.forEach(feedback);
     follow(Math.min(1, dt * 3.5));
 
-    // Dad: face where he runs (the hoop while aiming), lean into his speed, crouch and stretch in jumps, bend to pick up.
+    // Dad moves exactly as Catcha's characters do (characters.js stepPlayer): the same step rate for his speed, bounce,
+    // lean, squash and stretch, arm and leg swing, sprint wind-up and skid, and jump crouch and leap. Hoops adds the
+    // basketball on top: the dribbling hand, the aim, the follow-through and the pickup bend.
     const p = state.player, speed = Math.hypot(p.vx, p.vz), moving = speed > 0.3;
     const aiming = state.mode === 'aim', shooting = aiming || followT > 0;
-    dad.position.set(p.x, p.y, p.z);
-    dad.rotation.y = turn(dad.rotation.y, shooting ? Math.atan2(RIM.x - p.x, RIM.z - p.z) : p.yaw, dt * 12);
-    stepPhase += dt * (moving ? 7 + 6 * Math.min(1.35, speed / RUN_SPEED) : 0);
-    const air = p.y > 0, crouching = p.jumpT >= 0, braking = Math.max(-1, Math.min(1, (speed - lastSpeed) / Math.max(dt, 1e-6) / 20));
-    lastSpeed = speed; followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt); clock += dt;
-    if (wasAir && !air) { audio.land(); dust(p.x, p.z, 5, undefined, 0.2); }
+    const facing = shooting ? Math.atan2(RIM.x - p.x, RIM.z - p.z) : p.yaw, delta = Math.atan2(Math.sin(facing - dad.rotation.y), Math.cos(facing - dad.rotation.y));
+    dad.rotation.y += Math.max(-10 * dt, Math.min(10 * dt, delta));
+    stepPhase += dt * (moving ? 13 * (speed / RUN_SPEED) : 2);
+    const air = p.y > 0, crouching = p.jumpT >= 0, rise = air ? Math.max(0, Math.min(1, 0.5 - p.vy / (2 * JUMP_V))) : -1;
+    followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt); landT = Math.max(0, landT - dt); clock += dt;
+    if (wasAir && !air) { audio.land(); dust(p.x, p.z, 5, undefined, 0.2); landT = 0.16; }
     wasAir = air;
-    // Catcha's sprint body language: crouch and lean back in the wind-up, lean hard into the sprint, sit back in the skid.
-    const winding = p.dashT >= 0 && p.dashT < 0.1, sprinting = p.dashT >= 0.1, skidding = p.skidT > 0;
+    const winding = p.dashT >= 0 && p.dashT < DASH_WINDUP, sprinting = p.dashT >= DASH_WINDUP, skidding = p.skidT > 0;
     const bend = pickupT > 0 ? Math.sin((pickupT / PICKUP) * Math.PI) : 0;
-    squash += ((crouching ? 0.75 : air ? 1.1 : winding ? 0.86 : skidding ? 0.92 : aiming ? 0.94 : 1 - bend * 0.12) - squash) * Math.min(1, dt * 14);
+    const squashTo = crouching ? 0.72 : rise >= 0 ? (rise < 0.35 ? 1.18 : 1.04) : landT > 0 ? 0.78
+      : winding ? 0.86 : sprinting && p.dashT < DASH_WINDUP + 0.14 ? 1.1 : aiming ? 0.94 : 1 - bend * 0.12;
+    const leanTo = crouching ? 0.3 : rise >= 0 ? (rise < 0.6 ? 0.2 : -0.1) : winding ? -0.2 : skidding ? -0.22 : sprinting ? 0.24 : moving ? 0.06 : 0;
+    squash += (squashTo - squash) * Math.min(1, dt * 16);
+    lean += (leanTo + 0.6 * bend - lean) * Math.min(1, dt * 16);
     body.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
-    const leanTo = air ? 0 : winding ? -0.2 : skidding ? -0.22 : 0.14 * Math.min(1.35, speed / RUN_SPEED) + (sprinting ? 0.12 : 0) + 0.12 * braking + 0.6 * bend;
-    lean += (leanTo - lean) * Math.min(1, dt * 10);
     body.rotation.x = lean;
+    // Catcha's bounce: two little hops per stride, higher in a sprint.
+    dad.position.set(p.x, p.y + (moving && !air && !crouching && !winding ? Math.abs(Math.sin(stepPhase)) * (sprinting ? 0.14 : 0.09) : 0), p.z);
     // Dust from his feet as he runs, more the faster he goes.
     runDust = moving && !air ? runDust + dt * (2 + 6 * Math.min(1.5, speed / RUN_SPEED) ** 2) : 0;
     for (; runDust >= 1; runDust--) dust(p.x - Math.sin(dad.rotation.y) * 0.25, p.z - Math.cos(dad.rotation.y) * 0.25, 1, { x: -p.vx * 0.15, z: -p.vz * 0.15 }, 0.12);
@@ -308,18 +313,18 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       (gauge.material as THREE.MeshBasicMaterial).color.set(state.tired ? '#ff6b5b' : '#3dff8a');
       gauge.position.set(p.x, 0.027, p.z);
     }
-    // The dribble: the hand rides the top of the ball, pushes it down, and is waiting when it comes back.
-    const beat = state.dribble - Math.floor(state.dribble);
+    // Limbs as Catcha sets them, straight onto the pose each frame (no smoothing, which made the run float).
+    const swing = Math.sin(stepPhase) * (moving ? (sprinting ? 0.8 : 0.5) : 0.06), beat = state.dribble - Math.floor(state.dribble);
     for (const joint of joints) {
-      const isArm = joint.name.startsWith('arm'), right = joint.name.includes('right');
-      // Sprinting arms pump harder and sit a little back, like a real run.
-      const swing = moving && !air ? Math.sin(stepPhase) * (sprinting ? 0.85 : 0.6) * (right ? 1 : -1) : 0;
-      let to = isArm ? -swing * (sprinting ? 1.1 : 0.7) + (sprinting ? 0.25 : winding ? 0.6 : 0) : swing;
+      const isArm = joint.name.startsWith('arm'), side = joint.name.includes('right') ? 1 : -1;
+      let to = isArm ? -swing * side * (sprinting ? 1.1 : 0.7) + (sprinting ? 0.25 : winding ? 0.6 : 0) : swing * side;
+      if (crouching) to = isArm ? 0.9 : 0;
+      else if (rise >= 0) to = isArm ? -2.2 + rise * 1.5 + (side > 0 ? 0.25 : 0) : rise < 0.7 ? (side > 0 ? -0.75 : 0.55) : -0.3;
       if (isArm && bend > 0) to = -1.3 * bend - 0.2;
       else if (isArm && shooting) to = aiming ? -2.75 : -2.3;
-      else if (joint === rightArm && state.mode === 'held') to = -0.55 + 0.3 * Math.sin(2 * Math.PI * beat);
-      else if (isArm && air) to = -2.0;
-      joint.rotation.x += (to - joint.rotation.x) * Math.min(1, dt * (joint === rightArm && state.mode === 'held' ? 30 : 18));
+      // The dribbling hand keeps a light smoothing so it rides the ball's beat without snapping.
+      if (joint === rightArm && state.mode === 'held' && !crouching && rise < 0) joint.rotation.x += (-0.55 + 0.3 * Math.sin(2 * Math.PI * beat) - joint.rotation.x) * Math.min(1, dt * 30);
+      else joint.rotation.x = to;
     }
     dadShadow.position.set(p.x, 0.02, p.z); dadShadow.scale.setScalar(1 - Math.min(0.4, p.y * 0.4));
     ring.position.set(p.x, 0.025, p.z);

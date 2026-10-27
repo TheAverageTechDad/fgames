@@ -21,15 +21,17 @@ export function readPull(origin: Point, end: Point, minSide: number): { kind: 's
 
 /**
  * The farm's stick for moving, plus the shot: hold still on Dad (while he has the ball) to start aiming,
- * pull back, let go. A touch on Dad that moves straight away stays movement.
+ * pull back, let go. A touch on Dad that moves straight away stays movement. While aiming, a second finger jumps.
  */
 export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, dad: () => Target | null) {
   let held: (Point & { id: number; t: number; owned: boolean }) | null = null;
   let aim: (Point & { id: number; now: Point }) | null = null, enabled = true, tapJump = false;
   const queue: AimEvent[] = [];
+  // While aiming, any other finger touching down is the jump shot's jump, at once (not on lift) and nothing else.
   // A finger on Dad: if the stick is already steering (a second finger), take it so it can't turn into the stick's jump.
   const claim = (e: PointerEvent) => {
-    if (held || aim || !claimsShot({ x: e.clientX, y: e.clientY }, dad())) return false;
+    if (aim) { e.preventDefault(); if (enabled) tapJump = true; return true; }
+    if (held || !claimsShot({ x: e.clientX, y: e.clientY }, dad())) return false;
     const owned = stick.busy();
     held = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, owned };
     if (owned) { e.preventDefault(); canvas.setPointerCapture(e.pointerId); }

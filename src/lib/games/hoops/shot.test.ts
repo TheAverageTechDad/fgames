@@ -27,6 +27,15 @@ describe('shot', () => {
     expect(power(P_IDEAL * 1.07, false)).toBe(1);
     expect(power(P_IDEAL * 1.07, true)).toBeGreaterThan(1);
   });
+  it('gives a perfect jump-shot release a wider sweet band', () => {
+    expect(power(P_IDEAL * 1.12, false, 0)).toBeGreaterThan(1);
+    expect(power(P_IDEAL * 1.12, false, 1)).toBe(1);
+  });
+  it('helps the aim more on a perfect jump-shot release', () => {
+    const release = { x: 0, y: 2.1, z: 5 }, off = { dx: Math.sin(0.25) * ideal, dy: Math.cos(0.25) * ideal, minSide: 390 };
+    const heading = (bonus: number) => { const v = shotVelocity(release, off, bonus); return Math.abs(Math.atan2(v.x, -v.z)); };
+    expect(heading(1)).toBeLessThan(heading(0));
+  });
   it('launchVelocity drops the ball through the rim', () => {
     const release = { x: 1.5, y: 2.1, z: 5 };
     expect(fly(release, launchVelocity(release, RIM)).some(e => e.type === 'score')).toBe(true);

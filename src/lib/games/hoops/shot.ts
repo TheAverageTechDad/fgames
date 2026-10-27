@@ -13,9 +13,12 @@ export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_FULL = (20 * 
 /** The pull as a fraction of the screen, so the same pull means the same on every phone. */
 export const strength = ({ dx, dy, minSide }: Pull) => Math.min(MAX_PULL, Math.hypot(dx, dy) / minSide);
 
-/** How hard the ball goes compared with a clean make from here: 1 inside the sweet band, never softer for a longer pull. */
-export function power(s: number, twoPointer: boolean) {
-  const r = s / P_IDEAL, band = twoPointer ? BAND_FAR : BAND_NEAR;
+/**
+ * How hard the ball goes compared with a clean make from here: 1 inside the sweet band, never softer for a longer pull.
+ * `bonus` (0–1) is how clean a jump-shot release was: at the top of the jump the band is twice as wide.
+ */
+export function power(s: number, twoPointer: boolean, bonus = 0) {
+  const r = s / P_IDEAL, band = (twoPointer ? BAND_FAR : BAND_NEAR) * (1 + bonus);
   if (Math.abs(r - 1) <= band) return 1;
   return Math.min(1.45, Math.max(0.55, 1 + (r - 1 - Math.sign(r - 1) * band) * POWER_SLOPE));
 }
@@ -43,17 +46,18 @@ export function launchVelocity(from: Vec3, to: Vec3): Vec3 {
   return { x: ux * across, y: across * tan, z: uz * across };
 }
 
-export function shotVelocity(release: Vec3, pull: Pull): Vec3 {
+export function shotVelocity(release: Vec3, pull: Pull, bonus = 0): Vec3 {
   // The player aims at the rim they see. The error is measured on screen against the rim's on-screen direction,
   // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
   const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(-pull.dy, -pull.dx);
   const seen = pull.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
   // Aim help: within AIM_FULL only a tenth of the error is kept; it eases out to none at AIM_NONE, so the arc never snaps.
   const t = Math.max(0, Math.min(1, (AIM_NONE - Math.abs(err)) / (AIM_NONE - AIM_FULL))), help = t * t * (3 - 2 * t);
-  const angle = toRim + err * (1 - (1 - AIM_KEEP) * help);
+  // A clean jump-shot release keeps even less of the error.
+  const keep = AIM_KEEP * (1 - 0.7 * bonus), angle = toRim + err * (1 - (1 - keep) * help);
   // Aim a touch past the centre: the centre is the short end of the window that drops through.
   const reach = Math.hypot(RIM.x - release.x, RIM.z - release.z) + AIM_LONG;
   const v = launchVelocity(release, { x: release.x + Math.cos(angle) * reach, y: RIM.y, z: release.z + Math.sin(angle) * reach });
-  const k = power(strength(pull), isTwoPointer(release));
+  const k = power(strength(pull), isTwoPointer(release), bonus);
   return { x: v.x * k, y: v.y * k, z: v.z * k };
 }

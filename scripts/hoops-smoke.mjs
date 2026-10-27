@@ -67,7 +67,17 @@ try {
   await touch('touchEnd', []);
   await page.waitForFunction(n => +document.querySelector('.hoops-world').dataset.shots === n, s.shots + 1, { timeout: 2000 });
 
-  // 6. Offline after one full load.
+  // 6. Jump shot: hold Dad and pull back with one finger, tap with another (he jumps at once), let go in the air.
+  await holding(); s = await read();
+  const pull = away(s, 78);
+  await touch('touchStart', [[1, s.x, s.y]]); await page.waitForTimeout(250);
+  await touch('touchMove', [[1, pull.x, pull.y]]);
+  await touch('touchStart', [[1, pull.x, pull.y], [2, s.x + 120, s.y + 200]]);
+  await touch('touchEnd', [[1, pull.x, pull.y]]); await page.waitForTimeout(250);
+  await touch('touchEnd', []);
+  await page.waitForFunction(n => +document.querySelector('.hoops-world').dataset.shots === n, s.shots + 1, { timeout: 2000 });
+
+  // 7. Offline after one full load.
   await page.evaluate(() => navigator.serviceWorker?.ready);
   await context.setOffline(true);
   await page.reload();
@@ -76,7 +86,7 @@ try {
 
   assert.deepEqual(errors, [], 'page errors');
   assert.deepEqual(requests.filter(r => !r.includes('favicon')), [], 'failed requests');
-  console.log('Hoops smoke passed: drags (even from Dad) move, hold-pull-release shoots, slide-back cancels, tap jumps, second finger on Dad shoots, offline reload.');
+  console.log('Hoops smoke passed: drags (even from Dad) move, hold-pull-release shoots, slide-back cancels, tap jumps, second finger on Dad shoots, jump shot, offline reload.');
 } finally {
   await browser.close();
 }

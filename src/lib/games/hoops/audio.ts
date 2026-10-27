@@ -88,7 +88,11 @@ export function createHoopsAudio() {
       noise(0.35, { freq: 5200, q: 0.7, gain: 0.07, sweep: 0.35, wet: 0.2, pan });
       noise(0.22, { at: 0.08, freq: 3000, q: 0.8, gain: 0.03, sweep: 0.5, wet: 0.2, pan });
     },
-    shot: e => noise(0.14, { freq: 600, q: 1.2, gain: 0.035, sweep: 3, pan: panAt(e.at.x) }),
+    shot: e => {
+      noise(0.14, { freq: 600, q: 1.2, gain: 0.035, sweep: 3, pan: panAt(e.at.x) });
+      // A clean jump-shot release: a small sparkle.
+      if (e.type === 'shot' && e.release > 0.85) { tone(1568, { at: 0.03, gain: 0.03, decay: 0.3, wet: 0.5 }); tone(2093, { at: 0.08, gain: 0.02, decay: 0.3, wet: 0.5 }); }
+    },
     // Gathering the ball: a palm slap.
     pickup: e => { noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
     dash: () => { noise(0.22, { freq: 500, sweep: 4.8, q: 1.4, gain: 0.05 }); tone(220, { type: 'triangle', glide: 2, decay: 0.12, gain: 0.025 }); },
