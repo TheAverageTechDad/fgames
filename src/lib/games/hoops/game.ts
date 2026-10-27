@@ -13,6 +13,8 @@ export type Shootaround = {
   ball: Ball; mode: Mode; drive: Drive | null; dribble: number; stamina: number; staminaRest: number; tired: boolean;
   // streak: baskets in a row; shotLive: a shot is still up (it ends in a basket or on the floor, a miss).
   value: 1 | 2; score: number; shots: number; made: number; streak: number; shotLive: boolean;
+  // pull: the aim being held (the scene keeps it current while the thumb is down); a jump shot leaves with it at the top.
+  pull: Pull | null;
 };
 
 // Pocket Farm's run speed and Catcha's sprint and stamina; the jump is the farm's (a 0.09 s crouch, then up).
@@ -36,7 +38,7 @@ export function createShootaround(): Shootaround {
   const s: Shootaround = {
     player: { x: 0, y: 0, z: 4, vx: 0, vz: 0, yaw: Math.PI, vy: 0, jumpT: -1, dashT: -1, skidT: 0 },
     ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', drive: null, dribble: 0, stamina: 1, staminaRest: 0, tired: false,
-    value: 1, score: 0, shots: 0, made: 0, streak: 0, shotLive: false
+    value: 1, score: 0, shots: 0, made: 0, streak: 0, shotLive: false, pull: null
   };
   s.ball.p = heldBallPosition(s);
   return s;
@@ -46,6 +48,13 @@ export function createShootaround(): Shootaround {
 export function releasePoint(s: Shootaround): Vec3 {
   const { player } = s;
   return { x: player.x + Math.sin(player.yaw) * 0.12, y: RELEASE_HEIGHT + player.y, z: player.z + Math.cos(player.yaw) * 0.12 };
+}
+
+/** Where, and how cleanly, the ball would leave if the thumb let go now: on the way up, a jump shot waits for the top. */
+export function nextRelease(s: Shootaround): { at: Vec3; quality: number } {
+  const p = s.player, at = releasePoint(s), up = p.jumpT >= 0 ? JUMP_V : p.vy;
+  if (up > 0) return { at: { ...at, y: at.y + (up * up) / (2 * JUMP_GRAVITY) }, quality: 1 };
+  return { at, quality: p.y > 0 ? Math.max(0, 1 - Math.abs(p.vy) / JUMP_V) : 0 };
 }
 
 /** Where the ball sits while Dad has it: bouncing beside his right hand, or above his head while he aims. */
@@ -61,28 +70,31 @@ export function heldBallPosition(s: Shootaround): Vec3 {
 }
 
 const grounded = (s: Shootaround) => s.player.y === 0 && s.player.vy === 0;
+const rising = (s: Shootaround) => s.player.jumpT >= 0 || s.player.vy > 0;
 const faceRim = (s: Shootaround) => { s.player.yaw = Math.atan2(RIM.x - s.player.x, RIM.z - s.player.z); };
 
 /** Dad gathers the ball overhead and plants his feet. */
 export function startAim(s: Shootaround) {
   if (s.mode !== 'held') return false;
-  s.mode = 'aim'; s.player.vx = s.player.vz = 0; faceRim(s);
+  s.mode = 'aim'; s.player.vx = s.player.vz = 0; s.pull = null; faceRim(s);
   return true;
 }
-export function cancelAim(s: Shootaround) { if (s.mode === 'aim') s.mode = 'held'; }
+export function cancelAim(s: Shootaround) { if (s.mode === 'aim') { s.mode = 'held'; s.pull = null; } }
 
 /**
- * Lets go: the ball leaves from where it sat, at once, and Dad hops through a set shot. In the air it's a jump shot:
- * `release` rates it from 0 (a set shot, or leaving the ground) to 1 (right at the top of the jump), and a clean one is more forgiving.
+ * Lets go: the ball leaves from where it sat, at once, and Dad hops through a set shot. A jump while aiming is a jump
+ * shot: the ball goes at the top of the leap whenever the thumb lets go on the way up (stepShootaround releases it), so
+ * `release`, how clean it was from 0 (a set shot) to 1 (right at the top), is always high, and a clean one is more forgiving.
  */
 export function shoot(s: Shootaround, pull: Pull): GameEvent | null {
   if (s.mode !== 'aim' && s.mode !== 'held') return null;
+  if (s.mode === 'aim' && rising(s)) { s.pull = pull; return null; }
   if (s.mode === 'held') faceRim(s);
   const air = !grounded(s), quality = air ? Math.max(0, 1 - Math.abs(s.player.vy) / JUMP_V) : 0;
   const release = releasePoint(s);
   s.value = isTwoPointer(s.player) ? 2 : 1;
   s.ball = createBall(release, shotVelocity(release, pull, quality));
-  s.mode = 'flight'; s.shots++; s.shotLive = true; s.player.vx = s.player.vz = 0;
+  s.mode = 'flight'; s.shots++; s.shotLive = true; s.pull = null; s.player.vx = s.player.vz = 0;
   if (!air) s.player.vy = SHOT_HOP;
   return { type: 'shot', value: s.value, release: quality, at: release };
 }
@@ -113,6 +125,8 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
     p.vy -= JUMP_GRAVITY * dt; p.y += p.vy * dt;
     if (p.y <= 0) { p.y = 0; p.vy = 0; s.drive = null; }
   }
+  // A jump shot: at the top of the leap the ball goes, with the aim the thumb holds (or let go with on the way up).
+  if (s.mode === 'aim' && s.pull && p.y > 0 && !rising(s)) { const shot = shoot(s, s.pull); if (shot) events.push(shot); }
   // A dunk or layup: carried in through the air, and at the top of the leap the ball goes.
   if (drive && p.jumpT < 0 && !drive.released && p.y > 0) {
     p.x += drive.vx * dt; p.z += drive.vz * dt; faceRim(s);

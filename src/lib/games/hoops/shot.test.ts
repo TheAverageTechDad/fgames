@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBall, stepBall, type BallEvent } from './ball';
-import { RIM, type Vec3 } from './court';
-import { MAX_PULL, P_IDEAL, launchVelocity, power, shotVelocity, strength } from './shot';
+import { BALL_R, RIM, type Vec3 } from './court';
+import { MAX_PULL, P_IDEAL, launchVelocity, power, rimCrossing, shotVelocity, strength } from './shot';
 
 const fly = (release: Vec3, v: Vec3) => { const ball = createBall(release, v), events: BallEvent[] = []; for (let i = 0; i < 180; i++) events.push(...stepBall(ball, 1 / 60)); return events; };
 /** A drag straight toward the rim, `px` long: the ball goes the way it's dragged. */
@@ -63,6 +63,22 @@ describe('shot', () => {
     // From the wing the rim sits up the screen even though on court it is almost straight across: drag straight up.
     const release = { x: 3, y: 2.1, z: 1.5 };
     expect(fly(release, shotVelocity(release, { dx: 0, dy: -ideal, minSide: 390, rimAngle: -Math.PI / 2 })).some(e => e.type === 'score')).toBe(true);
+  });
+  it('puts the aim ring where the ball really comes down: on the rim for a make, short or long of it for a miss', () => {
+    for (const [x, z] of [[0, 4], [3, 5], [-3.2, 4.5], [3.5, 1.4]]) {
+      const release = { x, y: 2.1, z };
+      for (const [px, makes] of [[ideal, true], [30, false], [160, false]] as const) {
+        const v = shotVelocity(release, pullFrom(release, px)), ring = rimCrossing(release, v), off = ring ? Math.hypot(ring.at.x - RIM.x, ring.at.z - RIM.z) : Infinity;
+        expect(off < RIM.radius - BALL_R / 2, `ring on the rim from ${x}, ${z} with ${px} px`).toBe(makes);
+        expect(fly(release, v).some(e => e.type === 'score'), `scores from ${x}, ${z} with ${px} px`).toBe(makes);
+        // The dots trace the ball's own path: halfway up, the physics has it where the arc said (its fixed steps sag a few cm).
+        if (!ring) continue;
+        const ball = createBall(release, v);
+        for (let i = 0; i < Math.round((ring.t / 2) * 60); i++) stepBall(ball, 1 / 60);
+        const t = Math.round((ring.t / 2) * 60) / 60;
+        expect(Math.hypot(ball.p.x - (x + v.x * t), ball.p.y - (2.1 + v.y * t - 4.9 * t * t), ball.p.z - (z + v.z * t))).toBeLessThan(0.05);
+      }
+    }
   });
   it('falls short on a small drag, overshoots a long one and misses a sideways one', () => {
     const release = { x: 0, y: 2.1, z: 5 };

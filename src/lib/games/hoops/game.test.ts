@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
-import { streakWord, DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { streakWord, DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, nextRelease, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { shotVelocity } from './shot';
 
 const still: Move = { x: 0, z: 0, sprint: false };
 const ideal = { dx: 0, dy: -78, minSide: 390 }; // drag straight up at the rim: Dad starts straight out from it
@@ -95,13 +96,33 @@ describe('shootaround', () => {
     expect(events.filter(e => e.type === 'score')).toHaveLength(1);
     expect([s.score, s.made, s.shots]).toEqual([1, 1, 1]);
   });
-  it('jumps while aiming and lets go higher, with a clean release at the top', () => {
+  it('jumps while aiming and lets the ball go at the top of the leap by itself, cleanly', () => {
+    const s = createShootaround(); startAim(s); s.pull = ideal; jump(s);
+    const shot = run(s, 0.5).find(e => e.type === 'shot'); // the 0.09 s crouch, then a quarter second up to the top
+    expect(shot?.type === 'shot' && shot.release).toBeGreaterThan(0.85);
+    expect(shot?.at.y).toBeGreaterThan(RELEASE_HEIGHT + 0.6);
+    expect(run(s, 3).some(e => e.type === 'score')).toBe(true);
+  });
+  it('shows the arc the jump shot will fly while he is still on the way up', () => {
+    // A long pull: past a set shot's sweet band but inside a clean release's wider one, so the release quality shows.
+    const long = { ...ideal, dy: ideal.dy * 1.25 };
+    for (const rise of [0.05, 0.2]) {
+      const s = createShootaround(); startAim(s); s.pull = long; jump(s);
+      run(s, rise);
+      const next = nextRelease(s), v = shotVelocity(next.at, long, next.quality);
+      const shot = run(s, 0.5).find(e => e.type === 'shot');
+      // From the top of the leap (the frame-by-frame jump peaks a few cm under the exact one)...
+      expect(Math.abs((shot?.at.y ?? 0) - next.at.y), `release height after ${rise} s`).toBeLessThan(0.08);
+      // ...at the same heading and speed: within 0.045 m/s (a few cm at the rim), where a set shot's arc is 0.06 off.
+      expect(Math.hypot(s.ball.v.x - v.x, s.ball.v.z - v.z), `flight after ${rise} s`).toBeLessThan(0.045);
+    }
+  });
+  it('waits for the top when the thumb lets go on the way up', () => {
     const s = createShootaround(); startAim(s); jump(s);
-    run(s, 0.33); // the 0.09 s crouch, then a quarter second up to the top
-    expect(s.mode).toBe('aim'); expect(s.player.y).toBeGreaterThan(0.6);
-    const event = shoot(s, ideal);
-    expect(event?.type === 'shot' && event.release).toBeGreaterThan(0.85);
-    expect(s.ball.p.y).toBeGreaterThan(RELEASE_HEIGHT + 0.6);
+    run(s, 0.2);
+    expect(shoot(s, ideal)).toBeNull(); expect(s.mode).toBe('aim');
+    const shot = run(s, 0.3).find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.release).toBeGreaterThan(0.85);
     expect(run(s, 3).some(e => e.type === 'score')).toBe(true);
   });
   it('rates a set shot as no jump at all', () => {

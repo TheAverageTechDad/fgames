@@ -12,12 +12,23 @@ const readMusic = () => { try { return localStorage.getItem(MUSIC_KEY) !== 'fals
 // Dad's praise for a streak: Catcha's own recordings, shared from its folder.
 const VOICES = { excellent: '/catcha/assets/audio/dad-excellent.m4a', wonderful: '/catcha/assets/audio/dad-wonderful.m4a', brilliant: '/catcha/assets/audio/dad-brilliant.m4a' };
 const SAMPLES = ['excellent', 'wonderful', 'brilliant', 'bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
-type Sample = (typeof SAMPLES)[number];
+// The family's voices when they're booped (bumped into, or hit by the ball): the toddler's "ga-ga" and laughs are
+// Catcha's recordings. Add Mom's and the big sister's files to their lists as they're recorded (they play as soon as
+// they're listed); until then each gets a synthesized squeak or "oh".
+const CATCHA = (name: string) => `/catcha/assets/audio/${name}.m4a`;
+type Who = (typeof FAMILY)[number]['who'];
+const FAMILY_VOICES: Record<Who, Record<'bump' | 'hit', string[]>> = {
+  toddler: { bump: ['gaga-1', 'gaga-2'].map(CATCHA), hit: [1, 2, 3, 4].map(i => CATCHA(`baby-laugh-${i}`)) },
+  girl: { bump: [], hit: [] },
+  mom: { bump: [], hit: [] }
+};
 
 export function createHoopsAudio() {
   let ctx: AudioContext | null = null, closed = false, sfx: GainNode, crowd: GainNode, music: GainNode, reverb: GainNode;
   let track: AudioBuffer | null = null, musicTimer = 0, paused = false, musicOn = readMusic();
-  const buffers = new Map<Sample, AudioBuffer>();
+  // Keyed by sample name, or by URL for the family's voices.
+  const buffers = new Map<string, AudioBuffer>();
+  let voiceAt = -99;
   function build(c: AudioContext) {
     const compressor = c.createDynamicsCompressor();
     compressor.threshold.value = -20; compressor.knee.value = 10; compressor.ratio.value = 3; compressor.attack.value = 0.005; compressor.release.value = 0.2;
@@ -40,7 +51,8 @@ export function createHoopsAudio() {
       if (!ctx) {
         const c = ctx = new AudioContext(); build(c);
         void loadMusic(c);
-        for (const name of SAMPLES) void fetch(name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
+        const files = [...SAMPLES.map(name => [name, name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`]), ...Object.values(FAMILY_VOICES).flatMap(v => [...v.bump, ...v.hit]).map(url => [url, url])];
+        for (const [name, url] of files) void fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
       }
       if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
     } catch { /* the game plays fine silent */ }
@@ -95,7 +107,7 @@ export function createHoopsAudio() {
     s.connect(f); f.connect(g); out(g, pan, wet, nodes); s.start(t); s.onended = () => nodes.forEach(n => n.disconnect());
   }
   /** Plays a recording if it has loaded; false (so the caller synthesizes instead) if not. */
-  function sample(name: Sample, { gain = 0.5, pan = 0, rate = 1, at = 0, wet = 0.1, lowpass = 0, loud = false } = {}) {
+  function sample(name: string, { gain = 0.5, pan = 0, rate = 1, at = 0, wet = 0.1, lowpass = 0, loud = false } = {}) {
     const buffer = buffers.get(name);
     if (!buffer) return false;
     const c = ctx!, s = c.createBufferSource(), g = c.createGain(), nodes: AudioNode[] = [s, g];
@@ -105,7 +117,7 @@ export function createHoopsAudio() {
     return true;
   }
   let flip = false;
-  const either = (a: Sample, b: Sample) => (flip = !flip) ? a : b;
+  const either = (a: string, b: string) => (flip = !flip) ? a : b;
   /** The ball on the ground: a round low thunk with a little rubbery pop; duller and quieter on grass. */
   function bounce(strength: number, pan: number, grass: boolean) {
     const k = Math.min(1, 0.25 + strength), f = (grass ? 95 : 125) * vary();
@@ -191,6 +203,22 @@ export function createHoopsAudio() {
       if (!live() || sample('aww', { gain: 0.35, pan: famPan, wet: 0.25 })) return;
       tone(440, { type: 'triangle', gain: 0.025, decay: 0.35, glide: 0.82, wet: 0.3, pan: famPan });
       tone(370, { at: 0.05, type: 'triangle', gain: 0.02, decay: 0.45, glide: 0.85, wet: 0.3, pan: famPan + 0.15 });
+    },
+    /**
+     * One of the family booped (Catcha's): a kid squeaks three quick rising notes as in Catcha, Mom a soft "oh"; then,
+     * at most every four seconds, a voice: the toddler's "ga-ga" when bumped or a laugh when the ball hits her, or a giggle.
+     */
+    boop(who: Who, kind: 'bump' | 'hit') {
+      if (!document.hidden) haptic('bump');
+      if (!live()) return;
+      const pan = panAt(FAMILY.find(f => f.who === who)!.x), pitch = who === 'girl' ? 0.85 : 1;
+      if (who === 'mom') { tone(392 * vary(), { type: 'triangle', gain: 0.045, decay: 0.16, glide: 1.15, wet: 0.2, pan }); tone(330 * vary(), { at: 0.13, type: 'triangle', gain: 0.04, decay: 0.24, glide: 0.85, wet: 0.2, pan }); }
+      else [700, 900, 1100].forEach((f, i) => tone(f * pitch, { at: i * 0.12, type: 'triangle', gain: 0.05 - i * 0.005, decay: 0.13, glide: 1.65, wet: 0.2, pan }));
+      const lines = FAMILY_VOICES[who][kind].filter(url => buffers.has(url)), now = ctx!.currentTime;
+      if (now - voiceAt < 4 || Math.random() > 0.8) return;
+      voiceAt = now;
+      if (lines.length) sample(lines[Math.floor(Math.random() * lines.length)], { at: 0.32, gain: 0.55, pan, wet: 0.15, loud: true });
+      else if (who !== 'mom') { const f = (900 + Math.random() * 250) * pitch; for (let i = 0; i < 3; i++) tone(f + i * 90, { at: 0.38 + i * 0.09, type: 'triangle', gain: 0.035, decay: 0.08, glide: 1.3, wet: 0.2, pan }); }
     },
     /** Sneakers biting the court on a dunk or layup take-off. */
     squeak() { if (live() && !sample('skid', { gain: 0.16, rate: 1.1 })) noise(0.12, { freq: 2200, sweep: 1.3, q: 3, gain: 0.01 }); },

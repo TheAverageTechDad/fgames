@@ -6,9 +6,9 @@ import { LAMPS, buildHoopsWorld, createBirds } from './world';
 import { createHoopsAudio } from './audio';
 import { STEP, stepBall, type Ball } from './ball';
 import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
-import { DASH_WINDUP, JUMP_V, RUN_SPEED, streakWord, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
+import { DASH_WINDUP, JUMP_V, RUN_SPEED, streakWord, cancelAim, createShootaround, jump, nextRelease, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
-import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
+import { MIN_PULL_PX, rimCrossing, shotVelocity, type Pull } from './shot';
 
 const DAD = '/catcha/assets/chibi-dad.glb';
 // The family on the sideline: Catcha's Mom and the two girls.
@@ -127,7 +127,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const haloMaterial = keep(new THREE.SpriteMaterial({ blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0,
     map: props.canvasTexture(64, 64, c => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#ffd890'); g.addColorStop(1, '#ffd89000'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); }) }));
   for (const at of LAMPS) { const halo = new THREE.Sprite(haloMaterial); halo.position.set(at.x, 1.82, at.z); halo.scale.setScalar(1.3); scene.add(halo); }
-  const birds = createBirds(scene, props, daylight(0).sun);
+  // The sun's offset from the court, kept current by daylight(): the birds' and the backboard's ball shadows follow it.
+  const sunAt = daylight(0).sun, birds = createBirds(scene, props, sunAt);
   // Chain-link fence on the back and sides: posts, a top rail and a see-through mesh. The ball bounces off it (ball.ts).
   {
     const H = 2.4, link = keep(canvasTexture(64, 64, c => {
@@ -204,10 +205,20 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     return null;
   };
   let ballSquash = 0, ballPulse = 0;
-  // The aim: dots along the rising half of the arc the ball will fly.
-  const DOTS = 9, dots = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.055, 10, 6)), keep(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 })), DOTS);
+  // The aim: dots along the whole flight, and a ring where the ball comes down through the rim's height; lined up on the
+  // rim, it goes in. (The dots used to stop at the top of the arc, and seen from a wing that half seemed to point beside
+  // the rim. A ring at the rim's own height can't mislead: over the rim on screen is over the rim on the court.)
+  const DOTS = 16, dots = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.055, 10, 6)), keep(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 })), DOTS);
   dots.count = 0; dots.frustumCulled = false; scene.add(dots);
   const dotMatrix = new THREE.Matrix4();
+  const aimRingMat = keep(new THREE.MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0.95, depthWrite: false }));
+  const aimRing = new THREE.Mesh(keep(new THREE.RingGeometry(BALL_R - 0.04, BALL_R + 0.02, 32)), aimRingMat);
+  aimRing.rotation.x = -Math.PI / 2; aimRing.visible = false; scene.add(aimRing);
+  // The ball's shadow on the backboard, darker and sharper as it closes in.
+  const boardShadowMat = keep(new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, map: keep(canvasTexture(64, 64, c => {
+    const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#1e2a1a'); g.addColorStop(0.5, '#1e2a1aaa'); g.addColorStop(1, '#1e2a1a00'); c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  })) }));
+  const boardShadow = new THREE.Mesh(keep(new THREE.PlaneGeometry(1, 1)), boardShadowMat); boardShadow.position.z = BOARD.z + BOARD.halfDepth + 0.004; boardShadow.visible = false; scene.add(boardShadow);
 
   // Dad, with a ground ring that marks the controlled player.
   const dad = new THREE.Group(), body = new THREE.Group(); dad.add(body); scene.add(dad);
@@ -231,8 +242,19 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const fans = FAMILY.map((spec, i) => {
     const group = new THREE.Group(), body = new THREE.Group(); group.add(body); group.position.set(spec.x, 0, spec.z); scene.add(group);
     shadowDisc(spec.radius + 0.06).position.set(spec.x, 0.02, spec.z);
-    return { spec, group, body, joints: [] as THREE.Object3D[], model: null as THREE.Object3D | null, mood: 'idle' as Mood, moodT: 0, hop: 0, y: 0, vy: 0, phase: i * 1.7 };
+    // boop: seconds left of a boop's wobble; boopCd: until the next can start; near: Dad is touching them.
+    return { spec, group, body, joints: [] as THREE.Object3D[], model: null as THREE.Object3D | null, mood: 'idle' as Mood, moodT: 0, hop: 0, y: 0, vy: 0, phase: i * 1.7, boop: 0, boopCd: 0, near: false };
   });
+  // Catcha's boop: walk into one of the family, or hit them with the ball, and they wobble, hop and fling their arms out,
+  // with a squeak, a voice now and then and a puff of pink (and gold stars for the toddler).
+  const boop = (f: (typeof fans)[number], kind: 'bump' | 'hit') => {
+    if (f.boopCd > 0) return;
+    f.boop = 1.4; f.boopCd = 2.5; f.mood = 'idle';
+    audio.boop(f.spec.who, kind);
+    // At chest height, so Dad standing in front doesn't hide it.
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; puffs.spawn(f.spec.x, f.spec.height * 0.6, f.spec.z, Math.cos(a) * 2.2, 0.3 + Math.random() * 0.6, Math.sin(a) * 2.2, 0.55, 0.5 + Math.random() * 0.2, '#ff9ec4'); }
+    if (f.spec.who === 'toddler') for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; puffs.spawn(f.spec.x, f.spec.height + 0.25, f.spec.z, Math.cos(a) * 1.6, 2.5 + Math.random(), Math.sin(a) * 1.6, 0.6, 0.3, '#ffd23f'); }
+  };
   const setMood = (mood: Mood, seconds: number, hop = false) => fans.forEach((f, i) => {
     f.mood = mood; f.moodT = seconds;
     if (hop) f.hop = 0.04 + i * 0.07 + Math.random() * 0.05;
@@ -311,7 +333,10 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       if (shout) setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); else setMood('clap', 1.3);
     }
     if (e.type === 'floor' && shotLive) { shotLive = false; setMood(Math.random() < 0.5 ? 'aww' : 'idle', 0.9); if (rimTouched && Math.random() < 0.3) audio.aww(); }
-    if (e.type === 'fan') { const hit = fans.reduce((a, f) => Math.hypot(f.spec.x - e.at.x, f.spec.z - e.at.z) < Math.hypot(a.spec.x - e.at.x, a.spec.z - e.at.z) ? f : a); hit.mood = 'flinch'; hit.moodT = 0.45; }
+    if (e.type === 'fan') {
+      const hit = fans.reduce((a, f) => Math.hypot(f.spec.x - e.at.x, f.spec.z - e.at.z) < Math.hypot(a.spec.x - e.at.x, a.spec.z - e.at.z) ? f : a);
+      if (e.speed > 1.5) boop(hit, 'hit'); else { hit.mood = 'flinch'; hit.moodT = 0.45; }
+    }
     const p = state.player, back = { x: -Math.sin(dad.rotation.y) * 1.2, z: -Math.cos(dad.rotation.y) * 1.2 };
     if (e.type === 'dash') dust(p.x, p.z, 6, back);
     if (e.type === 'skid') dust(p.x + Math.sin(dad.rotation.y) * 0.3, p.z + Math.cos(dad.rotation.y) * 0.3, 5, { x: -back.x, z: -back.z });
@@ -349,6 +374,9 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       if (e.type === 'shoot') { const shot = shoot(state, aimed(e.pull)); if (shot) feedback(shot); }
     }
     if (input.jump()) jump(state);
+    // The aim the thumb is holding: for the arc, and for a jump shot, which takes it to the top of the leap.
+    const live = state.mode === 'aim' ? input.pull() : null;
+    if (live) state.pull = Math.hypot(live.dx, live.dy) >= MIN_PULL_PX ? aimed(live) : null;
     const events = stepShootaround(state, dt, input.read()); events.forEach(feedback);
     follow(Math.min(1, dt * 3.5));
 
@@ -367,7 +395,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const winding = p.dashT >= 0 && p.dashT < DASH_WINDUP, sprinting = p.dashT >= DASH_WINDUP, skidding = p.skidT > 0;
     const bend = pickupT > 0 ? Math.sin((pickupT / PICKUP) * Math.PI) : 0;
     const squashTo = crouching ? 0.72 : state.drive && rise >= 0 ? 1.16 : rise >= 0 ? (rise < 0.35 ? 1.18 : 1.04) : landT > 0 ? 0.78
-      : winding ? 0.86 : sprinting && p.dashT < DASH_WINDUP + 0.14 ? 1.1 : aiming ? 0.94 : 1 - bend * 0.12;
+      : winding ? 0.86 : sprinting && p.dashT < DASH_WINDUP + 0.14 ? 1.1 : aiming ? 0.94 - 0.1 * input.steady() : 1 - bend * 0.12;
     const leanTo = crouching ? 0.3 : rise >= 0 ? (rise < 0.6 ? 0.2 : -0.1) : winding ? -0.2 : skidding ? -0.22 : sprinting ? 0.24 : moving ? 0.06 : 0;
     squash += (squashTo - squash) * Math.min(1, dt * 16);
     lean += (leanTo + 0.6 * bend - lean) * Math.min(1, dt * 16);
@@ -417,17 +445,29 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       ball.position.set(hand.x + ((hand.x - p.x) / out) * 0.1 + fx * 0.12, BALL_R + (hand.y - 2 * BALL_R) * Math.abs(Math.cos(Math.PI * state.dribble)), hand.z + ((hand.z - p.z) / out) * 0.1 + fz * 0.12);
       if (pickupT > 0) ball.position.lerpVectors(pickupFrom, ball.position, 1 - pickupT / PICKUP);
     }
-    // The aim: dots up to the top of the arc the release will fly.
-    const pull = aiming ? input.pull() : null;
-    dots.count = 0;
-    if (pull && Math.hypot(pull.dx, pull.dy) >= MIN_PULL_PX) {
-      const from = releasePoint(state), v = shotVelocity(from, aimed(pull)), apex = Math.max(0.05, v.y / GRAVITY);
+    // It falls along the sun, as the other shadows do (straight behind the ball it hid behind the ball from this camera), kept
+    // steep enough to land on the board; it fades in over the last 1.2 m, with the sun at dusk, and away at the board's edges.
+    const bp = ball.position, d = bp.z - boardShadow.position.z, gap = Math.max(0, d - BALL_R);
+    const sx = bp.x - THREE.MathUtils.clamp(sunAt.x / sunAt.z, -0.8, 0.8) * d, sy = bp.y - THREE.MathUtils.clamp(sunAt.y / sunAt.z, 0.5, 1) * d;
+    const edge = Math.min(BOARD.halfWidth - Math.abs(sx), sy - BOARD.bottom, BOARD.top - sy);
+    boardShadowMat.opacity = d > 0 && gap < 1.2 ? 0.5 * Math.min(1, sun.intensity / 2) * (1 - gap / 1.2) ** 2 * THREE.MathUtils.clamp(edge / 0.18, 0, 1) : 0;
+    boardShadow.visible = boardShadowMat.opacity > 0.01;
+    if (boardShadow.visible) { boardShadow.position.x = sx; boardShadow.position.y = sy; boardShadow.scale.setScalar(BALL_R * 2.4 * (1 + gap * 0.8)); }
+    // The aim: the whole flight, down through the rim's height (or to the floor if it never gets that high); in a jump,
+    // the flight from the top of the leap, where the ball will go.
+    dots.count = 0; aimRing.visible = false;
+    if (aiming && state.pull) {
+      const { at: from, quality } = nextRelease(state), v = shotVelocity(from, state.pull, quality), cross = rimCrossing(from, v);
+      const end = cross ? cross.t : (v.y + Math.sqrt(v.y * v.y + 2 * GRAVITY * (from.y - BALL_R))) / GRAVITY;
       for (let i = 1; i <= DOTS; i++) {
-        const t = (apex * i) / DOTS, size = 1 - (i / DOTS) * 0.45;
+        const t = (end * i) / (DOTS + 1), size = 1 - (i / DOTS) * 0.3;
         dotMatrix.makeScale(size, size, size).setPosition(from.x + v.x * t, from.y + v.y * t - 0.5 * GRAVITY * t * t, from.z + v.z * t);
         dots.setMatrixAt(dots.count++, dotMatrix);
       }
       dots.instanceMatrix.needsUpdate = true;
+      // Well wide of the rim it fades away rather than float in mid-air; the dots show that miss well enough.
+      const wide = cross ? Math.hypot(cross.at.x - RIM.x, cross.at.z - RIM.z) : Infinity;
+      if (wide < 1.6) { aimRing.position.set(cross!.at.x, cross!.at.y, cross!.at.z); aimRingMat.opacity = 0.95 * Math.min(1, 1.6 - wide); aimRing.visible = true; }
     }
     const v = state.ball.v, spin = Math.hypot(v.x, v.z) * dt / BALL_R;
     if (spin > 0) ball.rotateOnWorldAxis(probe.set(v.z, 0, -v.x).normalize(), spin);
@@ -453,6 +493,19 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       if ((f.moodT -= dt) <= 0) f.mood = 'idle';
       const t = clock + f.phase, toddler = f.spec.who === 'toddler';
       f.group.rotation.y = turn(f.group.rotation.y, Math.atan2(p.x - f.spec.x, p.z - f.spec.z), dt * 4);
+      // Dad walking into them (game.ts keeps him just outside, so touching is the bump).
+      const near = Math.hypot(p.x - f.spec.x, p.z - f.spec.z) < f.spec.radius + 0.36;
+      if (near && !f.near && speed > 0.5) boop(f, 'bump');
+      f.near = near; f.boopCd = Math.max(0, f.boopCd - dt);
+      if (f.boop > 0) {
+        // Catcha's boop pose: a wobble, little hops and arms flung out to the sides, fading out (gentler for Mom).
+        f.boop = Math.max(0, f.boop - dt);
+        const k = Math.min(1, f.boop) * (f.spec.who === 'mom' ? 0.6 : 1);
+        f.body.rotation.z = Math.sin(f.boop * 18) * 0.18 * k; f.body.rotation.x *= 1 - Math.min(1, dt * 8);
+        f.y = Math.max(0, Math.sin(f.boop * 9)) * 0.25 * k; f.vy = 0; f.group.position.y = f.y; f.body.scale.set(1, 1, 1);
+        for (const joint of f.joints) { joint.rotation.x = 0; if (joint.name.startsWith('arm')) joint.rotation.z = (joint.name.includes('right') ? 1 : -1) * 1.4 * k; }
+        continue;
+      }
       if (f.hop > 0 && (f.hop -= dt) <= 0) f.vy = toddler ? 3 : 2.5;
       if (f.y > 0 || f.vy > 0) {
         f.vy -= 14 * dt; f.y += f.vy * dt;

@@ -47,6 +47,14 @@ export function launchVelocity(from: Vec3, to: Vec3): Vec3 {
   return { x: ux * across, y: across * tan, z: uz * across };
 }
 
+/** Where a ball thrown from `from` at `v` comes down through the rim's height (the aim's ring), or null if it never gets that high. */
+export function rimCrossing(from: Vec3, v: Vec3): { t: number; at: Vec3 } | null {
+  const high = v.y * v.y - 2 * GRAVITY * (RIM.y - from.y);
+  if (high < 0) return null;
+  const t = (v.y + Math.sqrt(high)) / GRAVITY;
+  return { t, at: { x: from.x + v.x * t, y: RIM.y, z: from.z + v.z * t } };
+}
+
 export function shotVelocity(release: Vec3, pull: Pull, bonus = 0): Vec3 {
   // The player aims at the rim they see. The error is measured on screen against the rim's on-screen direction,
   // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
