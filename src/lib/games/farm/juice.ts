@@ -58,8 +58,9 @@ export function createPuffs(scene: THREE.Scene) {
 export type Puffs = ReturnType<typeof createPuffs>;
 
 // Outdoor time of day in Catcha's keyframe style: morning, midday, golden hour, dusk, a moonlit night and dawn.
-// Night stays bright enough to play; lamps, windows and fireflies carry it.
-const KEYS = [
+// Night stays bright enough to play; lamps, windows and fireflies carry it. `y` (default 12) is the sun's height.
+export type SkyKey = { t: number; sun: readonly [string, number]; hemi: readonly [string, string, number]; bg: string; glow: number; x: number; y?: number };
+const KEYS: readonly SkyKey[] = [
   { t: 0, sun: ['#ffd9b0', 2.1], hemi: ['#fff1e2', '#7f9a62', 1.35], bg: '#86b45a', glow: 0, x: -9 },
   { t: 0.2, sun: ['#fff1d6', 2.55], hemi: ['#fffaf0', '#6f9450', 1.45], bg: '#79b545', glow: 0, x: -4 },
   { t: 0.5, sun: ['#ffb46e', 2.2], hemi: ['#ffe2c4', '#8a8a5c', 1.25], bg: '#8aa94a', glow: 0, x: 4 },
@@ -67,22 +68,22 @@ const KEYS = [
   { t: 0.72, sun: ['#9fb4ff', 0.75], hemi: ['#b7c4f2', '#3e4f5c', 0.85], bg: '#4a6650', glow: 1, x: -2 },
   { t: 0.9, sun: ['#9fb4ff', 0.75], hemi: ['#b7c4f2', '#3e4f5c', 0.85], bg: '#4a6650', glow: 1, x: -2 },
   { t: 1, sun: ['#ffd9b0', 2.1], hemi: ['#fff1e2', '#7f9a62', 1.35], bg: '#86b45a', glow: 0, x: -9 }
-] as const;
+];
 const ca = new THREE.Color(), cb = new THREE.Color();
 const mixColor = (out: THREE.Color, a: string, b: string, k: number) => out.copy(ca.set(a)).lerp(cb.set(b), k);
-export function createSky({ scene, hemi, sun }: { scene: THREE.Scene; hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight }) {
+export function createSky({ scene, hemi, sun }: { scene: THREE.Scene; hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight }, keys = KEYS) {
   const offset = new THREE.Vector3();
   return {
-    /** `t` loops 0…1 over a day; returns how much the lamps glow and where the sun sits relative to the focus. */
+    /** `t` loops 0…1 over a day; returns how much the lamps glow and where the sun sits relative to the focus (one vector, updated in place). */
     set(t: number) {
       t = ((t % 1) + 1) % 1;
-      let i = 0; while (i < KEYS.length - 2 && t > KEYS[i + 1].t) i++;
-      const a = KEYS[i], b = KEYS[i + 1], raw = (t - a.t) / (b.t - a.t), k = raw * raw * (3 - 2 * raw);
+      let i = 0; while (i < keys.length - 2 && t > keys[i + 1].t) i++;
+      const a = keys[i], b = keys[i + 1], raw = (t - a.t) / (b.t - a.t), k = raw * raw * (3 - 2 * raw);
       mixColor(sun.color, a.sun[0], b.sun[0], k); sun.intensity = a.sun[1] + (b.sun[1] - a.sun[1]) * k;
       mixColor(hemi.color, a.hemi[0], b.hemi[0], k); mixColor(hemi.groundColor, a.hemi[1], b.hemi[1], k);
       hemi.intensity = a.hemi[2] + (b.hemi[2] - a.hemi[2]) * k;
       if (scene.background instanceof THREE.Color) mixColor(scene.background, a.bg, b.bg, k);
-      offset.set(a.x + (b.x - a.x) * k, 12, 7);
+      offset.set(a.x + (b.x - a.x) * k, (a.y ?? 12) + ((b.y ?? 12) - (a.y ?? 12)) * k, 7);
       return { glow: a.glow + (b.glow - a.glow) * k, sun: offset };
     }
   };

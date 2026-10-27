@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeByMaterial, seeded, type FarmProps } from '../farm/props';
 import { COURT, FENCE } from './court';
 
+/** The street lamps behind the back fence; they come on at dusk. */
+export const LAMPS = [-7.5, -2.6, 2.6, 7.5].map(x => ({ x, z: FENCE.back - 0.75 }));
+
 /**
  * The neighbourhood around the court, built from Pocket Farm's props so the arcade's worlds match: a textured lawn,
  * a hedge and sidewalk with street lamps behind the back fence, a row of trees and a quiet street of houses beyond,
@@ -18,7 +21,7 @@ export function buildHoopsWorld(props: FarmProps, root: THREE.Object3D) {
   const back = FENCE.back;
   props.hedge(root, 0, back - 0.35, FENCE.side * 2 + 6, 0.45, 0.5);
   props.surface(root, 'paver', 0, 0.004, back - 1.3, 34, 1.3, 1.2);
-  for (const x of [-7.5, -2.6, 2.6, 7.5]) put(props.lamp(), x, back - 0.75);
+  for (const at of LAMPS) put(props.lamp(), at.x, at.z);
   for (let x = -14; x <= 14; x += 2.3) {
     if (Math.abs(x) < 1.2) continue; // keep the space right behind the backboard open
     put(r() < 0.3 ? props.cypress(2.6 + r() * 0.8) : props.roundTree(2.6 + r() * 1.1, Math.round(r() * 50)), x + jitter(0.8), back - 2.4 + jitter(0.6), r() * 6.3);
@@ -44,7 +47,8 @@ export function buildHoopsWorld(props: FarmProps, root: THREE.Object3D) {
   return mergeByMaterial(root);
 }
 
-/** Pocket Farm's birds: soft, blurred flocks crossing the top of the screen now and then, trailing faint shadows. */
+/** Pocket Farm's birds: soft, blurred flocks crossing the top of the screen now and then, trailing faint shadows.
+ * `sun` is the live sun offset, so the shadows swing round with the time of day. */
 export function createBirds(scene: THREE.Scene, props: FarmProps, sun: THREE.Vector3) {
   const frames = [0, 1].map(frame => props.canvasTexture(128, 64, c => {
     c.filter = 'blur(3px)'; c.fillStyle = '#2b3a33';
@@ -54,10 +58,11 @@ export function createBirds(scene: THREE.Scene, props: FarmProps, sun: THREE.Vec
   // The shadow is the bird laid flat, wings across its line of flight (along x).
   const shadow = new THREE.PlaneGeometry(0.7, 0.35).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);
   const birds: { sprite: THREE.Sprite; shade: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; vx: number; flap: number }[] = [];
-  const toSun = sun.clone().normalize();
+  const toSun = new THREE.Vector3();
   let next = 5;
   return {
     update(dt: number, focus: THREE.Vector3) {
+      toSun.copy(sun).normalize();
       if ((next -= dt) <= 0) {
         next = 15 + Math.random() * 10;
         const dir = Math.random() < 0.5 ? 1 : -1, z = FENCE.back - 1 + Math.random() * 3, y = 4.3 + Math.random() * 0.6;

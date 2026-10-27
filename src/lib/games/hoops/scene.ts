@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createPuffs } from '../farm/juice';
+import { createPuffs, createSky, type SkyKey } from '../farm/juice';
 import { createFarmProps } from '../farm/props';
-import { buildHoopsWorld, createBirds } from './world';
+import { LAMPS, buildHoopsWorld, createBirds } from './world';
 import { createHoopsAudio } from './audio';
 import { STEP, stepBall, type Ball } from './ball';
 import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
@@ -17,6 +17,18 @@ type Mood = 'idle' | 'watch' | 'clap' | 'cheer' | 'aww' | 'flinch';
 const CHEER_Z = 2.3;
 // The court texture covers the asphalt: the lines plus a dark border.
 const PAD = { minX: -COURT.halfWidth - 0.4, maxX: COURT.halfWidth + 0.4, minZ: -0.6, maxZ: COURT.depth + 0.3 }, PX = 100;
+// A day on the court, a little slower than Pocket Farm's 300 s: morning, midday, golden hour, a sunset with long
+// shadows, then a short blue dusk under the street lamps (dim, never dark) before dawn comes round again.
+const DAY_SECONDS = 420;
+const DAY: SkyKey[] = [
+  { t: 0, sun: ['#ffd9b0', 2.2], hemi: ['#fff1e2', '#7f9a62', 1.35], bg: '#f3dcbc', glow: 0, x: -9, y: 8 },
+  { t: 0.25, sun: ['#ffe2b0', 2.6], hemi: ['#fff4e0', '#6f8a55', 1.4], bg: '#f6d7a4', glow: 0, x: -3, y: 13 },
+  { t: 0.5, sun: ['#ffbf7a', 2.35], hemi: ['#ffe6c8', '#86885a', 1.3], bg: '#f5c38c', glow: 0, x: 5, y: 9 },
+  { t: 0.64, sun: ['#ff9a6a', 1.5], hemi: ['#f2cdb6', '#6e6c5e', 1.1], bg: '#eaab8c', glow: 0.5, x: 9, y: 4.5 },
+  { t: 0.74, sun: ['#b9c3e2', 0.85], hemi: ['#c9ccdc', '#525c5c', 1.05], bg: '#8d92b0', glow: 1, x: -3, y: 11 },
+  { t: 0.88, sun: ['#b9c3e2', 0.85], hemi: ['#c9ccdc', '#525c5c', 1.05], bg: '#8d92b0', glow: 1, x: -3, y: 11 },
+  { t: 1, sun: ['#ffd9b0', 2.2], hemi: ['#fff1e2', '#7f9a62', 1.35], bg: '#f3dcbc', glow: 0, x: -9, y: 8 }
+];
 const turn = (from: number, to: number, k: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * Math.min(1, k);
 
 function canvasTexture(width: number, height: number, paint: (c: CanvasRenderingContext2D) => void) {
@@ -63,12 +75,21 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   canvas.setAttribute('aria-label', 'Basketball court. Drag to move, push far to sprint, tap to jump. Hold Dad, drag toward the hoop and let go to shoot.');
   canvas.dataset.hoopsCanvas = ''; host.append(canvas);
 
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6d7a4'); scene.fog = new THREE.Fog('#f6d7a4', 30, 60);
+  const scene = new THREE.Scene(), fog = new THREE.Fog('#f6d7a4', 30, 60); scene.background = new THREE.Color('#f6d7a4'); scene.fog = fog;
   const hemi = new THREE.HemisphereLight('#fff4e0', '#6f8a55', 1.4); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#ffe2b0', 2.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 50 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
-  sun.position.set(-6, 12, 9); sun.target.position.set(0, 0, 4); scene.add(sun, sun.target);
+  sun.target.position.set(0, 0, 4); scene.add(sun, sun.target);
+  // ?time=0.6 starts at that point of the day (0 morning … 0.64 sunset … 0.74 dusk), like the farm's.
+  const sky = createSky({ scene, hemi, sun }, DAY);
+  let dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.08);
+  const daylight = (dt: number) => {
+    const day = sky.set((dayClock += dt) / DAY_SECONDS);
+    sun.position.copy(sun.target.position).add(day.sun); fog.color.copy(scene.background as THREE.Color);
+    props.glow.emissiveIntensity = day.glow * 1.6; haloMaterial.opacity = day.glow * 0.55;
+    return day;
+  };
 
   // An elevated view facing the hoop squarely (shot.ts relies on no yaw) that slides after Dad, never turning.
   // WIDE: how much court shows across at the point it looks at; the rim stays in view wherever he goes.
@@ -101,7 +122,12 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   ground.rotation.x = -Math.PI / 2; ground.position.set((PAD.minX + PAD.maxX) / 2, 0, (PAD.minZ + PAD.maxZ) / 2); ground.receiveShadow = true; scene.add(ground);
   // The neighbourhood around the court (Pocket Farm's props) and its birds.
   const props = createFarmProps(), world = new THREE.Group(); scene.add(world);
-  const worldGeometry = buildHoopsWorld(props, world), birds = createBirds(scene, props, sun.position.clone().sub(sun.target.position));
+  const worldGeometry = buildHoopsWorld(props, world);
+  // A warm halo round each street lamp's bulb from dusk (the hedge hides the sidewalk, so no pools on the ground).
+  const haloMaterial = keep(new THREE.SpriteMaterial({ blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0,
+    map: props.canvasTexture(64, 64, c => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, '#ffd890'); g.addColorStop(1, '#ffd89000'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); }) }));
+  for (const at of LAMPS) { const halo = new THREE.Sprite(haloMaterial); halo.position.set(at.x, 1.82, at.z); halo.scale.setScalar(1.3); scene.add(halo); }
+  const birds = createBirds(scene, props, daylight(0).sun);
   // Chain-link fence on the back and sides: posts, a top rail and a see-through mesh. The ball bounces off it (ball.ts).
   {
     const H = 2.4, link = keep(canvasTexture(64, 64, c => {
@@ -421,7 +447,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     }
     rimShake = Math.max(0, rimShake - dt / 0.6);
     rim.rotation.x = Math.PI / 2 + Math.sin(clock * 45) * 0.12 * rimShake; board.rotation.z = Math.sin(clock * 38) * 0.02 * rimShake;
-    puffs.step(dt); birds.update(dt, target);
+    daylight(dt); puffs.step(dt); birds.update(dt, target);
     for (const f of fans) {
       if (holdMood) { f.mood = holdMood; f.moodT = 1; }
       if ((f.moodT -= dt) <= 0) f.mood = 'idle';

@@ -142,7 +142,7 @@ Dad is `static/catcha/assets/chibi-dad.glb`. Catcha's `characters.js` loads the 
 
 Add basketball actions around the existing locomotion: moving and standing dribble, receive, pass, shoot and follow-through, defensive stance, steal, and rebound/catch. Gameplay events and hand attachment points drive animation timing so the ball never visibly leaves early, clips through the hands or teleports on a catch.
 
-Build one polished ball, hoop, backboard, net and half court. **Art direction:** an outdoor neighbourhood court at golden hour, with a sideline bench or kerb for the watching family. A textured asphalt surface gives the grit and wear the user asked for, painted lines read clearly, and Pocket Farm's outdoor lighting keyframes (`farm/juice.ts`) and blob shadows can be reused. The net reacts visibly to a basket; a lightweight animation is enough.
+Build one polished ball, hoop, backboard, net and half court. **Art direction:** an outdoor neighbourhood court at golden hour, with a sideline bench or kerb for the watching family. A textured asphalt surface gives the grit and wear the user asked for, painted lines read clearly, and Pocket Farm's outdoor lighting keyframes (`farm/juice.ts`) and blob shadows can be reused. Time moves on while you play, a little slower than the farm's day (7 minutes a loop): morning, midday, golden hour, a sunset whose shadows stretch across the court, then a short blue dusk where the street lamps and house windows come on. Dusk stays light enough to play; there is no full night. The net reacts visibly to a basket; a lightweight animation is enough.
 
 ## Presentation, feedback and AI
 
