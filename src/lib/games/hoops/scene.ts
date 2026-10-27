@@ -12,7 +12,7 @@ import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 const DAD = '/catcha/assets/chibi-dad.glb';
 // The family on the sideline: Catcha's Mom and the two girls.
 const FAMILY_ASSETS = { mom: '/catcha/assets/chibi-mom.glb', girl: '/catcha/assets/chibi-sibling-sample.glb', toddler: '/catcha/assets/chibi-toddler.glb' };
-type Mood = 'idle' | 'watch' | 'cheer' | 'aww' | 'flinch';
+type Mood = 'idle' | 'watch' | 'clap' | 'cheer' | 'aww' | 'flinch';
 const CHEER_Z = 2.3;
 // The court texture covers the asphalt: the lines plus a dark border.
 const PAD = { minX: -COURT.halfWidth - 0.4, maxX: COURT.halfWidth + 0.4, minZ: -0.6, maxZ: COURT.depth + 0.3 }, PX = 100;
@@ -59,7 +59,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.04;
   const canvas = renderer.domElement; canvas.tabIndex = 0;
-  canvas.setAttribute('aria-label', 'Basketball court. Drag to move, push far to sprint, tap to jump. Hold Dad, pull back and let go to shoot.');
+  canvas.setAttribute('aria-label', 'Basketball court. Drag to move, push far to sprint, tap to jump. Hold Dad, drag toward the hoop and let go to shoot.');
   canvas.dataset.hoopsCanvas = ''; host.append(canvas);
 
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#f6d7a4'); scene.fog = new THREE.Fog('#f6d7a4', 30, 60);
@@ -247,11 +247,17 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
 
   function feedback(e: GameEvent) {
     audio.play(e);
-    // The family follows each shot: clapping while it's up, a cheer if it drops, an "aww" if it rims out.
+    // The family follows each shot, not the same way every time: a basket always gets claps, and only sometimes a
+    // jumping, shouting cheer (more often for two points); a miss only sometimes gets a slump, and a rim-out an "aww".
     if (e.type === 'shot') { shotLive = true; rimTouched = false; setMood('watch', 3); }
     if (e.type === 'rim' && shotLive) rimTouched = true;
-    if (e.type === 'score' && shotLive) { shotLive = false; audio.cheer(state.value); setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); }
-    if (e.type === 'floor' && shotLive) { shotLive = false; setMood('aww', 0.9); if (rimTouched) audio.aww(); }
+    if (e.type === 'score' && shotLive) {
+      shotLive = false;
+      const shout = Math.random() < (state.value === 2 ? 0.55 : 0.3);
+      audio.cheer(state.value, shout);
+      if (shout) setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); else setMood('clap', 1.3);
+    }
+    if (e.type === 'floor' && shotLive) { shotLive = false; setMood(Math.random() < 0.5 ? 'aww' : 'idle', 0.9); if (rimTouched && Math.random() < 0.3) audio.aww(); }
     if (e.type === 'fan') { const hit = fans.reduce((a, f) => Math.hypot(f.spec.x - e.at.x, f.spec.z - e.at.z) < Math.hypot(a.spec.x - e.at.x, a.spec.z - e.at.z) ? f : a); hit.mood = 'flinch'; hit.moodT = 0.45; }
     const p = state.player, back = { x: -Math.sin(dad.rotation.y) * 1.2, z: -Math.cos(dad.rotation.y) * 1.2 };
     if (e.type === 'dash') dust(p.x, p.z, 6, back);
@@ -374,7 +380,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
         if (f.y <= 0) { f.y = 0; f.vy = toddler && f.mood === 'cheer' && f.moodT > 0.35 ? 2.4 : 0; }
       }
       f.group.position.y = f.y;
-      const tilt = f.mood === 'aww' ? 0.32 : f.mood === 'flinch' ? -0.35 : f.mood === 'watch' ? 0.12 : 0;
+      const tilt = f.mood === 'aww' ? 0.32 : f.mood === 'flinch' ? -0.35 : f.mood === 'watch' ? 0.12 : f.mood === 'clap' ? 0.05 : 0;
       f.body.rotation.x += (tilt - f.body.rotation.x) * Math.min(1, dt * 8);
       f.body.rotation.z = Math.sin(t * (f.mood === 'cheer' ? 9 : 1.6)) * (f.mood === 'cheer' ? 0.1 : 0.04);
       const stretch = f.y > 0 ? 1.08 : f.mood === 'aww' ? 0.95 : 1;
@@ -383,7 +389,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
         const arm = joint.name.startsWith('arm'), side = joint.name.includes('right') ? 1 : -1;
         const to = !arm ? (f.y > 0 ? side * 0.4 : 0)
           : f.mood === 'cheer' ? 0
-          : f.mood === 'watch' ? -1.2 + Math.sin(t * 20) * 0.22
+          : f.mood === 'watch' || f.mood === 'clap' ? -1.2 + Math.sin(t * 20) * 0.22
           : f.mood === 'flinch' ? -1.6 : f.mood === 'aww' ? 0.15 : Math.sin(t * 2 + side) * 0.08;
         joint.rotation.x += (to - joint.rotation.x) * Math.min(1, dt * 14);
         // Arms thrown up and out to the sides for a cheer, waving (the pivots aren't mirrored, so the sides rotate opposite ways);
@@ -399,7 +405,10 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
 
   return {
     ready, state, dadScreen, rimScreen,
-    setPaused(value: boolean) { paused = value; input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
+    get music() { return audio.music; },
+    /** The Music switch; with no value, re-reads the Sound switch. */
+    setMusic(value?: boolean) { audio.setMusic(value); },
+    setPaused(value: boolean) { paused = value; audio.setPaused(value); input.setEnabled(!value); previous = performance.now(); if (!value) canvas.focus({ preventScroll: true }); },
     destroy() {
       if (disposed) return;
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); input.destroy(); audio.destroy(); puffs.dispose(); birds.dispose(); worldGeometry.forEach(g => g.dispose()); props.dispose();

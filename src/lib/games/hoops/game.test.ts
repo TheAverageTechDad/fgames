@@ -3,7 +3,7 @@ import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
 import { RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
-const ideal = { dx: 0, dy: 78, minSide: 390 }; // pull straight back: Dad starts straight out from the rim
+const ideal = { dx: 0, dy: -78, minSide: 390 }; // drag straight up at the rim: Dad starts straight out from it
 const run = (s: Shootaround, seconds: number, move = still) => { const events: GameEvent[] = []; for (let i = 0; i < Math.round(seconds * 60); i++) events.push(...stepShootaround(s, 1 / 60, move)); return events; };
 const speed = (s: Shootaround) => Math.hypot(s.player.vx, s.player.vz);
 

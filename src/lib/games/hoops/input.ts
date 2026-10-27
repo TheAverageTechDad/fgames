@@ -21,7 +21,7 @@ export function readPull(origin: Point, end: Point, minSide: number): { kind: 's
 
 /**
  * The farm's stick for moving, plus the shot: hold still on Dad (while he has the ball) to start aiming,
- * pull back, let go. A touch on Dad that moves straight away stays movement. While aiming, a second finger jumps.
+ * drag toward the hoop, let go. A touch on Dad that moves straight away stays movement. While aiming, a second finger jumps.
  */
 export function createHoopsInput(canvas: HTMLCanvasElement, host: HTMLElement, dad: () => Target | null) {
   let held: (Point & { id: number; t: number; owned: boolean }) | null = null;

@@ -14,12 +14,13 @@ try {
   const read = () => page.evaluate(() => { const d = document.querySelector('.hoops-world').dataset; return { shots: +d.shots, score: +d.score, mode: d.mode, x: +d.dadX, y: +d.dadY, rx: +d.rimX, ry: +d.rimY }; });
   // After a shot the rebound is Dad's to fetch; a reload gives him the ball back for the next check.
   const holding = async () => { if ((await read()).mode !== 'held') { await page.reload(); await page.locator('[data-ready="true"]').waitFor(); } };
-  const away = (s, px) => { const len = Math.hypot(s.rx - s.x, s.ry - s.y); return { x: s.x - (s.rx - s.x) / len * px, y: s.y - (s.ry - s.y) / len * px }; };
-  // Hold Dad still past the aim delay, pull back `px` away from the rim, let go.
+  // The aim drags from Dad toward the hoop on screen.
+  const toward = (s, px) => { const len = Math.hypot(s.rx - s.x, s.ry - s.y); return { x: s.x + (s.rx - s.x) / len * px, y: s.y + (s.ry - s.y) / len * px }; };
+  // Hold Dad still past the aim delay, drag `px` toward the rim, let go.
   async function pullShot(px) {
     const s = await read();
     await page.mouse.move(s.x, s.y); await page.mouse.down(); await page.waitForTimeout(250);
-    const to = away(s, px); await page.mouse.move(to.x, to.y, { steps: 4 }); await page.mouse.up();
+    const to = toward(s, px); await page.mouse.move(to.x, to.y, { steps: 4 }); await page.mouse.up();
   }
 
   // 1. A drag that starts on Dad and moves straight away is movement, even a sprint; so is one on empty court.
@@ -58,7 +59,7 @@ try {
 
   // 5. Two fingers: the first steers, a second held on Dad aims and shoots (it must not become a jump).
   await holding(); s = await read();
-  const stick = [1, s.x - 110, s.y + 220], to = away(s, 78);
+  const stick = [1, s.x - 110, s.y + 220], to = toward(s, 78);
   await touch('touchStart', [stick]);
   await touch('touchStart', [stick, [2, s.x, s.y]]);
   await page.waitForTimeout(250);
@@ -69,7 +70,7 @@ try {
 
   // 6. Jump shot: hold Dad and pull back with one finger, tap with another (he jumps at once), let go in the air.
   await holding(); s = await read();
-  const pull = away(s, 78);
+  const pull = toward(s, 78);
   await touch('touchStart', [[1, s.x, s.y]]); await page.waitForTimeout(250);
   await touch('touchMove', [[1, pull.x, pull.y]]);
   await touch('touchStart', [[1, pull.x, pull.y], [2, s.x + 120, s.y + 200]]);
@@ -86,7 +87,7 @@ try {
 
   assert.deepEqual(errors, [], 'page errors');
   assert.deepEqual(requests.filter(r => !r.includes('favicon')), [], 'failed requests');
-  console.log('Hoops smoke passed: drags (even from Dad) move, hold-pull-release shoots, slide-back cancels, tap jumps, second finger on Dad shoots, jump shot, offline reload.');
+  console.log('Hoops smoke passed: drags (even from Dad) move, hold-drag-release shoots, slide-back cancels, tap jumps, second finger on Dad shoots, jump shot, offline reload.');
 } finally {
   await browser.close();
 }

@@ -1,16 +1,17 @@
 import { BALL_R, GRAVITY, RIM, isTwoPointer, type Vec3 } from './court';
 
 /**
- * A slingshot pull in screen px from where the thumb held Dad (dy positive downward): the ball goes the opposite way.
+ * The aim: a drag in screen px from where the thumb held Dad (dy positive downward), toward where the ball should go;
+ * its length sets the power. (It was a slingshot pull the other way until the third playtest.)
  * minSide is the viewport's shorter side; rimAngle the screen angle from Dad to the rim (atan2(dy, dx)).
  */
 export type Pull = { dx: number; dy: number; minSide: number; rimAngle?: number };
 
-// The ideal pull is a fifth of the screen from anywhere; MIN_PULL_PX or less cancels the shot.
+// The ideal drag is a fifth of the screen from anywhere; MIN_PULL_PX or less (sliding back onto Dad) cancels the shot.
 export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_FULL = (20 * Math.PI) / 180, AIM_NONE = (80 * Math.PI) / 180, AIM_KEEP = 0.1, BAND_NEAR = 0.08, BAND_FAR = 0.05,
   POWER_SLOPE = 0.35, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
 
-/** The pull as a fraction of the screen, so the same pull means the same on every phone. */
+/** The drag as a fraction of the screen, so the same drag means the same on every phone. */
 export const strength = ({ dx, dy, minSide }: Pull) => Math.min(MAX_PULL, Math.hypot(dx, dy) / minSide);
 
 /**
@@ -49,7 +50,7 @@ export function launchVelocity(from: Vec3, to: Vec3): Vec3 {
 export function shotVelocity(release: Vec3, pull: Pull, bonus = 0): Vec3 {
   // The player aims at the rim they see. The error is measured on screen against the rim's on-screen direction,
   // then applied to the court direction. Without rimAngle, screen directions are court directions (right = +x, up = -z).
-  const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(-pull.dy, -pull.dx);
+  const toRim = Math.atan2(RIM.z - release.z, RIM.x - release.x), swiped = Math.atan2(pull.dy, pull.dx);
   const seen = pull.rimAngle ?? toRim, err = Math.atan2(Math.sin(swiped - seen), Math.cos(swiped - seen));
   // Aim help: within AIM_FULL only a tenth of the error is kept; it eases out to none at AIM_NONE, so the arc never snaps.
   const t = Math.max(0, Math.min(1, (AIM_NONE - Math.abs(err)) / (AIM_NONE - AIM_FULL))), help = t * t * (3 - 2 * t);

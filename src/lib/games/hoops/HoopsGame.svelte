@@ -11,7 +11,7 @@
   let pauseDialog: HTMLDialogElement;
   let engine: ReturnType<typeof createHoopsScene> | undefined;
   let made = $state(0), shots = $state(0), pop = $state(''), popId = $state(0);
-  let loading = $state(true), error = $state(''), hint = $state(false), note = $state(''), muted = $state(sound.muted), buzz = $state(hapticsEnabled());
+  let loading = $state(true), error = $state(''), hint = $state(false), note = $state(''), muted = $state(sound.muted), buzz = $state(hapticsEnabled()), music = $state(true);
   let popTimer: ReturnType<typeof setTimeout>, hintTimer: ReturnType<typeof setTimeout>, noteTimer: ReturnType<typeof setTimeout>;
 
   function update() {
@@ -45,6 +45,7 @@
         if (cancelled) return;
         engine = createHoopsScene(host, { update, event });
         await engine.ready;
+        music = engine.music;
         if (!cancelled) { loading = false; host.dataset.ready = 'true'; hint = true; hintTimer = setTimeout(() => { hint = false; }, 4500); }
       } catch (err) {
         console.error('Hoops failed to load', err);
@@ -67,7 +68,7 @@
       <div class="hoops-count" aria-label={`Made ${made} of ${shots}`}><strong>{made}</strong><span>/ {shots}</span><small>made</small></div>
       <button class="hoops-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
     </header>
-    {#if hint}<div class="hoops-hint" role="status">Hold Dad · pull back · let go</div>{/if}
+    {#if hint}<div class="hoops-hint" role="status">Hold Dad · drag to the hoop · let go</div>{/if}
     {#if note}<div class="hoops-hint note" role="status">{note}</div>{/if}
     {#if pop}{#key popId}<div class="hoops-pop" role="status">{pop}</div>{/key}{/if}
     {#if loading || error}
@@ -79,9 +80,10 @@
     {/if}
     <dialog class="hoops-pause" bind:this={pauseDialog} onclose={resume}>
       <h2>Paused</h2>
-      <p>Hold Dad, pull back and let go to shoot; tap with another finger while aiming to jump, and let go at the top for a jump shot. Drag anywhere else to move; push to the edge to sprint.</p>
+      <p>Hold Dad, drag toward the hoop and let go to shoot; tap with another finger while aiming to jump, and let go at the top for a jump shot. Drag anywhere else to move; push to the edge to sprint.</p>
       <div class="hoops-switches">
-        <button class="hoops-switch" role="switch" aria-checked={!muted} onclick={() => { muted = sound.toggleMute(); }}>Sound <b>{muted ? 'Off' : 'On'}</b></button>
+        <button class="hoops-switch" role="switch" aria-checked={!muted} onclick={() => { muted = sound.toggleMute(); engine?.setMusic(); }}>Sound <b>{muted ? 'Off' : 'On'}</b></button>
+        <button class="hoops-switch" role="switch" aria-checked={music} onclick={() => { music = !music; engine?.setMusic(music); }}>Music <b>{music ? 'On' : 'Off'}</b></button>
         <button class="hoops-switch" role="switch" aria-checked={buzz} onclick={() => { buzz = !buzz; setHapticsEnabled(buzz); if (buzz) haptic('tick'); }}>Vibration <b>{buzz ? 'On' : 'Off'}</b></button>
       </div>
       <button class="toy-button" onclick={() => pauseDialog.close()}>Keep shooting</button>
@@ -102,7 +104,7 @@
   .hoops-hint{position:absolute;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 18%);left:50%;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 16px;border-radius:18px;background:#fff6dfe6;color:#5a3d26;font-size:15px;box-shadow:0 3px 0 #6b4a2f44;pointer-events:none;animation:hint 4.5s ease both}
   @keyframes hint{0%{opacity:0;translate:0 8px}8%,85%{opacity:1;translate:0 0}100%{opacity:0}}
   .hoops-hint.note{animation:hint 1.6s ease both;background:#ffe2d6;color:#8a3a22}
-  .hoops-switches{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hoops-switch{min-height:44px;border:2px solid #6b4a2f;border-radius:14px;background:#fff;color:#3b2a1d;font-size:15px}.hoops-switch b{font-weight:400;color:#c4502a}.hoops-switch[aria-checked="false"] b{color:#8a6a4c}
+  .hoops-switches{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.hoops-switch{min-height:44px;border:2px solid #6b4a2f;border-radius:14px;background:#fff;color:#3b2a1d;font-size:15px}.hoops-switch b{font-weight:400;color:#c4502a}.hoops-switch[aria-checked="false"] b{color:#8a6a4c}
   .hoops-loading{position:absolute;inset:0;background:#f2cf98;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:35px;gap:16px}.hoops-loading h2{font-size:34px}.hoops-loading p{font-size:16px;color:#8a6a4c}
   .hoops-pause{margin:auto;width:calc(100% - 40px);max-width:350px;border:3px solid #6b4a2f;border-radius:25px;padding:25px;background:#fff7e3;color:#3b2a1d;box-shadow:0 7px 0 #6b4a2f44}.hoops-pause::backdrop{background:#3b2a1d99}.hoops-pause h2{font-size:30px}.hoops-pause p{font-size:14px;margin:12px 0 20px;color:#8a6a4c}.hoops-pause button{width:100%;margin-top:12px}
   .hoops-world :global(.hoops-joystick){position:absolute;display:none;width:100px;height:100px;margin:-50px;border:2px solid #fff8e899;background:#fff8e82b;border-radius:50%;pointer-events:none;z-index:4}.hoops-world :global(.hoops-joystick>div){position:absolute;left:30px;top:30px;width:36px;height:36px;background:#fff8e8c9;border:2px solid #ffffffc9;border-radius:50%}

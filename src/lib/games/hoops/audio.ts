@@ -7,18 +7,25 @@ import type { GameEvent } from './game';
 // `static/hoops/audio`, precached for offline play. Each plays with a little pitch and level variation, pans with the
 // ball and scales with how hard it hit. Until a file has loaded (or if one fails), the synthesized version plays instead.
 // Mute and vibration follow the arcade-wide preferences (`fgames_muted`, `fgames_haptics`).
+const MUSIC_URL = '/hoops/audio/music.m4a', MUSIC_KEY = 'hoops_music', MUSIC_LEVEL = 0.16, CROSSFADE = 4;
+const readMusic = () => { try { return localStorage.getItem(MUSIC_KEY) !== 'false'; } catch { return true; } };
 const SAMPLES = ['bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
 type Sample = (typeof SAMPLES)[number];
 
 export function createHoopsAudio() {
-  let ctx: AudioContext | null = null, closed = false, sfx: GainNode, reverb: GainNode;
+  let ctx: AudioContext | null = null, closed = false, sfx: GainNode, crowd: GainNode, music: GainNode, reverb: GainNode;
+  let track: AudioBuffer | null = null, musicTimer = 0, paused = false, musicOn = readMusic();
   const buffers = new Map<Sample, AudioBuffer>();
   function build(c: AudioContext) {
     const compressor = c.createDynamicsCompressor();
     compressor.threshold.value = -20; compressor.knee.value = 10; compressor.ratio.value = 3; compressor.attack.value = 0.005; compressor.release.value = 0.2;
     compressor.connect(c.destination);
-    const soften = c.createBiquadFilter(); soften.type = 'lowpass'; soften.frequency.value = 7500; soften.connect(compressor);
-    sfx = c.createGain(); sfx.gain.value = 0.7; sfx.connect(soften);
+    // Effects sit well under everything (the fourth playtest found them distracting): low and softened, as in the farm.
+    // The family's cheer is the one sound that stays up, on its own bus; the music sits under it all.
+    const soften = c.createBiquadFilter(); soften.type = 'lowpass'; soften.frequency.value = 5200; soften.connect(compressor);
+    sfx = c.createGain(); sfx.gain.value = 0.28; sfx.connect(soften);
+    crowd = c.createGain(); crowd.gain.value = 0.7; crowd.connect(soften);
+    music = c.createGain(); music.gain.value = 0; music.connect(compressor);
     // Outdoors: a short, dark slap rather than a room.
     const length = c.sampleRate * 0.5, ir = c.createBuffer(2, length, c.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 5; }
@@ -30,11 +37,36 @@ export function createHoopsAudio() {
     try {
       if (!ctx) {
         const c = ctx = new AudioContext(); build(c);
+        void loadMusic(c);
         for (const name of SAMPLES) void fetch(`/hoops/audio/${name}.m4a`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
       }
       if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
     } catch { /* the game plays fine silent */ }
   };
+  async function loadMusic(c: AudioContext) {
+    try {
+      const response = await fetch(MUSIC_URL);
+      if (!response.ok || closed) return;
+      track = await c.decodeAudioData(await response.arrayBuffer());
+      if (!closed) playMusic(c.currentTime + 0.1);
+    } catch { /* the game plays fine without music */ }
+  }
+  // As in the farm: each pass of the track fades in over the tail of the last, so the loop never jumps.
+  function playMusic(at: number) {
+    if (!ctx || !track || closed) return;
+    const source = ctx.createBufferSource(), gain = ctx.createGain();
+    source.buffer = track; source.connect(gain); gain.connect(music);
+    gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(1, at + CROSSFADE);
+    const end = at + track.duration;
+    gain.gain.setValueAtTime(1, end - CROSSFADE); gain.gain.linearRampToValueAtTime(0, end);
+    source.start(at); source.stop(end + 0.05); source.onended = () => { source.disconnect(); gain.disconnect(); };
+    musicTimer = window.setTimeout(() => playMusic(end - CROSSFADE), Math.max(0, (end - CROSSFADE - ctx.currentTime - 1) * 1000));
+    level();
+  }
+  function level() {
+    if (!ctx) return;
+    music.gain.setTargetAtTime(sound.muted || !musicOn ? 0 : MUSIC_LEVEL * (paused ? 0.45 : 1), ctx.currentTime, 0.3);
+  }
   const visibility = () => { if (!ctx) return; if (document.hidden) void ctx.suspend().catch(() => {}); else void ctx.resume().catch(() => {}); };
   // Started on the finger lifting (still a user gesture on iOS), so building it never stalls the touch that begins a drag.
   window.addEventListener('pointerup', unlock); window.addEventListener('keydown', unlock);
@@ -42,8 +74,8 @@ export function createHoopsAudio() {
 
   const vary = (amount = 0.04) => 1 + (Math.random() * 2 - 1) * amount;
   const panAt = (x: number) => Math.max(-0.7, Math.min(0.7, x / 6));
-  function out(node: AudioNode, pan: number, wet: number, nodes: AudioNode[]) {
-    const c = ctx!, p = c.createStereoPanner(); p.pan.value = pan; node.connect(p); p.connect(sfx); nodes.push(p);
+  function out(node: AudioNode, pan: number, wet: number, nodes: AudioNode[], bus = sfx) {
+    const c = ctx!, p = c.createStereoPanner(); p.pan.value = pan; node.connect(p); p.connect(bus); nodes.push(p);
     if (wet) { const send = c.createGain(); send.gain.value = wet; p.connect(send); send.connect(reverb); nodes.push(send); }
   }
   function tone(freq: number, { at = 0, type = 'sine' as OscillatorType, attack = 0.003, decay = 0.12, gain = 0.1, glide = 1, wet = 0.15, pan = 0 } = {}) {
@@ -61,13 +93,13 @@ export function createHoopsAudio() {
     s.connect(f); f.connect(g); out(g, pan, wet, nodes); s.start(t); s.onended = () => nodes.forEach(n => n.disconnect());
   }
   /** Plays a recording if it has loaded; false (so the caller synthesizes instead) if not. */
-  function sample(name: Sample, { gain = 0.5, pan = 0, rate = 1, at = 0, wet = 0.1, lowpass = 0 } = {}) {
+  function sample(name: Sample, { gain = 0.5, pan = 0, rate = 1, at = 0, wet = 0.1, lowpass = 0, loud = false } = {}) {
     const buffer = buffers.get(name);
     if (!buffer) return false;
     const c = ctx!, s = c.createBufferSource(), g = c.createGain(), nodes: AudioNode[] = [s, g];
     s.buffer = buffer; s.playbackRate.value = rate * vary(0.04); g.gain.value = gain * vary(0.08);
     if (lowpass) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; s.connect(f); f.connect(g); nodes.push(f); } else s.connect(g);
-    out(g, pan, wet, nodes); s.start(c.currentTime + at); s.onended = () => nodes.forEach(n => n.disconnect());
+    out(g, pan, wet, nodes, loud ? crowd : sfx); s.start(c.currentTime + at); s.onended = () => nodes.forEach(n => n.disconnect());
     return true;
   }
   let flip = false;
@@ -119,7 +151,7 @@ export function createHoopsAudio() {
     },
     // Gathering the ball: a palm slap.
     pickup: e => { if (sample('catch', { gain: 0.6, pan: panAt(e.at.x) })) return; noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
-    dash: () => { if (sample('whoosh', { gain: 0.45, rate: 0.9 })) return; noise(0.22, { freq: 500, sweep: 4.8, q: 1.4, gain: 0.05 }); tone(220, { type: 'triangle', glide: 2, decay: 0.12, gain: 0.025 }); },
+    // The sprint has no whoosh (the playtest found it unnecessary); its dust and vibration are enough.
     skid: () => { if (!sample('skid', { gain: 0.5 })) noise(0.18, { freq: 1800, sweep: 0.4, q: 2, gain: 0.04 }); },
     jump: () => { tone(260, { type: 'triangle', glide: 2.8, decay: 0.16, gain: 0.05, wet: 0.15 }); noise(0.12, { freq: 700, sweep: 2.9, q: 1.2, gain: 0.03 }); },
     // Out of puff: Catcha's soft, breathy double huff.
@@ -136,16 +168,17 @@ export function createHoopsAudio() {
       }
       if (live()) RECIPES[e.type]?.(e as GameEvent & { speed?: number });
     },
-    /** The basket's reward chime, then the family's claps and a "yay" (bigger for two points). */
-    cheer(value: 1 | 2) {
+    /** A basket: a small chime and the family's claps; `shout` adds the kids' cheer (the one sound that stays loud). */
+    cheer(value: 1 | 2, shout: boolean) {
       if (!document.hidden && value === 2) haptic('celebrate');
       if (!live()) return;
       const notes = value === 2 ? [784, 988, 1319] : [784, 1047];
       notes.forEach((f, i) => { tone(f, { at: 0.12 + i * 0.07, gain: 0.04, decay: 0.6, wet: 0.5 }); tone(f * 2.01, { at: 0.12 + i * 0.07, gain: 0.012, decay: 0.3, wet: 0.5 }); });
-      // The family: their claps and a kids' cheer (louder for two points), off to the left where they stand.
+      // The family off to the left where they stand.
       const clapped = sample('claps', { at: 0.15, gain: value === 2 ? 0.5 : 0.38, pan: famPan, wet: 0.2 });
-      if (sample('cheer', { at: 0.1, gain: value === 2 ? 0.4 : 0.26, pan: famPan, wet: 0.2 }) && clapped) return;
+      if (clapped && (!shout || sample('cheer', { at: 0.1, gain: value === 2 ? 0.5 : 0.36, pan: famPan, wet: 0.2, loud: true }))) return;
       for (let i = 0; i < (value === 2 ? 12 : 8); i++) noise(0.022, { at: 0.2 + Math.random() * 0.8, freq: 1400 * vary(0.2), q: 0.9, gain: 0.05, wet: 0.2, pan: famPan + (Math.random() - 0.5) * 0.3 });
+      if (!shout) return;
       tone(520, { at: 0.25, type: 'triangle', gain: 0.025, decay: 0.3, glide: 1.5, wet: 0.3, pan: famPan });
       tone(760, { at: 0.32, type: 'triangle', gain: 0.02, decay: 0.25, glide: 1.4, wet: 0.3, pan: famPan + 0.2 });
     },
@@ -160,8 +193,13 @@ export function createHoopsAudio() {
       if (!document.hidden) haptic('tick');
       if (live()) { tone(120, { glide: 0.6, decay: 0.12, gain: 0.07 }); noise(0.06, { type: 'lowpass', freq: 450, gain: 0.04 }); }
     },
+    /** Pausing ducks the music. */
+    setPaused(value: boolean) { paused = value; level(); },
+    get music() { return musicOn; },
+    /** The Music switch (Hoops' own, remembered on this device); also call after the Sound switch changes. */
+    setMusic(value = musicOn) { musicOn = value; try { localStorage.setItem(MUSIC_KEY, String(value)); } catch { /* not remembered */ } level(); },
     destroy() {
-      closed = true;
+      closed = true; clearTimeout(musicTimer);
       window.removeEventListener('pointerup', unlock); window.removeEventListener('keydown', unlock); document.removeEventListener('visibilitychange', visibility);
       void ctx?.close().catch(() => {});
     }
