@@ -18,7 +18,7 @@ Character references come from the existing `static/catcha/assets/family-end-car
 
 ## Files and delivery
 
-- Original generated images live here as `<game>-poster-v1.png` (or the generator's original image format).
+- Original generated images live here as `<game>-poster-v1.webp` (converted from the generator's PNGs at WebP quality 90).
 - The website uses `static/cards/<game>-poster-v1.webp`, exported at 1280 × 680 pixels, with a centred cover crop and WebP compression.
 - Game titles and descriptions remain live accessible text below each illustration. The artwork contains no baked-in typography, controls, or watermarks.
 - The original `*-gameplay.webp` files remain available. The generated masters and prompts are outside `static/`, so phones only download the optimized covers.
