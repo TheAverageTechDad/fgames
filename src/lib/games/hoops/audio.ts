@@ -3,11 +3,16 @@ import { sound } from '#lib/sound';
 import { FAMILY, onAsphalt } from './court';
 import type { GameEvent } from './game';
 
-// Sound design as in Pocket Farm: every effect is synthesized (a short transient for the hit, a tonal body),
-// varies a little so repeats never sound copied, and scales with how hard the ball hit. Effects pan with the ball.
+// Recorded sounds from Pixabay (free to use, no credit needed), trimmed to the hit and compressed: about 130 KB in
+// `static/hoops/audio`, precached for offline play. Each plays with a little pitch and level variation, pans with the
+// ball and scales with how hard it hit. Until a file has loaded (or if one fails), the synthesized version plays instead.
 // Mute and vibration follow the arcade-wide preferences (`fgames_muted`, `fgames_haptics`).
+const SAMPLES = ['bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
+type Sample = (typeof SAMPLES)[number];
+
 export function createHoopsAudio() {
   let ctx: AudioContext | null = null, closed = false, sfx: GainNode, reverb: GainNode;
+  const buffers = new Map<Sample, AudioBuffer>();
   function build(c: AudioContext) {
     const compressor = c.createDynamicsCompressor();
     compressor.threshold.value = -20; compressor.knee.value = 10; compressor.ratio.value = 3; compressor.attack.value = 0.005; compressor.release.value = 0.2;
@@ -23,7 +28,10 @@ export function createHoopsAudio() {
   const unlock = () => {
     if (closed) return;
     try {
-      if (!ctx) { ctx = new AudioContext(); build(ctx); }
+      if (!ctx) {
+        const c = ctx = new AudioContext(); build(c);
+        for (const name of SAMPLES) void fetch(`/hoops/audio/${name}.m4a`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
+      }
       if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
     } catch { /* the game plays fine silent */ }
   };
@@ -52,9 +60,22 @@ export function createHoopsAudio() {
     s.buffer = buffer; f.type = type; f.frequency.setValueAtTime(freq, t); if (sweep !== 1) f.frequency.exponentialRampToValueAtTime(freq * sweep, t + duration); f.Q.value = q; g.gain.value = gain;
     s.connect(f); f.connect(g); out(g, pan, wet, nodes); s.start(t); s.onended = () => nodes.forEach(n => n.disconnect());
   }
+  /** Plays a recording if it has loaded; false (so the caller synthesizes instead) if not. */
+  function sample(name: Sample, { gain = 0.5, pan = 0, rate = 1, at = 0, wet = 0.1, lowpass = 0 } = {}) {
+    const buffer = buffers.get(name);
+    if (!buffer) return false;
+    const c = ctx!, s = c.createBufferSource(), g = c.createGain(), nodes: AudioNode[] = [s, g];
+    s.buffer = buffer; s.playbackRate.value = rate * vary(0.04); g.gain.value = gain * vary(0.08);
+    if (lowpass) { const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lowpass; s.connect(f); f.connect(g); nodes.push(f); } else s.connect(g);
+    out(g, pan, wet, nodes); s.start(c.currentTime + at); s.onended = () => nodes.forEach(n => n.disconnect());
+    return true;
+  }
+  let flip = false;
+  const either = (a: Sample, b: Sample) => (flip = !flip) ? a : b;
   /** The ball on the ground: a round low thunk with a little rubbery pop; duller and quieter on grass. */
   function bounce(strength: number, pan: number, grass: boolean) {
     const k = Math.min(1, 0.25 + strength), f = (grass ? 95 : 125) * vary();
+    if (sample(either('bounce-1', 'bounce-2'), { gain: 0.75 * k, pan, rate: grass ? 0.85 : 1, lowpass: grass ? 900 : 0, wet: 0.05 })) return;
     tone(f, { gain: 0.22 * k, decay: grass ? 0.07 : 0.09, glide: 0.75, wet: 0.05, pan });
     noise(0.03, { type: grass ? 'lowpass' : 'bandpass', freq: grass ? 500 : 1100 * vary(0.1), q: 0.9, gain: 0.07 * k, pan });
   }
@@ -66,6 +87,7 @@ export function createHoopsAudio() {
     // The backboard: a hollow wooden thwack with a short rattle in the frame.
     board: e => {
       const k = Math.min(1, 0.3 + (e.speed ?? 4) / 9), pan = panAt(e.at.x);
+      if (sample('backboard', { gain: 0.7 * k, pan, wet: 0.15 })) return;
       noise(0.05, { type: 'lowpass', freq: 1400, gain: 0.14 * k, pan });
       tone(205 * vary(), { gain: 0.16 * k, decay: 0.1, glide: 0.85, pan });
       noise(0.16, { freq: 420, q: 5, gain: 0.05 * k, wet: 0.2, pan });
@@ -73,33 +95,35 @@ export function createHoopsAudio() {
     // The rim: a bright metal ting with inharmonic partials; a soft touch is just a tick.
     rim: e => {
       const k = Math.min(1, 0.2 + (e.speed ?? 4) / 7), f = 560 * vary(0.02), pan = panAt(e.at.x);
+      if (sample(either('rim-1', 'rim-2'), { gain: 0.55 * k, pan, wet: 0.3 })) return;
       noise(0.012, { type: 'highpass', freq: 3200, gain: 0.08 * k, pan });
       tone(f, { gain: 0.09 * k, decay: 0.45 * k + 0.1, wet: 0.35, pan });
       tone(f * 2.76, { gain: 0.05 * k, decay: 0.28 * k + 0.05, wet: 0.35, pan });
       tone(f * 5.4, { gain: 0.025 * k, decay: 0.14, wet: 0.35, pan });
     },
-    pole: e => { const pan = panAt(e.at.x); tone(180 * vary(), { gain: 0.1, decay: 0.3, wet: 0.3, pan }); tone(471, { gain: 0.04, decay: 0.2, wet: 0.3, pan }); },
-    fence: e => { for (let i = 0; i < 5; i++) noise(0.025, { at: i * 0.03 * vary(0.3), type: 'highpass', freq: 2600, gain: 0.05 * (1 - i / 6), pan: panAt(e.at.x) }); },
+    pole: e => { const pan = panAt(e.at.x); if (sample('pole', { gain: 0.5, pan, wet: 0.25 })) return; tone(180 * vary(), { gain: 0.1, decay: 0.3, wet: 0.3, pan }); tone(471, { gain: 0.04, decay: 0.2, wet: 0.3, pan }); },
+    fence: e => { if (sample('fence', { gain: 0.45, pan: panAt(e.at.x) })) return; for (let i = 0; i < 5; i++) noise(0.025, { at: i * 0.03 * vary(0.3), type: 'highpass', freq: 2600, gain: 0.05 * (1 - i / 6), pan: panAt(e.at.x) }); },
     // Someone in the family gets hit: a soft "oof".
     fan: e => { tone(270 * vary(), { type: 'triangle', gain: 0.06, decay: 0.14, glide: 0.65, pan: panAt(e.at.x) }); noise(0.05, { type: 'lowpass', freq: 600, gain: 0.05, pan: panAt(e.at.x) }); },
     // Through the net: a soft swish, then a small chime (three notes for two points).
     score: e => {
       const pan = panAt(e.at.x);
+      if (sample('swish', { gain: 0.8, pan, wet: 0.2 })) return;
       noise(0.35, { freq: 5200, q: 0.7, gain: 0.07, sweep: 0.35, wet: 0.2, pan });
       noise(0.22, { at: 0.08, freq: 3000, q: 0.8, gain: 0.03, sweep: 0.5, wet: 0.2, pan });
     },
     shot: e => {
-      noise(0.14, { freq: 600, q: 1.2, gain: 0.035, sweep: 3, pan: panAt(e.at.x) });
+      if (!sample('whoosh', { gain: 0.3, rate: 1.25, pan: panAt(e.at.x) })) noise(0.14, { freq: 600, q: 1.2, gain: 0.035, sweep: 3, pan: panAt(e.at.x) });
       // A clean jump-shot release: a small sparkle.
       if (e.type === 'shot' && e.release > 0.85) { tone(1568, { at: 0.03, gain: 0.03, decay: 0.3, wet: 0.5 }); tone(2093, { at: 0.08, gain: 0.02, decay: 0.3, wet: 0.5 }); }
     },
     // Gathering the ball: a palm slap.
-    pickup: e => { noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
-    dash: () => { noise(0.22, { freq: 500, sweep: 4.8, q: 1.4, gain: 0.05 }); tone(220, { type: 'triangle', glide: 2, decay: 0.12, gain: 0.025 }); },
-    skid: () => noise(0.18, { freq: 1800, sweep: 0.4, q: 2, gain: 0.04 }),
+    pickup: e => { if (sample('catch', { gain: 0.6, pan: panAt(e.at.x) })) return; noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
+    dash: () => { if (sample('whoosh', { gain: 0.45, rate: 0.9 })) return; noise(0.22, { freq: 500, sweep: 4.8, q: 1.4, gain: 0.05 }); tone(220, { type: 'triangle', glide: 2, decay: 0.12, gain: 0.025 }); },
+    skid: () => { if (!sample('skid', { gain: 0.5 })) noise(0.18, { freq: 1800, sweep: 0.4, q: 2, gain: 0.04 }); },
     jump: () => { tone(260, { type: 'triangle', glide: 2.8, decay: 0.16, gain: 0.05, wet: 0.15 }); noise(0.12, { freq: 700, sweep: 2.9, q: 1.2, gain: 0.03 }); },
     // Out of puff: Catcha's soft, breathy double huff.
-    tired: () => { noise(0.22, { freq: 900, sweep: 0.67, q: 0.8, gain: 0.12 }); noise(0.26, { at: 0.32, freq: 800, sweep: 0.65, q: 0.8, gain: 0.1 }); }
+    tired: () => { if (sample('huff', { gain: 0.7 })) return; noise(0.22, { freq: 900, sweep: 0.67, q: 0.8, gain: 0.12 }); noise(0.26, { at: 0.32, freq: 800, sweep: 0.65, q: 0.8, gain: 0.1 }); }
   };
   // Tiny vibrations on Android (and iOS where it allows): light for touches, a fuller buzz for a basket.
   const BUZZ: Partial<Record<GameEvent['type'], HapticPattern>> = { dribble: 'tick', pickup: 'tick', shot: 'bump', rim: 'bump', board: 'tick', dash: 'bump', jump: 'tick', tired: 'sad' };
@@ -118,13 +142,16 @@ export function createHoopsAudio() {
       if (!live()) return;
       const notes = value === 2 ? [784, 988, 1319] : [784, 1047];
       notes.forEach((f, i) => { tone(f, { at: 0.12 + i * 0.07, gain: 0.04, decay: 0.6, wet: 0.5 }); tone(f * 2.01, { at: 0.12 + i * 0.07, gain: 0.012, decay: 0.3, wet: 0.5 }); });
+      // The family: their claps and a kids' cheer (louder for two points), off to the left where they stand.
+      const clapped = sample('claps', { at: 0.15, gain: value === 2 ? 0.5 : 0.38, pan: famPan, wet: 0.2 });
+      if (sample('cheer', { at: 0.1, gain: value === 2 ? 0.4 : 0.26, pan: famPan, wet: 0.2 }) && clapped) return;
       for (let i = 0; i < (value === 2 ? 12 : 8); i++) noise(0.022, { at: 0.2 + Math.random() * 0.8, freq: 1400 * vary(0.2), q: 0.9, gain: 0.05, wet: 0.2, pan: famPan + (Math.random() - 0.5) * 0.3 });
       tone(520, { at: 0.25, type: 'triangle', gain: 0.025, decay: 0.3, glide: 1.5, wet: 0.3, pan: famPan });
       tone(760, { at: 0.32, type: 'triangle', gain: 0.02, decay: 0.25, glide: 1.4, wet: 0.3, pan: famPan + 0.2 });
     },
     /** A near miss: the family's soft "aww". */
     aww() {
-      if (!live()) return;
+      if (!live() || sample('aww', { gain: 0.35, pan: famPan, wet: 0.25 })) return;
       tone(440, { type: 'triangle', gain: 0.025, decay: 0.35, glide: 0.82, wet: 0.3, pan: famPan });
       tone(370, { at: 0.05, type: 'triangle', gain: 0.02, decay: 0.45, glide: 0.85, wet: 0.3, pan: famPan + 0.15 });
     },
