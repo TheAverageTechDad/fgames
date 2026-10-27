@@ -54,6 +54,8 @@ function substep(ball: Ball, h: number, events: BallEvent[]) {
   if (d < BALL_R) {
     const n = d > 1e-9 ? { x: (p.x - c.x) / d, y: (p.y - c.y) / d, z: (p.z - c.z) / d } : { x: 0, y: 0, z: p.z >= BOARD.z ? 1 : -1 };
     hit('board', bounce(ball, c, n, BALL_R, BOARD_E));
+    // Same for a ball come to rest on top of the board: tip it off toward the court.
+    if (n.y > 0.7 && Math.hypot(v.x, v.y, v.z) < 0.2) v.z += 0.3;
   }
 
   // The pole and the family: vertical cylinders.

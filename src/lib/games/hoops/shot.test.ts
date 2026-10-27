@@ -53,6 +53,16 @@ describe('shot', () => {
       if (Math.hypot(x - RIM.x, z - RIM.z) > 2.5) expect(rim < 0 || rim > score, `clean from ${x}, ${z}`).toBe(true);
     }
   });
+  it('lets a drag a quarter too long miss long by a hand, not sail over the board', () => {
+    for (const [x, z] of [[0, 4], [0, 5.5], [3, 5]]) {
+      const release = { x, y: 2.1, z }, past = (k: number) => {
+        const at = rimCrossing(release, shotVelocity(release, pullFrom(release, ideal * k)))!.at;
+        return Math.hypot(at.x - release.x, at.z - release.z) - Math.hypot(RIM.x - release.x, RIM.z - release.z);
+      };
+      expect(past(1.25), `long from ${x}, ${z}`).toBeLessThan(0.6);
+      expect(past(1.25), `still long from ${x}, ${z}`).toBeGreaterThan(past(1) + 0.1);
+    }
+  });
   it('eases the aim help off gradually instead of snapping', () => {
     const release = { x: 0, y: 2.1, z: 5 };
     const heading = (deg: number) => { const a = (deg * Math.PI) / 180, v = shotVelocity(release, { dx: Math.sin(a) * ideal, dy: -Math.cos(a) * ideal, minSide: 390 }); return Math.atan2(v.x, -v.z) * 180 / Math.PI; };

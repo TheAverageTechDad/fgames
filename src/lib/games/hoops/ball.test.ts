@@ -63,6 +63,11 @@ describe('ball', () => {
     expect(events.some(e => e.type === 'board')).toBe(true);
     expect(ball.v.z).toBeGreaterThan(0);
   });
+  it('rolls a ball off the top of the backboard instead of balancing it there', () => {
+    const ball = createBall({ x: 0.3, y: BOARD.top + BALL_R, z: BOARD.z });
+    for (let i = 0; i < 180; i++) stepBall(ball, 1 / 60);
+    expect(ball.p.y).toBeLessThan(BOARD.bottom);
+  });
   it('does not tunnel through the backboard on a 0.1 s frame', () => {
     const ball = createBall({ x: 0, y: 3.4, z: 2 }, { x: 0, y: 0, z: -40 });
     stepBall(ball, 0.1);

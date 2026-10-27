@@ -9,7 +9,7 @@ export type Pull = { dx: number; dy: number; minSide: number; rimAngle?: number 
 
 // The ideal drag is a fifth of the screen from anywhere; MIN_PULL_PX or less (sliding back onto Dad) cancels the shot.
 export const P_IDEAL = 0.2, MAX_PULL = 0.45, MIN_PULL_PX = 20, AIM_FULL = (20 * Math.PI) / 180, AIM_NONE = (80 * Math.PI) / 180, AIM_KEEP = 0.1, BAND_NEAR = 0.08, BAND_FAR = 0.05,
-  POWER_SLOPE = 0.35, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
+  POWER_SLOPE = 0.2, MIN_SHOT_PX = 24, LAUNCH_ANGLE = (52 * Math.PI) / 180, ENTRY_ANGLE = (45 * Math.PI) / 180, AIM_LONG = 0.06;
 
 /** The drag as a fraction of the screen, so the same drag means the same on every phone. */
 export const strength = ({ dx, dy, minSide }: Pull) => Math.min(MAX_PULL, Math.hypot(dx, dy) / minSide);
@@ -21,7 +21,8 @@ export const strength = ({ dx, dy, minSide }: Pull) => Math.min(MAX_PULL, Math.h
 export function power(s: number, twoPointer: boolean, bonus = 0) {
   const r = s / P_IDEAL, band = (twoPointer ? BAND_FAR : BAND_NEAR) * (1 + bonus);
   if (Math.abs(r - 1) <= band) return 1;
-  return Math.min(1.45, Math.max(0.55, 1 + (r - 1 - Math.sign(r - 1) * band) * POWER_SLOPE));
+  // A gentle slope and a low ceiling: an overhit lands a hand or two long, where the ring shows it, not over the board.
+  return Math.min(1.25, Math.max(0.55, 1 + (r - 1 - Math.sign(r - 1) * band) * POWER_SLOPE));
 }
 
 /** The velocity that drops the ball's centre onto `to`, coming down at least ENTRY_ANGLE and steep enough to pass over the near edge of the rim. */
