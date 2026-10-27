@@ -146,6 +146,8 @@ export function createHoopsAudio() {
     },
     shot: e => {
       if (!sample('whoosh', { gain: 0.3, rate: 1.25, pan: panAt(e.at.x) })) noise(0.14, { freq: 600, q: 1.2, gain: 0.035, sweep: 3, pan: panAt(e.at.x) });
+      // A dunk: the slam rattles the rim and the backboard.
+      if (e.type === 'shot' && e.move === 'dunk') { sample('rim-1', { gain: 0.8, wet: 0.3 }); sample('backboard', { at: 0.02, gain: 0.6 }); if (!document.hidden) haptic('celebrate'); return; }
       // A clean jump-shot release: a small sparkle.
       if (e.type === 'shot' && e.release > 0.85) { tone(1568, { at: 0.03, gain: 0.03, decay: 0.3, wet: 0.5 }); tone(2093, { at: 0.08, gain: 0.02, decay: 0.3, wet: 0.5 }); }
     },
@@ -188,6 +190,8 @@ export function createHoopsAudio() {
       tone(440, { type: 'triangle', gain: 0.025, decay: 0.35, glide: 0.82, wet: 0.3, pan: famPan });
       tone(370, { at: 0.05, type: 'triangle', gain: 0.02, decay: 0.45, glide: 0.85, wet: 0.3, pan: famPan + 0.15 });
     },
+    /** Sneakers biting the court on a dunk or layup take-off. */
+    squeak() { if (live() && !sample('skid', { gain: 0.55, rate: 1.1 })) noise(0.12, { freq: 2200, sweep: 1.3, q: 3, gain: 0.03 }); },
     /** Dad landing from a jump: a soft pat. */
     land() {
       if (!document.hidden) haptic('tick');

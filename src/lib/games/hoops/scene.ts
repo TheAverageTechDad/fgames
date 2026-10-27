@@ -74,10 +74,11 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
   const target = new THREE.Vector3(), aim = new THREE.Vector3(), VIEW = new THREE.Vector3(0, Math.sin(0.62), Math.cos(0.62)), WIDE = 7.4;
   const probe = new THREE.Vector3();
-  let distance = 14;
+  // rimShake: a dunk's wobble in the rim and backboard (and a nudge of the camera), fading over 0.6 s.
+  let distance = 14, rimShake = 0;
   const follow = (k: number) => {
     const p = state.player;
-    aim.set(Math.max(-2.3, Math.min(2.3, p.x * 0.55)), 1, Math.max(2.6, Math.min(6.4, p.z - 0.4)));
+    aim.set(Math.max(-2.3, Math.min(2.3, p.x * 0.55)) + (Math.random() - 0.5) * 0.12 * rimShake, 1 + (Math.random() - 0.5) * 0.12 * rimShake, Math.max(2.6, Math.min(6.4, p.z - 0.4)));
     target.lerp(aim, k);
     camera.position.copy(target).addScaledVector(VIEW, distance); camera.lookAt(target); camera.updateMatrixWorld();
   };
@@ -189,7 +190,9 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   });
   // ?fans=cheer (or watch, aww, flinch) holds the family in one mood, for tuning poses like the farm's ?time=.
   const holdMood = new URLSearchParams(location.search).get('fans') as Mood | null;
-  let shotLive = false, rimTouched = false, clock = 0, wasAir = false, runDust = 0;
+  // ?speed=0.25 slows the whole game down, for checking animation.
+  const timeScale = Number(new URLSearchParams(location.search).get('speed')) || 1;
+  let shotLive = false, rimTouched = false, clock = 0, wasAir = false, runDust = 0, lastMove: string | undefined;
   const joints: THREE.Object3D[] = [];
   // The right hand: the bottom of the right arm in the arm's own space, measured in the rest pose.
   let rightArm: THREE.Object3D | null = null;
@@ -253,7 +256,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     if (e.type === 'rim' && shotLive) rimTouched = true;
     if (e.type === 'score' && shotLive) {
       shotLive = false;
-      const shout = Math.random() < (state.value === 2 ? 0.55 : 0.3);
+      // A dunk always brings the house down.
+      const shout = lastMove === 'dunk' || Math.random() < (state.value === 2 ? 0.55 : 0.3);
       audio.cheer(state.value, shout);
       if (shout) setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); else setMood('clap', 1.3);
     }
@@ -262,7 +266,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const p = state.player, back = { x: -Math.sin(dad.rotation.y) * 1.2, z: -Math.cos(dad.rotation.y) * 1.2 };
     if (e.type === 'dash') dust(p.x, p.z, 6, back);
     if (e.type === 'skid') dust(p.x + Math.sin(dad.rotation.y) * 0.3, p.z + Math.cos(dad.rotation.y) * 0.3, 5, { x: -back.x, z: -back.z });
-    if (e.type === 'jump') dust(p.x, p.z, 3, undefined, 0.15);
+    if (e.type === 'jump') { dust(p.x, p.z, state.drive ? 7 : 3, undefined, state.drive ? 0.3 : 0.15); if (state.drive) audio.squeak(); }
+    if (e.type === 'shot') { lastMove = e.move; if (e.move === 'dunk') { rimShake = 1; swish = 1; } }
     if (e.type === 'floor' || e.type === 'dribble') ballSquash = 1;
     if (e.type === 'rim' || e.type === 'board' || e.type === 'pole') ballPulse = 1;
     if (e.type === 'score') swish = 1;
@@ -276,7 +281,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   function animate(now: number) {
     if (disposed) return;
     frame = requestAnimationFrame(animate);
-    const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
+    const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)) * timeScale; previous = now;
     if (paused || document.hidden || !loaded) return;
     input.tick();
     for (let e = input.next(); e; e = input.next()) {
@@ -302,7 +307,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     wasAir = air;
     const winding = p.dashT >= 0 && p.dashT < DASH_WINDUP, sprinting = p.dashT >= DASH_WINDUP, skidding = p.skidT > 0;
     const bend = pickupT > 0 ? Math.sin((pickupT / PICKUP) * Math.PI) : 0;
-    const squashTo = crouching ? 0.72 : rise >= 0 ? (rise < 0.35 ? 1.18 : 1.04) : landT > 0 ? 0.78
+    const squashTo = crouching ? 0.72 : state.drive && rise >= 0 ? 1.16 : rise >= 0 ? (rise < 0.35 ? 1.18 : 1.04) : landT > 0 ? 0.78
       : winding ? 0.86 : sprinting && p.dashT < DASH_WINDUP + 0.14 ? 1.1 : aiming ? 0.94 : 1 - bend * 0.12;
     const leanTo = crouching ? 0.3 : rise >= 0 ? (rise < 0.6 ? 0.2 : -0.1) : winding ? -0.2 : skidding ? -0.22 : sprinting ? 0.24 : moving ? 0.06 : 0;
     squash += (squashTo - squash) * Math.min(1, dt * 16);
@@ -328,6 +333,12 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       let to = isArm ? -swing * side * (sprinting ? 1.1 : 0.7) + (sprinting ? 0.25 : winding ? 0.6 : 0) : swing * side;
       if (crouching) to = isArm ? 0.9 : 0;
       else if (rise >= 0) to = isArm ? -2.2 + rise * 1.5 + (side > 0 ? 0.25 : 0) : rise < 0.7 ? (side > 0 ? -0.75 : 0.55) : -0.3;
+      // A dunk: both arms up with the ball, then hanging on the rim with the knees tucked. A layup: one arm reaching up.
+      if (state.drive && !crouching) {
+        const hanging = state.drive.hang > 0 || state.drive.released;
+        if (state.drive.kind === 'dunk') to = isArm ? (hanging ? -2.6 : -2.95) : hanging ? (side > 0 ? -0.9 : 0.5) : to;
+        else to = isArm ? (joint === rightArm ? -2.95 : -0.6) : to;
+      }
       if (isArm && bend > 0) to = -1.3 * bend - 0.2;
       else if (isArm && shooting) to = aiming ? -2.75 : -2.3;
       // The dribbling hand keeps a light smoothing so it rides the ball's beat without snapping.
@@ -367,6 +378,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     ballShadow.position.set(b.x, 0.021, b.z); ballShadow.scale.setScalar(Math.max(0.4, 1 - b.y * 0.15));
 
     swish = Math.max(0, swish - dt / 0.3); net.scale.y = 1 + Math.sin(swish * Math.PI) * 0.35;
+    rimShake = Math.max(0, rimShake - dt / 0.6);
+    rim.rotation.x = Math.PI / 2 + Math.sin(clock * 45) * 0.12 * rimShake; board.rotation.z = Math.sin(clock * 38) * 0.02 * rimShake;
     puffs.step(dt); birds.update(dt, target);
     for (const f of fans) {
       if (holdMood) { f.mood = holdMood; f.moodT = 1; }

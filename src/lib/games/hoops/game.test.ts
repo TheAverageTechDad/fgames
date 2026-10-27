@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
-import { RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
 const ideal = { dx: 0, dy: -78, minSide: 390 }; // drag straight up at the rim: Dad starts straight out from it
@@ -108,6 +108,35 @@ describe('shootaround', () => {
     const s = createShootaround(); startAim(s);
     const event = shoot(s, ideal);
     expect(event?.type === 'shot' && event.release).toBe(0);
+  });
+  it('dunks on a jump right by the rim, slamming it down through the ring once', () => {
+    const s = createShootaround(); s.player.x = 0.3; s.player.z = RIM.z + 0.8;
+    jump(s);
+    const events = run(s, 2);
+    const shot = events.find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.move).toBe('dunk');
+    expect(events.filter(e => e.type === 'score')).toHaveLength(1);
+    expect([s.score, s.shots]).toEqual([1, 1]);
+    expect(s.player.y).toBe(0);
+  });
+  it('lays it up on a jump a little further out', () => {
+    const s = createShootaround(); s.player.x = 1; s.player.z = RIM.z + 2;
+    expect(Math.hypot(s.player.x - RIM.x, s.player.z - RIM.z)).toBeGreaterThan(DUNK_R);
+    jump(s);
+    const events = run(s, 3);
+    const shot = events.find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.move).toBe('layup');
+    expect(s.score).toBe(1);
+  });
+  it('starts out of layup range, so a jump from the opening spot is just a jump', () => {
+    const s = createShootaround();
+    expect(Math.hypot(s.player.x - RIM.x, s.player.z - RIM.z)).toBeGreaterThan(LAYUP_R);
+  });
+  it('only jumps further out, or without the ball', () => {
+    const far = createShootaround(); far.player.z = RIM.z + LAYUP_R + 0.5;
+    jump(far); expect(run(far, 1.5).some(e => e.type === 'shot')).toBe(false); expect(far.mode).toBe('held');
+    const empty = createShootaround(); empty.player.z = RIM.z + 0.8; empty.mode = 'loose'; empty.ball.p = { x: 3, y: BALL_R, z: 6 };
+    jump(empty); expect(run(empty, 1.5).some(e => e.type === 'shot')).toBe(false);
   });
   it('scores two from beyond the arc', () => {
     const s = createShootaround(); s.player.z = RIM.z + ARC_R + 0.8;

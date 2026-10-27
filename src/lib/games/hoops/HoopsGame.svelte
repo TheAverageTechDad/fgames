@@ -24,7 +24,7 @@
   function event(e: GameEvent) {
     const say = (text: string) => { note = text; clearTimeout(noteTimer); noteTimer = setTimeout(() => { note = ''; }, 1600); };
     if (e.type === 'tired') say('Out of puff! Catch your breath');
-    if (e.type === 'shot' && e.release > 0.85) say('Perfect release!');
+    if (e.type === 'shot') { if (e.move === 'dunk') say('Dunk!'); else if (e.move === 'layup') say('Layup!'); else if (e.release > 0.85) say('Perfect release!'); }
     if (e.type !== 'score' || !engine) return;
     pop = `+${engine.state.value}`; popId++;
     clearTimeout(popTimer); popTimer = setTimeout(() => { pop = ''; }, 900);
@@ -80,7 +80,7 @@
     {/if}
     <dialog class="hoops-pause" bind:this={pauseDialog} onclose={resume}>
       <h2>Paused</h2>
-      <p>Hold Dad, drag toward the hoop and let go to shoot; tap with another finger while aiming to jump, and let go at the top for a jump shot. Drag anywhere else to move; push to the edge to sprint.</p>
+      <p>Hold Dad, drag toward the hoop and let go to shoot; tap with another finger while aiming to jump, and let go at the top for a jump shot. Tap to jump near the hoop with the ball to dunk or lay it up. Drag anywhere else to move; push to the edge to sprint.</p>
       <div class="hoops-switches">
         <button class="hoops-switch" role="switch" aria-checked={!muted} onclick={() => { muted = sound.toggleMute(); engine?.setMusic(); }}>Sound <b>{muted ? 'Off' : 'On'}</b></button>
         <button class="hoops-switch" role="switch" aria-checked={music} onclick={() => { music = !music; engine?.setMusic(music); }}>Music <b>{music ? 'On' : 'Off'}</b></button>
