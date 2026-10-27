@@ -43,7 +43,7 @@ export function buildHoopsWorld(props: FarmProps, root: THREE.Object3D) {
   put(props.decoration('benches'), FENCE.side + 1.2, 3.2, -Math.PI / 2, 0.9);
 
   // The near grass: bushes off to the sides only.
-  for (const [x, z] of [[-4.6, 10.2], [5.1, 10.6], [-6.4, 12.6], [6.8, 12.8], [-3.2, 13.6], [3.9, 13.9]]) put(props.bush(0.4 + r() * 0.15, Math.round(r() * 50), flowers[Math.floor(r() * flowers.length)]), x, z);
+  for (const [x, z] of [[-4.6, 1.7], [5.1, 2.1], [-6.4, 4.1], [6.8, 4.3], [-3.2, 5.1], [3.9, 5.4]]) put(props.bush(0.4 + r() * 0.15, Math.round(r() * 50), flowers[Math.floor(r() * flowers.length)]), x, COURT.depth + z);
   return mergeByMaterial(root);
 }
 

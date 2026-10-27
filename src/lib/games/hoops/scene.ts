@@ -51,7 +51,7 @@ function courtTexture() {
     c.strokeRect(X(-COURT.halfWidth), Z(0), COURT.halfWidth * 2 * PX, COURT.depth * PX);
     c.fillStyle = '#c9603c55'; c.fillRect(X(-1.45), Z(0), 2.9 * PX, 3.5 * PX); c.strokeRect(X(-1.45), Z(0), 2.9 * PX, 3.5 * PX); // the key
     c.beginPath(); c.arc(X(0), Z(3.5), 1.1 * PX, 0, Math.PI); c.stroke();
-    c.beginPath(); c.arc(X(RIM.x), Z(RIM.z), ARC_R * PX, 0, Math.PI); c.stroke(); // the arc
+    c.beginPath(); c.moveTo(X(RIM.x + ARC_R), Z(0)); c.arc(X(RIM.x), Z(RIM.z), ARC_R * PX, 0, Math.PI); c.lineTo(X(RIM.x - ARC_R), Z(0)); c.stroke(); // the arc and its corner lines
   });
 }
 
@@ -80,7 +80,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const sun = new THREE.DirectionalLight('#ffe2b0', 2.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 50 });
   sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03;
-  sun.target.position.set(0, 0, 4); scene.add(sun, sun.target);
+  sun.target.position.set(0, 0, 6); scene.add(sun, sun.target);
   // ?time=0.6 starts at that point of the day (0 morning … 0.64 sunset … 0.74 dusk), like the farm's.
   const sky = createSky({ scene, hemi, sun }, DAY);
   let dayClock = DAY_SECONDS * (Number(new URLSearchParams(location.search).get('time')) || 0.08);
@@ -100,7 +100,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   let distance = 14, rimShake = 0;
   const follow = (k: number) => {
     const p = state.player;
-    aim.set(Math.max(-2.3, Math.min(2.3, p.x * 0.55)) + (Math.random() - 0.5) * 0.12 * rimShake, 1 + (Math.random() - 0.5) * 0.12 * rimShake, Math.max(2.6, Math.min(6.4, p.z - 0.4)));
+    aim.set(Math.max(-2.3, Math.min(2.3, p.x * 0.55)) + (Math.random() - 0.5) * 0.12 * rimShake, 1 + (Math.random() - 0.5) * 0.12 * rimShake, Math.max(2.6, Math.min(8, p.z - 0.4)));
     target.lerp(aim, k);
     camera.position.copy(target).addScaledVector(VIEW, distance); camera.lookAt(target); camera.updateMatrixWorld();
   };
@@ -284,7 +284,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     const feet = probe.set(p.x, p.y, p.z).project(camera), fy = feet.y, fx = feet.x;
     const head = probe.set(p.x, p.y + DAD_HEIGHT, p.z).project(camera);
     const toY = (y: number) => rect.top + (1 - y) * rect.height / 2;
-    return { x: rect.left + (fx + 1) * rect.width / 2, y: (toY(fy) + toY(head.y)) / 2, radius: 0.8 * (toY(fy) - toY(head.y)) };
+    return { x: rect.left + (fx + 1) * rect.width / 2, y: (toY(fy) + toY(head.y)) / 2, radius: toY(fy) - toY(head.y) };
   };
   const input = createHoopsInput(canvas, host, () => state.mode === 'held' ? dadScreen() : null);
   /** The pull with the rim's on-screen direction from Dad, so aim is judged against the rim the player sees. */

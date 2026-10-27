@@ -127,7 +127,7 @@ The chibi characters are short and Catcha's jump is big (peak 1.5 units at 0.25 
 | Value | Start |
 | --- | --- |
 | Rim height | 1.8 × Dad's height (a jump reaches the rim for blocks, not for dunks) |
-| Court | 9 wide × 8.5 deep, arc 4.2 (the 7.5 × 7 tried first felt small); fence 1.3 beyond the sides and 1.6 behind the baseline |
+| Court | 9 wide × 12.75 deep (the user stretched 8.5 toward the camera), arc 4.2 with straight corner lines to the baseline; fence 1.3 beyond the sides and 1.6 behind the baseline |
 | Ball diameter | about 0.4 × Dad's head height, enough to read at phone size |
 | Match | 2:00 active play |
 | Guarding | 0.9 m reach, 2 s fill, 2× drain |

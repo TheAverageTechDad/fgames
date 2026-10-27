@@ -9,6 +9,9 @@ describe('court', () => {
   it('scores two beyond the arc and one inside', () => {
     expect(isTwoPointer({ x: 0, z: RIM.z + ARC_R + 0.1 })).toBe(true);
     expect(isTwoPointer({ x: 0, z: RIM.z + ARC_R - 0.1 })).toBe(false);
+    // In the corners the line runs straight to the baseline.
+    expect(isTwoPointer({ x: ARC_R - 0.1, z: 0.3 })).toBe(false);
+    expect(isTwoPointer({ x: ARC_R + 0.1, z: 0.3 })).toBe(true);
   });
   it('knows the boundaries', () => {
     expect(inBounds({ x: COURT.halfWidth - 0.1, z: COURT.depth - 0.1 })).toBe(true);
