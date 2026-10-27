@@ -6,7 +6,7 @@ Working title for the portrait farming game. Launch from the arcade or `/farm`.
 - `model.ts`: independent simulation: layout, collisions, crops, inventory, load-based speed, the customer queue and patience, star rating, purchases, the goal track, and the next-step guide.
 - `storage.ts`: versioned `pocket-farm:v1` save and validation, defaulting fields older saves lack. No offline growth. Customers are not saved.
 - `juice.ts`: Catcha's soft dust puffs and the outdoor time-of-day keyframes.
-- `scene.ts`: disposable Three.js scene: isometric follow camera, the farmer's squash and dust, plants, carry stack, shoppers, children, birds, day/night, rain, cash pile, guide arrow, and transfer effects. `?time=0.75` starts at night, `?rain` starts a shower.
+- `scene.ts`: disposable Three.js scene: isometric follow camera, the farmer's squash and dust, plants, carry stack, shoppers, children, Dad minding the stalls (walking between them once the orchard opens), birds, day/night, rain, cash pile, guide arrow, and transfer effects. `?time=0.75` starts at night, `?rain` starts a shower.
 - `world.ts`: the static farm (ground, stone paths, balustrade, hedges, house, trees, ground tiles), merged into a few draw calls.
 - `props.ts`: reusable local meshes and baked canvas textures for soil, crops, stands, market, hedges, trees, bushes, lamps, tiles and the hand-built shoppers.
 - `assets.ts`: shared local GLB references. Does not import or initialise Catcha.

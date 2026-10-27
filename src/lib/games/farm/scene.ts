@@ -52,6 +52,9 @@ function along(from: THREE.Vector3, door: THREE.Vector3 | null, to: THREE.Vector
 // Where the children play: points on the paths and lawns, clear of the fields.
 const PLAYGROUND: Point[] = [{ x: 0, z: 0 }, { x: -5.5, z: 0 }, { x: 5.5, z: 0 }, { x: 0, z: -5.5 }, { x: 0, z: 5.5 }, { x: -1.4, z: 5.2 },
   { x: 4.0, z: 5.7 }, { x: -5.6, z: 3.4 }, { x: 0.3, z: -3 }, { x: -3, z: 0.2 }, { x: 4.8, z: 0.5 }, { x: 1.2, z: 4.6 }];
+// Dad keeps the stalls from the end of each counter, clear of the queue. Once the orchard opens he walks between them
+// on the stone: behind the market counter, down the main path through the hedge gap, and behind the orchard stand.
+const DAD_ROUTE: Point[] = [{ x: 4.4, z: 2.15 }, { x: 3.95, z: 1.85 }, { x: 0, z: 1.85 }, { x: 0, z: 6.98 }, { x: -2.75, z: 6.98 }, { x: -3.2, z: 7.25 }];
 const ease = (t: number) => 1 - (1 - t) ** 3;
 const pop = (t: number) => t >= 1 ? 1 : 1 + Math.sin(t * Math.PI) * 0.25 * (1 - t) + (ease(t) - 1);
 const turn = (from: number, to: number, k: number) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * Math.min(1, k);
@@ -414,6 +417,24 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     });
   }
 
+  // Dad: scenery, outside the model. He minds a stall for a while, then (with the orchard open) strolls to the other one.
+  let dad!: Walker & { goal: number; next: number; rest: number; tidy: number };
+  const dadGoal = new THREE.Vector3();
+  function updateDad(dt: number) {
+    const p = dad.group.position, near = (i: number) => Math.hypot(DAD_ROUTE[i].x - p.x, DAD_ROUTE[i].z - p.z) < 0.01;
+    if (dad.next !== dad.goal && near(dad.next)) dad.next += Math.sign(dad.goal - dad.next);
+    if (!near(dad.next)) { walkTo(dad, dadGoal.set(DAD_ROUTE[dad.next].x, 0, DAD_ROUTE[dad.next].z), 1.6, dt); return; }
+    if ((dad.rest -= dt) <= 0 && hasOrchard(state)) {
+      dad.rest = 15 + Math.random() * 15; dad.goal = dad.goal ? 0 : DAD_ROUTE.length - 1; dad.next += Math.sign(dad.goal - dad.next); return;
+    }
+    // At the counter's end: glancing about, and every few seconds turning to straighten the produce.
+    animateWalker(dad, false, 0, dt);
+    if ((dad.tidy -= dt) < -1.2) dad.tidy = 3 + Math.random() * 5;
+    const side = dad.goal ? 1 : -1, reach = dad.tidy < 0 ? Math.sin(-dad.tidy / 1.2 * Math.PI) : 0;
+    dad.group.rotation.y = turn(dad.group.rotation.y, dad.tidy < 0 ? side * Math.PI / 2 : side * 0.45 + Math.sin(time * 0.6) * 0.25, dt * 5);
+    dad.joints.forEach(j => { if (j.name.startsWith('arm')) j.rotation.x = -reach * (j.name.includes('right') ? 1.1 + Math.sin(time * 14) * 0.15 : 0.35); });
+  }
+
   // Birds glide high above, soft and blurred like something close to the lens, trailing faint shadows.
   const birdFrames = [0, 1].map(frame => props.canvasTexture(128, 64, c => {
     c.filter = 'blur(3px)'; c.fillStyle = '#2b3a33';
@@ -691,10 +712,14 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     if (disposed) disposeObject(gltf.scene); else loadedModels.push(gltf.scene);
     return gltf;
   };
-  const ready = Promise.all([load(FARM_ASSETS.farmer), load(FARM_ASSETS.olderGirl), load(FARM_ASSETS.youngerGirl)]).then(([mother, ...girls]) => {
+  const ready = Promise.all([load(FARM_ASSETS.farmer), load(FARM_ASSETS.dad), load(FARM_ASSETS.olderGirl), load(FARM_ASSETS.youngerGirl)]).then(([mother, father, ...girls]) => {
     if (disposed) return;
     const model = fit(mother.scene, 1.65); body.add(model);
     model.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) joints.push(o); });
+    const dadGroup = new THREE.Group(), dadJoints: THREE.Object3D[] = [];
+    dadGroup.add(fit(father.scene, 1.7), shadowDisc(0.32)); dadGroup.position.set(DAD_ROUTE[0].x, 0, DAD_ROUTE[0].z); scene.add(dadGroup);
+    dadGroup.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) dadJoints.push(o); });
+    dad = { group: dadGroup, joints: dadJoints, phase: 0, walk: 0, squash: 1, goal: 0, next: 0, rest: 15 + rand() * 15, tidy: 2 };
     girls.forEach((girl, i) => {
       const group = new THREE.Group(), kid = fit(girl.scene, i ? 0.8 : 1.15), kidJoints: THREE.Object3D[] = [];
       kid.traverse(o => { if (!(o instanceof THREE.Mesh) && /^(arm-|leg-)/.test(o.name)) kidJoints.push(o); });
@@ -857,7 +882,7 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
       }
       if (progress <= 0) payClock = 0;
     }
-    updateShoppers(dt); updateKids(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
+    updateShoppers(dt); updateKids(dt); updateDad(dt); updateYard(dt); updateHelpers(dt); updateSprinklers(dt);
     boardRoot.visible = boardOpen(state);
     if (stallBorn >= 0) for (const st of stalls) st?.scale.setScalar(pop(Math.min(1, (time - stallBorn) / 0.6)));
     updateHives();
