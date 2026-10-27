@@ -4,8 +4,9 @@ import { createPuffs } from '../farm/juice';
 import { createFarmProps } from '../farm/props';
 import { buildHoopsWorld, createBirds } from './world';
 import { createHoopsAudio } from './audio';
+import { STEP, stepBall, type Ball } from './ball';
 import { ARC_R, BALL_R, BOARD, COURT, DAD_HEIGHT, FAMILY, FENCE, GRAVITY, POLE, RIM, onAsphalt } from './court';
-import { DASH_WINDUP, JUMP_V, RUN_SPEED, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
+import { DASH_WINDUP, JUMP_V, RUN_SPEED, streakWord, cancelAim, createShootaround, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent } from './game';
 import { createHoopsInput, type Target } from './input';
 import { MIN_PULL_PX, shotVelocity, type Pull } from './shot';
 
@@ -137,23 +138,45 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const bracket = new THREE.Mesh(keep(new THREE.BoxGeometry(0.12, 0.04, RIM.z - RIM.radius - BOARD.z)), rim.material);
   bracket.position.set(0, RIM.y, (BOARD.z + RIM.z - RIM.radius) / 2);
   for (const m of [pole, arm, board, rim, bracket]) { m.castShadow = true; scene.add(m); }
+  // The net: strands crossing both ways from the rim to a smaller bottom hoop. A basket snaps the bottom down and in,
+  // swaying the way the ball went, then it springs back; a rim touch gives it a little shiver.
   const net = new THREE.Group(); net.position.set(RIM.x, RIM.y, RIM.z); scene.add(net);
-  {
-    const points: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2, b = ((i + 1.5) / 12) * Math.PI * 2;
-      points.push(Math.cos(a) * RIM.radius, 0, Math.sin(a) * RIM.radius, Math.cos(b) * 0.18, -0.42, Math.sin(b) * 0.18);
+  const NET_N = 12, netPositions = new Float32Array(NET_N * 3 * 2 * 3);
+  const netGeometry = keep(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(netPositions, 3)));
+  net.add(new THREE.LineSegments(netGeometry, keep(new THREE.LineBasicMaterial({ color: '#ffffff' }))));
+  let netT = 9, netKick = 0, swayX = 0, swayZ = 0;
+  const shapeNet = (drop: number, squeeze: number) => {
+    const bottom = (i: number, k = 0) => {
+      const a = (i / NET_N) * Math.PI * 2, r = 0.18 * (1 - squeeze);
+      return [Math.cos(a) * r + swayX * drop, -0.42 - drop * (1 + k), Math.sin(a) * r + swayZ * drop];
+    };
+    let n = 0;
+    const put = (v: number[]) => { netPositions.set(v, n); n += 3; };
+    for (let i = 0; i < NET_N; i++) {
+      const a = (i / NET_N) * Math.PI * 2, top = [Math.cos(a) * RIM.radius, 0, Math.sin(a) * RIM.radius];
+      put(top); put(bottom(i + 1.5)); put(top); put(bottom(i - 1.5)); put(bottom(i)); put(bottom(i + 1));
     }
-    net.add(new THREE.LineSegments(keep(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(points, 3))), keep(new THREE.LineBasicMaterial({ color: '#ffffff' }))));
-  }
-  let swish = 0;
+    netGeometry.attributes.position.needsUpdate = true; netGeometry.computeBoundingSphere();
+  };
+  shapeNet(0, 0);
 
   // Ball, with a soft shadow that shrinks as it rises.
   const shadowMat = keep(new THREE.MeshBasicMaterial({ color: '#1e2a1a', transparent: true, opacity: 0.25, depthWrite: false }));
   const shadowDisc = (radius: number) => { const m = new THREE.Mesh(keep(new THREE.CircleGeometry(radius, 24)), shadowMat); m.rotation.x = -Math.PI / 2; m.position.y = 0.02; scene.add(m); return m; };
   const ball = new THREE.Mesh(keep(new THREE.SphereGeometry(BALL_R, 32, 16)), mat('#ffffff', { map: keep(ballTexture()), roughness: 0.7 }));
-  ball.castShadow = true; scene.add(ball);
-  const ballShadow = shadowDisc(BALL_R);
+  // No sun shadow for the ball: it fell off to one side and made it hard to tell where the ball was. One clear shadow
+  // sits straight below it instead, and on a rebound a soft ring marks where it will come down.
+  scene.add(ball);
+  const ballShadowMat = keep(new THREE.MeshBasicMaterial({ color: '#1e2a1a', transparent: true, opacity: 0.45, depthWrite: false }));
+  const ballShadow = new THREE.Mesh(keep(new THREE.CircleGeometry(BALL_R * 1.1, 24)), ballShadowMat); ballShadow.rotation.x = -Math.PI / 2; scene.add(ballShadow);
+  const landingMat = keep(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false }));
+  const landing = new THREE.Mesh(keep(new THREE.RingGeometry(0.17, 0.24, 32)), landingMat); landing.rotation.x = -Math.PI / 2; landing.position.y = 0.03; scene.add(landing);
+  /** Where a loose ball next touches the ground: its own physics run ahead on a copy, up to two seconds. */
+  const predictLanding = (b: Ball) => {
+    const ghost: Ball = { p: { ...b.p }, v: { ...b.v }, acc: 0, scored: true, out: true };
+    for (let i = 0; i < 240; i++) for (const e of stepBall(ghost, STEP)) if (e.type === 'floor') return e.at;
+    return null;
+  };
   let ballSquash = 0, ballPulse = 0;
   // The aim: dots along the rising half of the arc the ball will fly.
   const DOTS = 9, dots = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.055, 10, 6)), keep(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 })), DOTS);
@@ -267,10 +290,20 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     if (e.type === 'dash') dust(p.x, p.z, 6, back);
     if (e.type === 'skid') dust(p.x + Math.sin(dad.rotation.y) * 0.3, p.z + Math.cos(dad.rotation.y) * 0.3, 5, { x: -back.x, z: -back.z });
     if (e.type === 'jump') { dust(p.x, p.z, state.drive ? 7 : 3, undefined, state.drive ? 0.3 : 0.15); if (state.drive) audio.squeak(); }
-    if (e.type === 'shot') { lastMove = e.move; if (e.move === 'dunk') { rimShake = 1; swish = 1; } }
+    if (e.type === 'shot') { lastMove = e.move; if (e.move === 'dunk') rimShake = 1; }
     if (e.type === 'floor' || e.type === 'dribble') ballSquash = 1;
     if (e.type === 'rim' || e.type === 'board' || e.type === 'pole') ballPulse = 1;
-    if (e.type === 'score') swish = 1;
+    if (e.type === 'score') {
+      netT = 0; netKick = 1; const v = state.ball.v, sp = Math.hypot(v.x, v.z) || 1; swayX = (v.x / sp) * 0.25; swayZ = (v.z / sp) * 0.25;
+      // A little burst of sparkle out of the bottom of the net, more for two points.
+      for (let i = 0; i < (state.value === 2 ? 10 : 6); i++) {
+        const a = Math.random() * Math.PI * 2;
+        puffs.spawn(RIM.x + Math.cos(a) * 0.15, RIM.y - 0.35, RIM.z + Math.sin(a) * 0.15, Math.cos(a) * 1.2, -0.3 + Math.random() * 0.8, Math.sin(a) * 1.2, 0.45, 0.22 + Math.random() * 0.12, '#fff6d0');
+      }
+      const word = streakWord(state.streak);
+      if (word) audio.praise(word);
+    }
+    if (e.type === 'rim' && netT > 0.6) { netT = 0; netKick = 0.25; swayX = swayZ = 0; }
     if (e.type === 'shot') followT = 0.25;
     if (e.type === 'pickup') { pickupT = PICKUP; pickupFrom.copy(ball.position); }
     callbacks.event(e);
@@ -375,9 +408,17 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     ballSquash = Math.max(0, ballSquash - dt / 0.12); ballPulse = Math.max(0, ballPulse - dt / 0.15);
     const flat = 0.2 * ballSquash * (b.y < BALL_R * 1.4 ? 1 : 0), pulse = 1 - 0.1 * ballPulse;
     ball.scale.set((1 + flat * 0.6) * pulse, (1 - flat) * pulse, (1 + flat * 0.6) * pulse); ball.position.y -= BALL_R * flat;
-    ballShadow.position.set(b.x, 0.021, b.z); ballShadow.scale.setScalar(Math.max(0.4, 1 - b.y * 0.15));
+    ballShadow.position.set(b.x, 0.021, b.z); ballShadow.scale.setScalar(Math.max(0.75, 1 - b.y * 0.06)); ballShadowMat.opacity = Math.max(0.22, 0.45 - b.y * 0.05);
+    const land = state.mode === 'loose' && b.y > BALL_R + 0.1 ? predictLanding(state.ball) : null;
+    if (land) landing.position.set(land.x, 0.03, land.z);
+    landingMat.opacity += ((land ? 0.55 : 0) - landingMat.opacity) * Math.min(1, dt * 10);
+    landing.visible = landingMat.opacity > 0.02;
 
-    swish = Math.max(0, swish - dt / 0.3); net.scale.y = 1 + Math.sin(swish * Math.PI) * 0.35;
+    if (netT < 1.6) {
+      netT += dt;
+      const k = netKick * Math.exp(-netT * 4.5);
+      shapeNet(0.22 * k * Math.cos(netT * 15), 0.35 * netKick * Math.exp(-netT * 5));
+    }
     rimShake = Math.max(0, rimShake - dt / 0.6);
     rim.rotation.x = Math.PI / 2 + Math.sin(clock * 45) * 0.12 * rimShake; board.rotation.z = Math.sin(clock * 38) * 0.02 * rimShake;
     puffs.step(dt); birds.update(dt, target);

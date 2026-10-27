@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
-import { DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { streakWord, DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
 
 const still: Move = { x: 0, z: 0, sprint: false };
 const ideal = { dx: 0, dy: -78, minSide: 390 }; // drag straight up at the rim: Dad starts straight out from it
@@ -137,6 +137,17 @@ describe('shootaround', () => {
     jump(far); expect(run(far, 1.5).some(e => e.type === 'shot')).toBe(false); expect(far.mode).toBe('held');
     const empty = createShootaround(); empty.player.z = RIM.z + 0.8; empty.mode = 'loose'; empty.ball.p = { x: 3, y: BALL_R, z: 6 };
     jump(empty); expect(run(empty, 1.5).some(e => e.type === 'shot')).toBe(false);
+  });
+  it('counts makes in a row and resets the streak on a miss', () => {
+    const s = createShootaround();
+    for (let i = 0; i < 3; i++) { s.mode = 'held'; startAim(s); shoot(s, ideal); run(s, 2.5); }
+    expect([s.made, s.streak]).toEqual([3, 3]);
+    s.mode = 'held'; startAim(s); shoot(s, { dx: 0, dy: -25, minSide: 390 });
+    expect(run(s, 3).filter(e => e.type === 'miss')).toHaveLength(1);
+    expect(s.streak).toBe(0);
+  });
+  it('praises a streak as Catcha does', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13].map(streakWord)).toEqual([null, null, 'excellent', null, 'wonderful', null, 'brilliant', null, 'excellent', 'wonderful', 'brilliant']);
   });
   it('scores two from beyond the arc', () => {
     const s = createShootaround(); s.player.z = RIM.z + ARC_R + 0.8;

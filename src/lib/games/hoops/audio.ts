@@ -9,7 +9,9 @@ import type { GameEvent } from './game';
 // Mute and vibration follow the arcade-wide preferences (`fgames_muted`, `fgames_haptics`).
 const MUSIC_URL = '/hoops/audio/music.m4a', MUSIC_KEY = 'hoops_music', MUSIC_LEVEL = 0.16, CROSSFADE = 4;
 const readMusic = () => { try { return localStorage.getItem(MUSIC_KEY) !== 'false'; } catch { return true; } };
-const SAMPLES = ['bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
+// Dad's praise for a streak: Catcha's own recordings, shared from its folder.
+const VOICES = { excellent: '/catcha/assets/audio/dad-excellent.m4a', wonderful: '/catcha/assets/audio/dad-wonderful.m4a', brilliant: '/catcha/assets/audio/dad-brilliant.m4a' };
+const SAMPLES = ['excellent', 'wonderful', 'brilliant', 'bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
 type Sample = (typeof SAMPLES)[number];
 
 export function createHoopsAudio() {
@@ -38,7 +40,7 @@ export function createHoopsAudio() {
       if (!ctx) {
         const c = ctx = new AudioContext(); build(c);
         void loadMusic(c);
-        for (const name of SAMPLES) void fetch(`/hoops/audio/${name}.m4a`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
+        for (const name of SAMPLES) void fetch(name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
       }
       if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
     } catch { /* the game plays fine silent */ }
@@ -133,8 +135,8 @@ export function createHoopsAudio() {
       tone(f * 2.76, { gain: 0.05 * k, decay: 0.28 * k + 0.05, wet: 0.35, pan });
       tone(f * 5.4, { gain: 0.025 * k, decay: 0.14, wet: 0.35, pan });
     },
-    pole: e => { const pan = panAt(e.at.x); if (sample('pole', { gain: 0.5, pan, wet: 0.25 })) return; tone(180 * vary(), { gain: 0.1, decay: 0.3, wet: 0.3, pan }); tone(471, { gain: 0.04, decay: 0.2, wet: 0.3, pan }); },
-    fence: e => { if (sample('fence', { gain: 0.45, pan: panAt(e.at.x) })) return; for (let i = 0; i < 5; i++) noise(0.025, { at: i * 0.03 * vary(0.3), type: 'highpass', freq: 2600, gain: 0.05 * (1 - i / 6), pan: panAt(e.at.x) }); },
+    pole: e => { const pan = panAt(e.at.x); if (sample('pole', { gain: 0.2, pan, wet: 0.25 })) return; tone(180 * vary(), { gain: 0.1, decay: 0.3, wet: 0.3, pan }); tone(471, { gain: 0.04, decay: 0.2, wet: 0.3, pan }); },
+    fence: e => { if (sample('fence', { gain: 0.12, pan: panAt(e.at.x) })) return; for (let i = 0; i < 5; i++) noise(0.025, { at: i * 0.03 * vary(0.3), type: 'highpass', freq: 2600, gain: 0.015 * (1 - i / 6), pan: panAt(e.at.x) }); },
     // Someone in the family gets hit: a soft "oof".
     fan: e => { tone(270 * vary(), { type: 'triangle', gain: 0.06, decay: 0.14, glide: 0.65, pan: panAt(e.at.x) }); noise(0.05, { type: 'lowpass', freq: 600, gain: 0.05, pan: panAt(e.at.x) }); },
     // Through the net: a soft swish, then a small chime (three notes for two points).
@@ -152,9 +154,9 @@ export function createHoopsAudio() {
       if (e.type === 'shot' && e.release > 0.85) { tone(1568, { at: 0.03, gain: 0.03, decay: 0.3, wet: 0.5 }); tone(2093, { at: 0.08, gain: 0.02, decay: 0.3, wet: 0.5 }); }
     },
     // Gathering the ball: a palm slap.
-    pickup: e => { if (sample('catch', { gain: 0.6, pan: panAt(e.at.x) })) return; noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
+    pickup: e => { if (sample('catch', { gain: 0.35, pan: panAt(e.at.x) })) return; noise(0.03, { freq: 1800, q: 1, gain: 0.07, pan: panAt(e.at.x) }); bounce(0.2, panAt(e.at.x), false); },
     // The sprint has no whoosh (the playtest found it unnecessary); its dust and vibration are enough.
-    skid: () => { if (!sample('skid', { gain: 0.5 })) noise(0.18, { freq: 1800, sweep: 0.4, q: 2, gain: 0.04 }); },
+    skid: () => { if (!sample('skid', { gain: 0.14 })) noise(0.18, { freq: 1800, sweep: 0.4, q: 2, gain: 0.012 }); },
     jump: () => { tone(260, { type: 'triangle', glide: 2.8, decay: 0.16, gain: 0.05, wet: 0.15 }); noise(0.12, { freq: 700, sweep: 2.9, q: 1.2, gain: 0.03 }); },
     // Out of puff: Catcha's soft, breathy double huff.
     tired: () => { if (sample('huff', { gain: 0.7 })) return; noise(0.22, { freq: 900, sweep: 0.67, q: 0.8, gain: 0.12 }); noise(0.26, { at: 0.32, freq: 800, sweep: 0.65, q: 0.8, gain: 0.1 }); }
@@ -191,7 +193,9 @@ export function createHoopsAudio() {
       tone(370, { at: 0.05, type: 'triangle', gain: 0.02, decay: 0.45, glide: 0.85, wet: 0.3, pan: famPan + 0.15 });
     },
     /** Sneakers biting the court on a dunk or layup take-off. */
-    squeak() { if (live() && !sample('skid', { gain: 0.55, rate: 1.1 })) noise(0.12, { freq: 2200, sweep: 1.3, q: 3, gain: 0.03 }); },
+    squeak() { if (live() && !sample('skid', { gain: 0.16, rate: 1.1 })) noise(0.12, { freq: 2200, sweep: 1.3, q: 3, gain: 0.01 }); },
+    /** Dad's praise for a streak, after the swish. */
+    praise(word: 'excellent' | 'wonderful' | 'brilliant') { if (live()) sample(word, { at: 0.45, gain: 0.7, loud: true }); },
     /** Dad landing from a jump: a soft pat. */
     land() {
       if (!document.hidden) haptic('tick');

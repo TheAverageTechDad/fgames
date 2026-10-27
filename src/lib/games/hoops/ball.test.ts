@@ -37,6 +37,13 @@ describe('ball', () => {
     const ball = createBall({ x: RIM.x, y: RIM.y - 1, z: RIM.z }, { x: 0, y: 5, z: 0 });
     expect(run(ball, 0.4).filter(e => e.type === 'score')).toHaveLength(0);
   });
+  it('lets the net catch the ball: it drops out of the bottom slower than it went in', () => {
+    const ball = createBall({ x: RIM.x, y: RIM.y + 1, z: RIM.z }, { x: 0.2, y: 0, z: 0 });
+    let speedIn = 0;
+    for (let i = 0; i < 120 && !ball.scored; i++) { speedIn = Math.hypot(ball.v.x, ball.v.y, ball.v.z); stepBall(ball, 1 / 120); }
+    expect(ball.scored).toBe(true);
+    expect(Math.hypot(ball.v.x, ball.v.y, ball.v.z)).toBeLessThan(speedIn * 0.7);
+  });
   it('never scores a ball that came up through the ring, even on the way back down', () => {
     const ball = createBall({ x: RIM.x, y: RIM.y - 1, z: RIM.z }, { x: 0, y: 6, z: 0 });
     expect(run(ball, 3).filter(e => e.type === 'score')).toHaveLength(0);

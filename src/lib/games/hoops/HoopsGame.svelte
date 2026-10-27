@@ -4,20 +4,20 @@
   import Icon from '#lib/components/Icon.svelte';
   import { haptic, hapticsEnabled, installHaptics, setHapticsEnabled } from '#lib/haptics';
   import { sound } from '#lib/sound';
-  import type { GameEvent } from './game';
+  import { streakWord, type GameEvent } from './game';
   import type { createHoopsScene } from './scene';
 
   let host: HTMLDivElement;
   let pauseDialog: HTMLDialogElement;
   let engine: ReturnType<typeof createHoopsScene> | undefined;
-  let made = $state(0), shots = $state(0), pop = $state(''), popId = $state(0);
+  let made = $state(0), shots = $state(0), streak = $state(0), pop = $state(''), popId = $state(0);
   let loading = $state(true), error = $state(''), hint = $state(false), note = $state(''), muted = $state(sound.muted), buzz = $state(hapticsEnabled()), music = $state(true);
   let popTimer: ReturnType<typeof setTimeout>, hintTimer: ReturnType<typeof setTimeout>, noteTimer: ReturnType<typeof setTimeout>;
 
   function update() {
     if (!engine) return;
     const s = engine.state, dad = engine.dadScreen(), rim = engine.rimScreen();
-    made = s.made; shots = s.shots;
+    made = s.made; shots = s.shots; streak = s.streak;
     // ponytail: smoke hooks (scripts/hoops-smoke.mjs reads these).
     Object.assign(host.dataset, { shots: String(s.shots), score: String(s.score), mode: s.mode, dadX: String(Math.round(dad.x)), dadY: String(Math.round(dad.y)), rimX: String(Math.round(rim.x)), rimY: String(Math.round(rim.y)) });
   }
@@ -26,6 +26,8 @@
     if (e.type === 'tired') say('Out of puff! Catch your breath');
     if (e.type === 'shot') { if (e.move === 'dunk') say('Dunk!'); else if (e.move === 'layup') say('Layup!'); else if (e.release > 0.85) say('Perfect release!'); }
     if (e.type !== 'score' || !engine) return;
+    const word = streakWord(engine.state.streak);
+    if (word) say(`${word[0].toUpperCase()}${word.slice(1)}! ${engine.state.streak} in a row`);
     pop = `+${engine.state.value}`; popId++;
     clearTimeout(popTimer); popTimer = setTimeout(() => { pop = ''; }, 900);
   }
@@ -65,7 +67,7 @@
     <div class="hoops-world" bind:this={host}></div>
     <header class="hoops-header">
       <button class="hoops-round" aria-label="Back to arcade" onclick={home}><Icon name="arrow-left" size={24}/></button>
-      <div class="hoops-count" aria-label={`Made ${made} of ${shots}`}><strong>{made}</strong><span>/ {shots}</span><small>made</small></div>
+      <div class="hoops-count" aria-label={`Made ${made} of ${shots}${streak >= 2 ? `, ${streak} in a row` : ''}`}><strong>{made}</strong><span>/ {shots}</span><small>made</small>{#if streak >= 2}<b class="hoops-streak">{streak} in a row</b>{/if}</div>
       <button class="hoops-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
     </header>
     {#if hint}<div class="hoops-hint" role="status">Hold Dad · drag to the hoop · let go</div>{/if}
@@ -100,6 +102,7 @@
   .hoops-round{width:43px;height:43px;min-width:43px;border:2px solid #6b4a2f;border-radius:50%;background:#fff6df;box-shadow:0 3px 0 #6b4a2f66;display:grid;place-items:center;color:#5a3d26;padding:8px}.hoops-round:active{transform:translateY(2px);box-shadow:none}.hoops-round.small{width:38px;height:38px;min-width:38px}
   .pause-symbol{width:14px;height:16px;border-left:5px solid currentColor;border-right:5px solid currentColor}
   .hoops-count{display:flex;align-items:baseline;gap:5px;padding:6px 16px;border-radius:20px;background:#fff6dfe6;box-shadow:0 3px 0 #6b4a2f44;font-variant-numeric:tabular-nums}.hoops-count strong{font-size:26px;font-weight:400}.hoops-count span{font-size:16px}.hoops-count small{font-size:12px;color:#8a6a4c}
+  .hoops-count{position:relative}.hoops-streak{position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);white-space:nowrap;padding:3px 10px;border-radius:12px;background:#ffcf3d;color:#5a3d26;font-size:12px;font-weight:400;box-shadow:0 2px 0 #6b4a2f44}
   .hoops-pop{position:absolute;top:18%;left:50%;transform:translateX(-50%);font-size:44px;color:#fff;text-shadow:0 4px 0 #c4502a,0 0 18px #ff9a4a99;animation:pop .9s ease-out both;pointer-events:none}
   .hoops-hint{position:absolute;bottom:calc(max(16px,env(safe-area-inset-bottom)) + 18%);left:50%;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 16px;border-radius:18px;background:#fff6dfe6;color:#5a3d26;font-size:15px;box-shadow:0 3px 0 #6b4a2f44;pointer-events:none;animation:hint 4.5s ease both}
   @keyframes hint{0%{opacity:0;translate:0 8px}8%,85%{opacity:1;translate:0 0}100%{opacity:0}}

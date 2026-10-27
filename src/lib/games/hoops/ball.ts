@@ -82,6 +82,8 @@ function substep(ball: Ball, h: number, events: BallEvent[]) {
   if (inside && y0 < RIM.y && p.y >= RIM.y) ball.scored = true;
   if (!ball.scored && y0 > RIM.y && p.y <= RIM.y && v.y < 0 && inside) {
     ball.scored = true; events.push({ type: 'score', speed: -v.y, at: { ...p } });
+    // The net catches it: the ball drops out of the bottom slowly and nearly straight down.
+    v.x *= 0.3; v.z *= 0.3; v.y *= 0.55;
   }
 }
 

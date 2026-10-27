@@ -4,31 +4,39 @@ import { AIM_LONG, launchVelocity, shotVelocity, type Pull } from './shot';
 
 export type Mode = 'held' | 'aim' | 'drive' | 'flight' | 'loose';
 export type Move = { x: number; z: number; sprint: boolean };
-export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump' | 'dash' | 'skid' | 'tired'; at: Vec3 } | { type: 'shot'; value: 1 | 2; release: number; move?: 'dunk' | 'layup'; at: Vec3 };
+export type GameEvent = BallEvent | { type: 'dribble' | 'pickup' | 'jump' | 'dash' | 'skid' | 'tired' | 'miss'; at: Vec3 } | { type: 'shot'; value: 1 | 2; release: number; move?: 'dunk' | 'layup'; at: Vec3 };
 /** A dunk or layup: the leap's sideways speed, its take-off speed, whether the ball has gone, and the hang on the rim after a dunk. */
 export type Drive = { kind: 'dunk' | 'layup'; vx: number; vz: number; vy: number; released: boolean; hang: number };
 export type Shootaround = {
   // jumpT < 0 when not crouching; dashT: seconds into a sprint, < 0 when not sprinting; skidT: the skid after one.
   player: { x: number; y: number; z: number; vx: number; vz: number; yaw: number; vy: number; jumpT: number; dashT: number; skidT: number };
   ball: Ball; mode: Mode; drive: Drive | null; dribble: number; stamina: number; staminaRest: number; tired: boolean;
-  value: 1 | 2; score: number; shots: number; made: number;
+  // streak: baskets in a row; shotLive: a shot is still up (it ends in a basket or on the floor, a miss).
+  value: 1 | 2; score: number; shots: number; made: number; streak: number; shotLive: boolean;
 };
 
 // Pocket Farm's run speed and Catcha's sprint and stamina; the jump is the farm's (a 0.09 s crouch, then up).
 // ACCEL/DECEL: how quickly he gets up to speed and pulls up (per second, exponential).
 // SPRINT_TIME: seconds of flat-out sprinting before he's out of puff (Catcha's Medium is 9, Hard 7).
-export const RUN_SPEED = 3.6, SPRINT = 1.35, SPRINT_TIME = 7, DASH_WINDUP = 0.1, ACCEL = 9, DECEL = 12, PICKUP_REACH = 0.6, HAND_HEIGHT = 1.0, RELEASE_HEIGHT = 1.85,
+export const RUN_SPEED = 3.6, SPRINT = 1.35, SPRINT_TIME = 7, DASH_WINDUP = 0.1, ACCEL = 9, DECEL = 12, PICKUP_REACH = 0.75, HAND_HEIGHT = 1.0, RELEASE_HEIGHT = 1.85,
   SHOT_HOP = 3, CROUCH = 0.09, JUMP_V = 7.5, JUMP_GRAVITY = 30;
 // A jump with the ball within DUNK_R of the rim is a dunk, within LAYUP_R a layup: higher leaps that carry him in.
 // DUNK_V tops out about 1 m up: hands at the rim, head just under the net.
 export const DUNK_R = 1.3, LAYUP_R = 2.5, DUNK_V = 7.8, LAYUP_V = 8, HANG = 0.22;
 const DRIBBLE_RATE = { still: 1.6, moving: 2.2, sprint: 2.8 }; // bounces per second
 
+/** Catcha's praise for a streak: "excellent" at 3 in a row, "wonderful" at 5, "brilliant" at 7, then one every two more. */
+export function streakWord(streak: number): 'excellent' | 'wonderful' | 'brilliant' | null {
+  const words = ['excellent', 'wonderful', 'brilliant'] as const;
+  if (streak < 3 || streak % 2 === 0) return null;
+  return streak <= 7 ? words[(streak - 3) / 2] : words[((streak - 9) / 2) % 3];
+}
+
 export function createShootaround(): Shootaround {
   const s: Shootaround = {
     player: { x: 0, y: 0, z: 4, vx: 0, vz: 0, yaw: Math.PI, vy: 0, jumpT: -1, dashT: -1, skidT: 0 },
     ball: createBall({ x: 0, y: 0, z: 0 }), mode: 'held', drive: null, dribble: 0, stamina: 1, staminaRest: 0, tired: false,
-    value: 1, score: 0, shots: 0, made: 0
+    value: 1, score: 0, shots: 0, made: 0, streak: 0, shotLive: false
   };
   s.ball.p = heldBallPosition(s);
   return s;
@@ -74,7 +82,7 @@ export function shoot(s: Shootaround, pull: Pull): GameEvent | null {
   const release = releasePoint(s);
   s.value = isTwoPointer(s.player) ? 2 : 1;
   s.ball = createBall(release, shotVelocity(release, pull, quality));
-  s.mode = 'flight'; s.shots++; s.player.vx = s.player.vz = 0;
+  s.mode = 'flight'; s.shots++; s.shotLive = true; s.player.vx = s.player.vz = 0;
   if (!air) s.player.vy = SHOT_HOP;
   return { type: 'shot', value: s.value, release: quality, at: release };
 }
@@ -115,7 +123,7 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
         const r = releasePoint(s), d = Math.hypot(RIM.x - r.x, RIM.z - r.z) || 1;
         s.ball = createBall(r, launchVelocity(r, { x: RIM.x + ((RIM.x - r.x) / d) * AIM_LONG, y: RIM.y, z: RIM.z + ((RIM.z - r.z) / d) * AIM_LONG }));
       }
-      drive.released = true; s.mode = 'flight'; s.value = 1; s.shots++;
+      drive.released = true; s.mode = 'flight'; s.value = 1; s.shots++; s.shotLive = true;
       events.push({ type: 'shot', value: 1, release: 1, move: drive.kind, at: { ...s.ball.p } });
     }
   }
@@ -162,10 +170,11 @@ export function stepShootaround(s: Shootaround, dt: number, move: Move): GameEve
   // In flight or loose, physics alone moves the ball. Any contact or a basket makes it a rebound Dad can grab, wherever it ends up.
   for (const e of stepBall(s.ball, dt)) {
     events.push(e);
-    if (e.type === 'score') { s.score += s.value; s.made++; }
+    if (e.type === 'score') { s.score += s.value; s.made++; if (s.shotLive) { s.shotLive = false; s.streak++; } }
+    if (e.type === 'floor' && s.shotLive) { s.shotLive = false; s.streak = 0; events.push({ type: 'miss', at: e.at }); }
     if (s.mode === 'flight') s.mode = 'loose';
   }
-  if (s.mode === 'loose' && Math.hypot(s.ball.p.x - p.x, s.ball.p.z - p.z) < PICKUP_REACH && s.ball.p.y < 1.2 + p.y) {
+  if (s.mode === 'loose' && Math.hypot(s.ball.p.x - p.x, s.ball.p.z - p.z) < PICKUP_REACH && s.ball.p.y < 1.4 + p.y) {
     s.mode = 'held'; s.dribble = 0; s.ball.p = heldBallPosition(s);
     events.push({ type: 'pickup', at: { ...s.ball.p } });
   }
