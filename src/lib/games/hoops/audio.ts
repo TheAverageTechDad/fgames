@@ -3,7 +3,7 @@ import { sound } from '#lib/sound';
 import { FAMILY, onAsphalt } from './court';
 import type { GameEvent } from './game';
 
-// Recorded sounds from Pixabay (free to use, no credit needed), trimmed to the hit and compressed: about 130 KB in
+// Recorded sounds from Pixabay (free to use, no credit needed), trimmed to the hit and compressed: about 300 KB with the family's clips, in
 // `static/hoops/audio`, precached for offline play. Each plays with a little pitch and level variation, pans with the
 // ball and scales with how hard it hit. Until a file has loaded (or if one fails), the synthesized version plays instead.
 // Mute and vibration follow the arcade-wide preferences (`fgames_muted`, `fgames_haptics`).
@@ -12,15 +12,21 @@ const readMusic = () => { try { return localStorage.getItem(MUSIC_KEY) !== 'fals
 // Dad's praise for a streak: Catcha's own recordings, shared from its folder.
 const VOICES = { excellent: '/catcha/assets/audio/dad-excellent.m4a', wonderful: '/catcha/assets/audio/dad-wonderful.m4a', brilliant: '/catcha/assets/audio/dad-brilliant.m4a' };
 const SAMPLES = ['excellent', 'wonderful', 'brilliant', 'bounce-1', 'bounce-2', 'backboard', 'rim-1', 'rim-2', 'swish', 'catch', 'fence', 'pole', 'skid', 'whoosh', 'claps', 'cheer', 'aww', 'huff'] as const;
-// The family's voices when they're booped (bumped into, or hit by the ball): the toddler's "ga-ga" and laughs are
-// Catcha's recordings. Add Mom's and the big sister's files to their lists as they're recorded (they play as soon as
-// they're listed); until then each gets a synthesized squeak or "oh".
-const CATCHA = (name: string) => `/catcha/assets/audio/${name}.m4a`;
+// The family's voices: when booped (bumped into, or hit by the ball), after some baskets, and now and then while Dad
+// holds the ball. The toddler's "ga-ga" and laughs are Catcha's recordings; the rest are the girls' own, cut from family
+// recordings. Add Mom's files to her lists when they're recorded (they play as soon as they're listed); an empty
+// boop list gets a synthesized squeak or "oh".
+const CATCHA = (name: string) => `/catcha/assets/audio/${name}.m4a`, HOOPS = (name: string) => `/hoops/audio/${name}.m4a`;
 type Who = (typeof FAMILY)[number]['who'];
-const FAMILY_VOICES: Record<Who, Record<'bump' | 'hit', string[]>> = {
-  toddler: { bump: ['gaga-1', 'gaga-2'].map(CATCHA), hit: [1, 2, 3, 4].map(i => CATCHA(`baby-laugh-${i}`)) },
-  girl: { bump: [], hit: [] },
-  mom: { bump: [], hit: [] }
+const FAMILY_VOICES: Record<Who, Record<'bump' | 'hit' | 'score' | 'idle', string[]>> = {
+  toddler: {
+    bump: [...['gaga-1', 'gaga-2'].map(CATCHA), HOOPS('baby-uh-oh')],
+    hit: [...[1, 2, 3, 4].map(i => CATCHA(`baby-laugh-${i}`)), HOOPS('baby-uh-oh')],
+    score: ['baby-clap-clap', 'baby-thank-you-1', 'baby-thank-you-2'].map(HOOPS),
+    idle: ['baby-bye-bye', 'baby-la-1', 'baby-la-2', 'baby-la-3'].map(HOOPS)
+  },
+  girl: { bump: [], hit: [HOOPS('sis-the-basketball')], score: [HOOPS('sis-like-daddy')], idle: ['sis-throw-it-in', 'sis-the-basketball'].map(HOOPS) },
+  mom: { bump: [], hit: [], score: [], idle: [] }
 };
 
 export function createHoopsAudio() {
@@ -51,7 +57,7 @@ export function createHoopsAudio() {
       if (!ctx) {
         const c = ctx = new AudioContext(); build(c);
         void loadMusic(c);
-        const files = [...SAMPLES.map(name => [name, name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`]), ...Object.values(FAMILY_VOICES).flatMap(v => [...v.bump, ...v.hit]).map(url => [url, url])];
+        const files = [...SAMPLES.map(name => [name, name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`]), ...Object.values(FAMILY_VOICES).flatMap(v => Object.values(v).flat()).map(url => [url, url])];
         for (const [name, url] of files) void fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
       }
       if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
@@ -219,6 +225,15 @@ export function createHoopsAudio() {
       voiceAt = now;
       if (lines.length) sample(lines[Math.floor(Math.random() * lines.length)], { at: 0.32, gain: 0.55, pan, wet: 0.15, loud: true });
       else if (who !== 'mom') { const f = (900 + Math.random() * 250) * pitch; for (let i = 0; i < 3; i++) tone(f + i * 90, { at: 0.38 + i * 0.09, type: 'triangle', gain: 0.035, decay: 0.08, glide: 1.3, wet: 0.2, pan }); }
+    },
+    /** One of the kids pipes up from where she stands: after a basket, or idly while Dad holds the ball. Shares the boops' four-second gap. */
+    chatter(kind: 'score' | 'idle') {
+      if (!live()) return;
+      const now = ctx!.currentTime, lines = FAMILY.flatMap(f => FAMILY_VOICES[f.who][kind].filter(url => buffers.has(url)).map(url => ({ url, x: f.x })));
+      if (now - voiceAt < 4 || !lines.length) return;
+      const { url, x } = lines[Math.floor(Math.random() * lines.length)];
+      voiceAt = now;
+      sample(url, { at: kind === 'score' ? 0.6 : 0, gain: 0.5, pan: panAt(x), wet: 0.15, loud: true });
     },
     /** Sneakers biting the court on a dunk or layup take-off. */
     squeak() { if (live() && !sample('skid', { gain: 0.16, rate: 1.1 })) noise(0.12, { freq: 2200, sweep: 1.3, q: 3, gain: 0.01 }); },

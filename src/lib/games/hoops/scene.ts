@@ -263,7 +263,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
   const holdMood = new URLSearchParams(location.search).get('fans') as Mood | null;
   // ?speed=0.25 slows the whole game down, for checking animation.
   const timeScale = Number(new URLSearchParams(location.search).get('speed')) || 1;
-  let shotLive = false, rimTouched = false, clock = 0, wasAir = false, runDust = 0, lastMove: string | undefined;
+  // chatterIn: seconds until one of the kids might pipe up while Dad holds the ball.
+  let chatterIn = 12, shotLive = false, rimTouched = false, clock = 0, wasAir = false, runDust = 0, lastMove: string | undefined;
   const joints: THREE.Object3D[] = [];
   // The right hand: the bottom of the right arm in the arm's own space, measured in the rest pose.
   let rightArm: THREE.Object3D | null = null;
@@ -330,6 +331,8 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
       // A dunk always brings the house down.
       const shout = lastMove === 'dunk' || Math.random() < (state.value === 2 ? 0.55 : 0.3);
       audio.cheer(state.value, shout);
+      // Over the plain claps (not the cheer, nor Dad's streak praise), sometimes a kid's own word.
+      if (!shout && !streakWord(state.streak) && Math.random() < 0.5) audio.chatter('score');
       if (shout) setMood('cheer', state.value === 2 ? 1.6 : 1.2, true); else setMood('clap', 1.3);
     }
     if (e.type === 'floor' && shotLive) { shotLive = false; setMood(Math.random() < 0.5 ? 'aww' : 'idle', 0.9); if (rimTouched && Math.random() < 0.3) audio.aww(); }
@@ -389,6 +392,7 @@ export function createHoopsScene(host: HTMLElement, callbacks: { update(): void;
     dad.rotation.y += Math.max(-10 * dt, Math.min(10 * dt, delta));
     stepPhase += dt * (moving ? 13 * (speed / RUN_SPEED) : 2);
     const air = p.y > 0, crouching = p.jumpT >= 0, rise = air ? Math.max(0, Math.min(1, 0.5 - p.vy / (2 * JUMP_V))) : -1;
+    if ((chatterIn -= dt) <= 0) { chatterIn = 14 + Math.random() * 16; if (state.mode === 'held') audio.chatter('idle'); }
     followT = Math.max(0, followT - dt); pickupT = Math.max(0, pickupT - dt); landT = Math.max(0, landT - dt); clock += dt;
     if (wasAir && !air) { audio.land(); dust(p.x, p.z, 5, undefined, 0.2); landT = 0.16; }
     wasAir = air;
