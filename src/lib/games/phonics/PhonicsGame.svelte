@@ -1,0 +1,80 @@
+<script lang="ts">
+  import confetti from 'canvas-confetti';
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import Icon from '#lib/components/Icon.svelte';
+  import { haptic, installHaptics } from '#lib/haptics';
+  import { sound } from '#lib/sound';
+  import { createPhonicsAudio, type PhonicsAudio } from './audio';
+  import ReadCard from './ReadCard.svelte';
+  import { round, WORDS } from './words';
+
+  // A round of 8 words from the first stone. ponytail: no sound map or saved progress yet (build step 3).
+  let audio = $state<PhonicsAudio | null>(null);
+  let words = $state(round(1)), index = $state(0), muted = $state(sound.muted);
+  const finished = $derived(index >= words.length);
+
+  function next() {
+    if (++index < words.length) return;
+    audio?.praise(); haptic('celebrate');
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) confetti({ particleCount: 110, spread: 90, origin: { y: .55 }, colors: ['#7657ee', '#6ce6b8', '#ff9a6b', '#86ceff', '#ffd166'] });
+  }
+  function again() { words = round(1); index = 0; }
+  function toggleSound() { muted = sound.toggleMute(); }
+
+  onMount(() => {
+    const removeHaptics = installHaptics(), a = createPhonicsAudio();
+    audio = a;
+    void a.preload(WORDS.filter(w => w.set === 1));
+    const unlock = () => a.unlock();
+    addEventListener('pointerdown', unlock, { capture: true });
+    return () => { removeHaptics(); removeEventListener('pointerdown', unlock, { capture: true }); a.close(); };
+  });
+</script>
+
+<div class="app-surround"><main class="app-shell phonics-screen" aria-label="Sound It Out">
+  <header class="phonics-header">
+    <button class="toy-button icon-button round" onclick={() => goto('/')} aria-label="Back to arcade"><Icon name="arrow-left"/></button>
+    <ol class="progress" aria-label={`Word ${Math.min(index + 1, words.length)} of ${words.length}`}>
+      {#each words as _, i}<li class:done={i < index} class:now={i === index}></li>{/each}
+    </ol>
+    <button class="toy-button icon-button round" onclick={toggleSound} aria-label={muted ? 'Turn sound on' : 'Turn sound off'}><Icon name={muted ? 'speaker-slash' : 'speaker-high'}/></button>
+  </header>
+
+  {#if muted}<button class="sound-tip" onclick={toggleSound}><Icon name="speaker-slash" size={18}/> Sound is off · tap to turn it on</button>{/if}
+
+  {#if audio && !finished}
+    {#key index}<ReadCard word={words[index]} {audio} onNext={next}/>{/key}
+  {/if}
+
+  {#if finished}
+    <div class="modal-overlay" role="presentation">
+      <div class="toy-card win-card" role="dialog" aria-modal="true" aria-label="Round complete">
+        <h2>You read {words.length} words!</h2>
+        <div class="read-words">
+          {#each words as w, i}
+            <button style:--i={i} onclick={() => audio?.word(w.text)} aria-label={`Hear ${w.text}`}><span>{w.emoji ?? '⭐'}</span><small>{w.text}</small></button>
+          {/each}
+        </div>
+        <button class="toy-button mint" onclick={again}>Read more</button>
+        <button class="toy-button" onclick={() => goto('/')}>Home</button>
+      </div>
+    </div>
+  {/if}
+</main></div>
+
+<style>
+  .phonics-screen{display:flex;flex-direction:column;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink);overflow:hidden}
+  .phonics-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(14px,env(safe-area-inset-top)) 16px 4px;flex-shrink:0}
+  .progress{display:flex;gap:7px;list-style:none;margin:0;padding:0}
+  .progress li{width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:var(--cream);transition:background 200ms,scale 200ms}
+  .progress li.done{background:var(--grape-bottom)}
+  .progress li.now{scale:1.3;background:var(--grape-top)}
+  .sound-tip{align-self:center;display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 14px;border:2px solid var(--ink);border-radius:99px;background:var(--cream);color:var(--ink);font-size:14px}
+  .read-words{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+  .read-words button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);color:var(--ink);animation:word-in 360ms cubic-bezier(.22,1,.36,1) both calc(120ms + var(--i) * 60ms)}
+  .read-words span{font-size:30px;line-height:1.1}
+  .read-words small{font-family:'Andika',sans-serif;font-weight:700;font-size:17px}
+  @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
+  @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}
+</style>
