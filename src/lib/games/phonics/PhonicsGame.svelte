@@ -6,7 +6,9 @@
   import { haptic, installHaptics } from '#lib/haptics';
   import { sound } from '#lib/sound';
   import { createPhonicsAudio, type PhonicsAudio } from './audio';
+  import { modal } from '#lib/components/modal';
   import ReadCard from './ReadCard.svelte';
+  import { readReveal, saveReveal, type Reveal } from './settings';
   import { round, STAR, WORDS } from './words';
 
   // A round of 8 words from the first stone. ponytail: no sound map or saved progress yet (build step 3).
@@ -21,6 +23,8 @@
   }
   function again() { words = round(1); index = 0; }
   function toggleSound() { muted = sound.toggleMute(); }
+  let reveal = $state<Reveal>(readReveal()), settingsOpen = $state(false);
+  function setReveal(value: Reveal) { reveal = value; saveReveal(value); }
 
   onMount(() => {
     const removeHaptics = installHaptics(), a = createPhonicsAudio();
@@ -38,13 +42,27 @@
     <ol class="progress" aria-label={`Word ${Math.min(index + 1, words.length)} of ${words.length}`}>
       {#each words as _, i}<li class:done={i < index} class:now={i === index}></li>{/each}
     </ol>
-    <button class="toy-button icon-button round" onclick={toggleSound} aria-label={muted ? 'Turn sound on' : 'Turn sound off'}><Icon name={muted ? 'speaker-slash' : 'speaker-high'}/></button>
+    <button class="toy-button icon-button round" onclick={() => settingsOpen = true} aria-label="Settings"><Icon name="gear-six"/></button>
   </header>
 
   {#if muted}<button class="sound-tip" onclick={toggleSound}><Icon name="speaker-slash" size={18}/> Sound is off · tap to turn it on</button>{/if}
 
   {#if audio && !finished}
-    {#key index}<ReadCard word={words[index]} {audio} onNext={next}/>{/key}
+    {#key index}<ReadCard word={words[index]} {audio} {reveal} onNext={next}/>{/key}
+  {/if}
+
+  {#if settingsOpen}
+    <div class="modal-overlay" role="presentation" onclick={e => { if (e.target === e.currentTarget) settingsOpen = false; }}>
+      <div use:modal={() => settingsOpen = false} class="toy-card modal-card" role="dialog" aria-modal="true" aria-label="Settings" tabindex="-1">
+        <div class="modal-heading"><h2>Settings</h2><button class="toy-button icon-button round" onclick={() => settingsOpen = false} aria-label="Close"><Icon name="x"/></button></div>
+        <button class="setting-row" onclick={toggleSound} aria-pressed={!muted}><Icon name={muted ? 'speaker-slash' : 'speaker-high'}/><span>Sound</span><strong>{muted ? 'Off' : 'On'}</strong></button>
+        <fieldset class="reveal-choice">
+          <legend>After the word is blended, say it</legend>
+          <label class:on={reveal === 'pause'}><input type="radio" name="reveal" checked={reveal === 'pause'} onchange={() => setReveal('pause')}/><span><b>After 3 seconds</b><small>Your child says it first, then hears it</small></span></label>
+          <label class:on={reveal === 'tap'}><input type="radio" name="reveal" checked={reveal === 'tap'} onchange={() => setReveal('tap')}/><span><b>Only when tapped</b><small>Your child taps the speaker to check</small></span></label>
+        </fieldset>
+      </div>
+    </div>
   {/if}
 
   {#if finished}
@@ -75,6 +93,15 @@
   .read-words button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);color:var(--ink);animation:word-in 360ms cubic-bezier(.22,1,.36,1) both calc(120ms + var(--i) * 60ms)}
   .read-words img{width:72%;aspect-ratio:1;object-fit:cover;border:2px solid var(--ink);border-radius:10px}
   .read-words small{font-family:'Andika',sans-serif;font-weight:700;font-size:17px}
+  .reveal-choice{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+  .reveal-choice legend{font-size:15px;color:var(--ink-soft);margin-bottom:8px}
+  .reveal-choice label{display:flex;align-items:center;gap:12px;padding:12px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);cursor:pointer}
+  .reveal-choice label.on{background:var(--grape-top);color:var(--cream)}
+  .reveal-choice label.on small{color:var(--cream)}
+  .reveal-choice input{accent-color:var(--grape-bottom);width:20px;height:20px;margin:0;flex-shrink:0}
+  .reveal-choice span{display:flex;flex-direction:column;gap:2px}
+  .reveal-choice b{font-weight:400;font-size:17px}
+  .reveal-choice small{font-size:13px;color:var(--ink-soft)}
   @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
   @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}
 </style>

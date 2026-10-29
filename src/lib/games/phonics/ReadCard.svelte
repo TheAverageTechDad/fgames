@@ -5,12 +5,14 @@
   import { haptic } from '#lib/haptics';
   import type { PhonicsAudio } from './audio';
   import { STAR, type Word } from './words';
+  import type { Reveal } from './settings';
 
   // One word to read. Drag the handle along the rail: each sound lights and plays as the handle reaches its letters.
-  // Reaching the end closes the gaps, waits a beat for the child to say it, says the word, then turns the picture over.
-  let { word, audio, onNext }: { word: Word; audio: PhonicsAudio; onNext: () => void } = $props();
+  // Reaching the end closes the gaps, then it's the child's turn to say the word: the speaker counts down (`reveal`
+  // 'pause') or waits for a tap ('tap') before the word is said and the picture turns over.
+  let { word, audio, reveal, onNext }: { word: Word; audio: PhonicsAudio; reveal: Reveal; onNext: () => void } = $props();
 
-  const HANDLE = 56, BEAT = 600;
+  const HANDLE = 56, TURN = 3000;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   // The card is keyed per word, so reading the props once is right.
@@ -21,8 +23,8 @@
   let thresholds: number[] = [], passed = pieces.map(() => false);
   let x = $state(0), dragging = $state(false), returning = $state(false), nudge = $state(false);
   let lit = $state(pieces.map(() => false));
-  let stage = $state<'reading' | 'joining' | 'saying' | 'done'>('reading');
-  let grab = 0, idle = 0, alive = true;
+  let stage = $state<'reading' | 'joining' | 'turn' | 'saying' | 'done'>('reading');
+  let grab = 0, idle = 0, turnTimer = 0, alive = true;
 
   const maxX = () => rail.clientWidth - HANDLE;
   function measure() {
@@ -87,8 +89,15 @@
   async function finish() {
     dragging = false; stage = 'joining'; lit = lit.map(() => true); clearTimeout(idle);
     haptic('land');
-    await wait((still ? 0 : 280) + BEAT);
+    await wait(still ? 0 : 280);
     if (!alive) return;
+    // The child's turn: nothing is said until the countdown runs out or the speaker is tapped.
+    stage = 'turn';
+    if (untrack(() => reveal) === 'pause') turnTimer = window.setTimeout(answer, TURN);
+  }
+  async function answer() {
+    if (stage !== 'turn') return;
+    clearTimeout(turnTimer); audio.unlock();
     stage = 'saying'; hop();
     const seconds = audio.word(word.text);
     await wait(seconds * 1000 + 80);
@@ -111,7 +120,7 @@
 
   // Fetch the picture while the child reads, so it's there when the card turns.
   onMount(() => { armIdle(); new Image().src = word.picture ?? STAR; });
-  onDestroy(() => { alive = false; clearTimeout(idle); });
+  onDestroy(() => { alive = false; clearTimeout(idle); clearTimeout(turnTimer); });
 </script>
 
 <section class="read-card" style:--n={letters} aria-label={`Read the word ${stage === 'done' ? word.text : ''}`}>
@@ -120,7 +129,11 @@
       <div class="face front" aria-hidden="true"><span>?</span></div>
       <div class="face back"><img src={word.picture ?? STAR} alt={word.picture ? word.text : 'A star'} draggable="false"/><span class="shine"></span></div>
     </div>
-    {#if stage === 'done'}<button class="toy-button icon-button round speaker" onclick={say} aria-label={`Hear ${word.text} again`}><Icon name="speaker-high"/></button>{/if}
+    {#if stage === 'turn'}
+      <button class="toy-button icon-button round speaker turn" class:counting={reveal === 'pause'} style:--turn="{TURN}ms" onclick={answer} aria-label="Hear the word">
+        <svg class="countdown" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"/></svg><Icon name="speaker-high"/>
+      </button>
+    {:else if stage === 'done'}<button class="toy-button icon-button round speaker" onclick={say} aria-label={`Hear ${word.text} again`}><Icon name="speaker-high"/></button>{/if}
   </div>
 
   <div class="word" class:joined={stage !== 'reading'} bind:this={wordEl}>
@@ -138,7 +151,7 @@
     <div class="handle" class:dragging class:returning class:nudge role="slider" tabindex="0" aria-label="Slide to blend the sounds" aria-valuemin="0" aria-valuemax={pieces.length} aria-valuenow={lit.filter(Boolean).length} onkeydown={key} onanimationend={() => nudge = false}></div>
   </div>
 
-  <button class="toy-button mint next" class:shown={stage === 'done'} disabled={stage !== 'done'} bind:this={nextEl} onclick={onNext} aria-hidden={stage !== 'done'}>Next <Icon name="arrow-right"/></button>
+  <button class="toy-button mint next" class:shown={stage === 'done' || (stage === 'turn' && reveal === 'tap')} disabled={!(stage === 'done' || (stage === 'turn' && reveal === 'tap'))} bind:this={nextEl} onclick={onNext} aria-hidden={!(stage === 'done' || (stage === 'turn' && reveal === 'tap'))}>Next <Icon name="arrow-right"/></button>
 </section>
 
 <style>
@@ -160,6 +173,11 @@
   .open .shine{animation:shine 900ms cubic-bezier(.22,1,.36,1) 520ms}
   .speaker{position:absolute;right:-14px;bottom:-14px;animation:pop-in 300ms cubic-bezier(.3,1.6,.5,1) both 380ms}
 
+  .speaker.turn{width:64px;height:64px;right:-18px;bottom:-18px;--top:var(--sunny-top,#ffe08a);--bottom:var(--sunny-bottom,#ffc94a);animation:pop-in 300ms cubic-bezier(.3,1.6,.5,1) both,breathe 1.6s ease-in-out 300ms infinite}
+  .countdown{position:absolute;inset:-7px;width:calc(100% + 14px);height:calc(100% + 14px);rotate:-90deg;fill:none;stroke:var(--grape-bottom);stroke-width:5;stroke-linecap:round;stroke-dasharray:183;stroke-dashoffset:0;opacity:0}
+  .counting .countdown{opacity:1;animation:count var(--turn) linear forwards}
+  @keyframes breathe{50%{scale:1.08}}
+  @keyframes count{to{stroke-dashoffset:183}}
   .word{display:flex;align-items:flex-end;justify-content:center;font-family:'Andika',sans-serif;font-weight:700;font-size:var(--size);line-height:1;color:var(--ink)}
   .piece{all:unset;display:flex;flex-direction:column;align-items:center;gap:.02em;padding:0 .13em;min-width:44px;touch-action:manipulation;cursor:pointer;transition:padding 240ms cubic-bezier(.22,1,.36,1) calc(var(--i) * 40ms)}
   .joined .piece{padding:0 .005em}
@@ -200,7 +218,7 @@
   @keyframes nudge{30%{translate:18px 0}55%{translate:-3px 0}75%{translate:6px 0}}
   @keyframes rail-glow{from{filter:brightness(1.35)}}
   @media (prefers-reduced-motion:reduce){
-    .read-card,.front span,.open .back img,.open .shine,.speaker,.next.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
+    .speaker.turn,.read-card,.front span,.open .back img,.open .shine,.speaker,.next.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
     .next.shown{scale:1;opacity:1}
     .flip,.piece,.handle.returning,.fill{transition-duration:1ms}
   }
