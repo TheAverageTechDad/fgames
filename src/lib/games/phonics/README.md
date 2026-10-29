@@ -1,6 +1,6 @@
 # Sound It Out
 
-Working title for the phonics reading game. Build step 1, the Read card: rounds of 8 words from the first stone (s a t p i n). Open `/phonics`; it has no home tile until the real sounds are approved. Design: `docs/superpowers/specs/2026-10-29-phonics-game-design.md`.
+Working title for the phonics reading game. Build step 1, the Read card: rounds of 8 words from the first stone (s a t p i n). First card on the arcade home screen, or open `/phonics`. Design: `docs/superpowers/specs/2026-10-29-phonics-game-design.md`.
 
 - `words.ts`: the sets in school order, the words split into sounds (`ch|i|ck`, `th:dh|i|s`), the banned list and `round()`. `words.test.ts` checks every spelling is taught, every audio file exists and no banned word slips in.
 - `audio.ts`: decoded buffers for instant playback, each clip fading the last over ~40 ms, the word chime and Dad's praise (Catcha's recordings). Follows the arcade's mute switch.
