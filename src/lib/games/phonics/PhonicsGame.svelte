@@ -7,7 +7,7 @@
   import { sound } from '#lib/sound';
   import { createPhonicsAudio, type PhonicsAudio } from './audio';
   import ReadCard from './ReadCard.svelte';
-  import { round, WORDS } from './words';
+  import { round, STAR, WORDS } from './words';
 
   // A round of 8 words from the first stone. ponytail: no sound map or saved progress yet (build step 3).
   let audio = $state<PhonicsAudio | null>(null);
@@ -53,7 +53,7 @@
         <h2>You read {words.length} words!</h2>
         <div class="read-words">
           {#each words as w, i}
-            <button style:--i={i} onclick={() => audio?.word(w.text)} aria-label={`Hear ${w.text}`}><span>{w.emoji ?? '⭐'}</span><small>{w.text}</small></button>
+            <button style:--i={i} onclick={() => audio?.word(w.text)} aria-label={`Hear ${w.text}`}><img src={w.picture ?? STAR} alt="" draggable="false"/><small>{w.text}</small></button>
           {/each}
         </div>
         <button class="toy-button mint" onclick={again}>Read more</button>
@@ -73,7 +73,7 @@
   .sound-tip{align-self:center;display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 14px;border:2px solid var(--ink);border-radius:99px;background:var(--cream);color:var(--ink);font-size:14px}
   .read-words{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
   .read-words button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);color:var(--ink);animation:word-in 360ms cubic-bezier(.22,1,.36,1) both calc(120ms + var(--i) * 60ms)}
-  .read-words span{font-size:30px;line-height:1.1}
+  .read-words img{width:72%;aspect-ratio:1;object-fit:cover;border:2px solid var(--ink);border-radius:10px}
   .read-words small{font-family:'Andika',sans-serif;font-weight:700;font-size:17px}
   @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
   @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}

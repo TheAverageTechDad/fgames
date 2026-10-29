@@ -4,7 +4,7 @@
   import Icon from '#lib/components/Icon.svelte';
   import { haptic } from '#lib/haptics';
   import type { PhonicsAudio } from './audio';
-  import type { Word } from './words';
+  import { STAR, type Word } from './words';
 
   // One word to read. Drag the handle along the rail: each sound lights and plays as the handle reaches its letters.
   // Reaching the end closes the gaps, waits a beat for the child to say it, says the word, then turns the picture over.
@@ -93,7 +93,7 @@
     audio.chime(); haptic('celebrate');
     if (!still) {
       const b = wordEl.getBoundingClientRect();
-      confetti({ particleCount: word.emoji ? 36 : 70, spread: word.emoji ? 55 : 85, startVelocity: 24, scalar: .8, ticks: 110, origin: { x: (b.left + b.width / 2) / innerWidth, y: b.top / innerHeight }, colors: ['#7657ee', '#6ce6b8', '#ff9a6b', '#86ceff', '#ffd166'] });
+      confetti({ particleCount: word.picture ? 36 : 70, spread: word.picture ? 55 : 85, startVelocity: 24, scalar: .8, ticks: 110, origin: { x: (b.left + b.width / 2) / innerWidth, y: b.top / innerHeight }, colors: ['#7657ee', '#6ce6b8', '#ff9a6b', '#86ceff', '#ffd166'] });
     }
     requestAnimationFrame(() => nextEl?.focus({ preventScroll: true }));
   }
@@ -105,7 +105,8 @@
     audio.sound(pieces[i].sound); pop(i); armIdle();
   }
 
-  onMount(armIdle);
+  // Fetch the picture while the child reads, so it's there when the card turns.
+  onMount(() => { armIdle(); new Image().src = word.picture ?? STAR; });
   onDestroy(() => { alive = false; clearTimeout(idle); });
 </script>
 
@@ -113,7 +114,7 @@
   <div class="mystery" class:open={stage === 'done'}>
     <div class="flip">
       <div class="face front" aria-hidden="true"><span>?</span></div>
-      <div class="face back"><span class="picture" class:star={!word.emoji} role="img" aria-label={word.emoji ? word.text : 'star'}>{word.emoji ?? '⭐'}</span></div>
+      <div class="face back"><img src={word.picture ?? STAR} alt={word.picture ? word.text : 'A star'} draggable="false"/><span class="shine"></span></div>
     </div>
     {#if stage === 'done'}<button class="toy-button icon-button round speaker" onclick={say} aria-label={`Hear ${word.text} again`}><Icon name="speaker-high"/></button>{/if}
   </div>
@@ -129,7 +130,7 @@
   <div class="rail" class:full={stage !== 'reading'} bind:this={rail} style:--x="{x}px" style:--w="calc(var(--size) * {(letters * .62 + pieces.length * .26).toFixed(2)} + {HANDLE * 2}px)"
     onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onlostpointercapture={up} role="presentation">
     <div class="track"><div class="fill"></div></div>
-    <svg class="arrowhead" viewBox="0 0 20 24" aria-hidden="true"><path d="M3 2 18 12 3 22Z"/></svg>
+    <span class="goal" aria-hidden="true"></span>
     <div class="handle" class:dragging class:returning class:nudge role="slider" tabindex="0" aria-label="Slide to blend the sounds" aria-valuemin="0" aria-valuemax={pieces.length} aria-valuenow={lit.filter(Boolean).length} onkeydown={key} onanimationend={() => nudge = false}></div>
   </div>
 
@@ -141,16 +142,18 @@
   /* Container units resolve against .read-card, so the size lives on its children. Longer words shrink to fit. */
   .read-card>*{--size:min(112px,calc((100cqw - 32px) / (var(--n) * .78)))}
 
-  .mystery{position:relative;width:min(46cqw,190px);aspect-ratio:1;perspective:900px}
-  .flip{position:absolute;inset:0;transform-style:preserve-3d;transition:transform 560ms cubic-bezier(.3,1.35,.5,1)}
+  .mystery{position:relative;width:min(58cqw,236px);aspect-ratio:1;perspective:900px}
+  .flip{position:absolute;inset:0;transform-style:preserve-3d;transition:transform 620ms cubic-bezier(.22,1,.36,1)}
   .open .flip{transform:rotateY(180deg)}
-  .face{position:absolute;inset:0;display:grid;place-items:center;border:4px solid var(--ink);border-radius:28px;box-shadow:0 7px 0 var(--ink);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .face{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;border:4px solid var(--ink);border-radius:30px;box-shadow:0 7px 0 var(--ink);backface-visibility:hidden;-webkit-backface-visibility:hidden}
   .front{background:radial-gradient(circle at 30% 25%,#ffffff55 0 18%,transparent 19%) 0 0/34px 34px,linear-gradient(var(--grape-top),var(--grape-bottom))}
   .front span{font-family:'Luckiest Guy',cursive;font-size:min(22cqw,92px);color:var(--cream);text-shadow:0 4px 0 var(--grape-lip);animation:q-bob 2.4s ease-in-out infinite}
-  .back{background:linear-gradient(var(--cream),var(--cream-bottom));transform:rotateY(180deg)}
-  .picture{font-size:min(28cqw,118px);line-height:1}
-  .open .picture{animation:picture-in 620ms cubic-bezier(.3,1.5,.5,1) both 120ms}
-  .open .picture.star{animation-name:star-in}
+  .back{background:var(--cream);transform:rotateY(180deg)}
+  .back img{width:100%;height:100%;object-fit:cover;display:block;-webkit-user-drag:none}
+  /* The picture develops as the card turns: out of a soft blur, settling from slightly large. */
+  .open .back img{animation:develop 760ms cubic-bezier(.22,1,.36,1) both 140ms}
+  .shine{position:absolute;inset:0;background:linear-gradient(115deg,transparent 38%,#fff9 50%,transparent 62%);translate:-130% 0;pointer-events:none}
+  .open .shine{animation:shine 900ms cubic-bezier(.22,1,.36,1) 520ms}
   .speaker{position:absolute;right:-14px;bottom:-14px;animation:pop-in 300ms cubic-bezier(.3,1.6,.5,1) both 380ms}
 
   .word{display:flex;align-items:flex-end;justify-content:center;font-family:'Andika',sans-serif;font-weight:700;font-size:var(--size);line-height:1;color:var(--ink)}
@@ -159,19 +162,22 @@
   .piece:focus-visible{outline:3px solid var(--ink);outline-offset:4px;border-radius:12px}
   .letters{display:block;line-height:1.3;padding-top:.05em;transition:color 120ms ease-out;transform-origin:50% 90%}
   .lit .letters{color:var(--grape-bottom)}
-  .mark{width:.2em;height:.2em;border-radius:50%;background:var(--ink-soft);transition:background 120ms,transform 160ms cubic-bezier(.3,1.6,.5,1),opacity 200ms}
+  .mark{width:.2em;height:.2em;border-radius:50%;background:var(--ink);opacity:.4;transition:background 120ms,opacity 120ms,transform 160ms cubic-bezier(.3,1.6,.5,1)}
+  .piece:active .mark{transform:scale(.8)}
   .mark.bar{width:72%;height:.14em;border-radius:.07em}
-  .lit .mark{background:var(--grape-bottom);transform:scale(1.25)}
+  .lit .mark{background:var(--grape-bottom);opacity:1;transform:scale(1.3)}
   .joined .mark{opacity:0}
 
   .rail{position:relative;width:var(--w);max-width:100%;height:64px;touch-action:none}
-  .track{position:absolute;left:0;right:14px;top:50%;height:20px;margin-top:-10px;border:3px solid var(--ink);border-radius:99px;background:#241b3a12;overflow:hidden}
-  .fill{height:100%;width:calc(var(--x) + 28px);background:linear-gradient(var(--grape-top),var(--grape-bottom));border-radius:99px}
+  .track{position:absolute;left:16px;right:16px;top:50%;height:22px;margin-top:-11px;border:3px solid var(--ink);border-radius:99px;background:#241b3a0f;box-shadow:inset 0 3px 0 #241b3a14;overflow:hidden}
+  .fill{height:100%;width:calc(var(--x) + 12px);background:linear-gradient(var(--grape-top),var(--grape-bottom));border-radius:99px}
   .rail:has(.returning) .fill{transition:width 340ms cubic-bezier(.34,1.56,.64,1)}
   .full .fill{width:100%;animation:rail-glow 700ms ease-out}
-  .arrowhead{position:absolute;right:0;top:50%;width:20px;height:24px;margin-top:-12px;fill:var(--ink)}
-  .full .arrowhead{fill:var(--grape-bottom)}
-  .handle{position:absolute;left:0;top:4px;width:56px;height:56px;border:3px solid var(--ink);border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff9 0 14%,transparent 15%),linear-gradient(var(--grape-top),var(--grape-bottom));box-shadow:0 5px 0 var(--grape-lip);transform:translateX(var(--x));cursor:grab;transition:box-shadow 120ms,scale 120ms}
+  .goal{position:absolute;right:0;top:4px;width:56px;height:56px;border:3px dashed #241b3a59;border-radius:50%;background:var(--cream)}
+  .full .goal{border:3px solid var(--mint-lip);background:var(--mint-top);animation:goal-pop 420ms cubic-bezier(.22,1,.36,1)}
+  .handle{position:absolute;left:0;top:4px;z-index:1;width:56px;height:56px;border:3px solid var(--ink);border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff9 0 14%,transparent 15%),linear-gradient(var(--grape-top),var(--grape-bottom));box-shadow:0 5px 0 var(--grape-lip);transform:translateX(var(--x));cursor:grab;transition:box-shadow 120ms,scale 120ms}
+  .handle::after{content:'';position:absolute;left:50%;top:50%;width:11px;height:11px;margin:-6px 0 0 -8px;border:solid var(--cream);border-width:4px 4px 0 0;border-radius:2px;rotate:45deg}
+  .full .handle::after{width:7px;height:14px;margin:-10px 0 0 -5px;border-width:0 4px 4px 0;border-color:var(--cream);rotate:40deg}
   .handle.dragging{cursor:grabbing;scale:1.1;box-shadow:0 8px 0 var(--grape-lip),0 10px 18px #241b3a33}
   .handle.returning{transition:transform 340ms cubic-bezier(.34,1.56,.64,1),box-shadow 120ms,scale 120ms}
   .handle.nudge{animation:nudge 900ms cubic-bezier(.3,1.4,.5,1)}
@@ -183,13 +189,14 @@
 
   @keyframes card-in{from{opacity:0;transform:translateX(28px)}}
   @keyframes q-bob{50%{transform:translateY(-5px) rotate(-4deg)}}
-  @keyframes picture-in{0%{scale:.6;rotate:-8deg;opacity:0}60%{scale:1.05;rotate:3deg;opacity:1}100%{scale:1;rotate:0deg}}
-  @keyframes star-in{0%{scale:.3;rotate:-90deg;opacity:0}60%{scale:1.15;rotate:10deg;opacity:1}100%{scale:1;rotate:0deg}}
+  @keyframes develop{from{scale:1.16;filter:blur(10px) saturate(.3)}}
+  @keyframes shine{to{translate:130% 0}}
+  @keyframes goal-pop{40%{scale:1.14}}
   @keyframes pop-in{from{scale:.6;opacity:0}to{scale:1;opacity:1}}
   @keyframes nudge{30%{translate:18px 0}55%{translate:-3px 0}75%{translate:6px 0}}
   @keyframes rail-glow{from{filter:brightness(1.35)}}
   @media (prefers-reduced-motion:reduce){
-    .read-card,.front span,.open .picture,.speaker,.next.shown,.handle.nudge,.full .fill{animation:none}
+    .read-card,.front span,.open .back img,.open .shine,.speaker,.next.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
     .next.shown{scale:1;opacity:1}
     .flip,.piece,.handle.returning,.fill{transition-duration:1ms}
   }

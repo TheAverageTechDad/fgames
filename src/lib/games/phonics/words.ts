@@ -8,18 +8,21 @@ export const SETS = [['s', 'a', 't', 'p', 'i', 'n']];
 const SOUND_OF: Record<string, string> = { c: 'k', ck: 'k', ff: 'f', ll: 'l', ss: 's', zz: 'z' };
 
 export type Piece = { spelling: string; sound: string };
-export type Word = { text: string; set: number; pieces: Piece[]; emoji?: string };
+export type Word = { text: string; set: number; pieces: Piece[]; picture?: string };
 
-const word = (split: string, set: number, emoji?: string): Word => {
+// Pictures are Image Playground illustrations in static/phonics/pictures/{word}.webp; a word without one shows the star.
+const word = (split: string, set: number, pictured = false): Word => {
   const pieces = split.split('|').map(part => { const [spelling, sound] = part.split(':'); return { spelling, sound: sound ?? SOUND_OF[spelling] ?? spelling }; });
-  return { text: pieces.map(p => p.spelling).join(''), set, pieces, emoji };
+  const text = pieces.map(p => p.spelling).join('');
+  return { text, set, pieces, picture: pictured ? `/phonics/pictures/${text}.webp` : undefined };
 };
+export const STAR = '/phonics/pictures/star.webp';
 
 export const WORDS: Word[] = [
-  word('p|i|n', 1, '📌'), word('p|a|n', 1, '🍳'), word('t|a|p', 1, '🚰'), word('t|i|n', 1, '🥫'),
-  word('n|a|p', 1, '😴'), word('s|i|p', 1, '🥤'), word('s|i|t', 1, '🪑'), word('p|i|t', 1, '🕳️'),
-  word('s|a|t', 1), word('p|a|t', 1), word('s|a|p', 1), word('t|i|p', 1), word('n|i|p', 1), word('t|a|n', 1),
-  word('a|t', 1), word('a|n', 1), word('i|n', 1), word('i|t', 1)
+  word('p|i|n', 1, true), word('p|a|n', 1, true), word('t|a|p', 1, true), word('t|i|n', 1, true), word('n|a|p', 1, true),
+  word('s|i|p', 1, true), word('s|i|t', 1, true), word('p|i|t', 1, true), word('s|a|t', 1, true), word('p|a|t', 1, true),
+  word('t|i|p', 1, true), word('n|i|p', 1, true), word('s|a|p', 1, true),
+  word('t|a|n', 1), word('a|t', 1), word('a|n', 1), word('i|n', 1), word('i|t', 1)
 ];
 
 // Real words that turn up in phonics lists and must never be shown.
