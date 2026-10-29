@@ -7,7 +7,13 @@ const KEY = 'phonics_reveal';
 export function readReveal(): Reveal { try { return localStorage.getItem(KEY) === 'tap' ? 'tap' : 'pause'; } catch { return 'pause'; } }
 export function saveReveal(value: Reveal) { try { localStorage.setItem(KEY, value); } catch { /* private mode: lasts this visit */ } }
 
-// Which stone's words a round reads (1 is s a t p i n, 2 adds m d g o, …). ponytail: a setting until the sound map exists.
-const STONE = 'phonics_stone';
-export function readStone(): number { try { const n = Number(localStorage.getItem(STONE)); return n >= 1 && n <= SETS.length ? n : 1; } catch { return 1; } }
-export function saveStone(value: number) { try { localStorage.setItem(STONE, String(value)); } catch { /* private mode: lasts this visit */ } }
+// The sound map: rounds finished on each stone (index 0 is stone 1), and whether a grown-up opened every stone. A stone
+// opens once the stone before it has a finished round. Saved on the device.
+export type Progress = { rounds: number[]; open: boolean };
+const PROGRESS = 'phonics_progress';
+export function readProgress(): Progress {
+  try { const p = JSON.parse(localStorage.getItem(PROGRESS) ?? '{}'); return { rounds: SETS.map((_, i) => Number(p.rounds?.[i]) || 0), open: p.open === true }; }
+  catch { return { rounds: SETS.map(() => 0), open: false }; }
+}
+export function saveProgress(p: Progress) { try { localStorage.setItem(PROGRESS, JSON.stringify(p)); } catch { /* private mode: lasts this visit */ } }
+export const isOpen = (p: Progress, stone: number) => p.open || stone === 1 || p.rounds[stone - 2] > 0;

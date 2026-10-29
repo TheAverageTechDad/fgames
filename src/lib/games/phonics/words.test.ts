@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isOpen } from './settings';
 import { BANNED, round, SETS, WORDS } from './words';
 
 const files = import.meta.glob(['../../../../static/phonics/audio/*/*.m4a', '../../../../static/phonics/pictures/*.webp']);
@@ -24,5 +25,11 @@ describe('phonics words', () => {
     const r = round(1);
     expect(r).toHaveLength(8);
     expect(new Set(r.map(w => w.text)).size).toBe(8);
+  });
+
+  it('opens a stone once the one before it has a finished round, or when every stone is opened', () => {
+    const p = { rounds: [1, 0, 0, 0], open: false };
+    expect([1, 2, 3, 4].map(n => isOpen(p, n))).toEqual([true, true, false, false]);
+    expect(isOpen({ ...p, open: true }, 4)).toBe(true);
   });
 });
