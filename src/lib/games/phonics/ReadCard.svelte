@@ -49,8 +49,10 @@
     x = next;
     // A flick past several sounds lights them all and plays only the last.
     if (last >= 0) { audio.sound(pieces[last].sound); haptic('tick'); pop(last); }
-    if (next >= maxX() - 1) void finish();
+    // Close enough to the goal counts: the handle glides the last bit in and drops into the ring.
+    if (next >= maxX() - HANDLE * .6) snapHome();
   }
+  function snapHome() { returning = true; x = maxX(); void finish(); }
   function down(e: PointerEvent) {
     if (stage !== 'reading') return;
     audio.unlock();
@@ -69,6 +71,8 @@
     if (!dragging) return;
     dragging = false;
     if (stage !== 'reading') return;
+    // Every sound heard and most of the way there: a lift short of the ring still finishes the word.
+    if (passed.every(Boolean) && x >= maxX() * .7) return snapHome();
     // Let go early: spring back, dim, nothing marked wrong.
     returning = true; x = 0; lit = lit.map(() => false); passed = passed.map(() => false);
     armIdle();
