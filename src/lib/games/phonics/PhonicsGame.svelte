@@ -9,7 +9,7 @@
   import { modal } from '#lib/components/modal';
   import ReadCard from './ReadCard.svelte';
   import { readReveal, readStone, saveReveal, saveStone, type Reveal } from './settings';
-  import { round, STAR, WORDS } from './words';
+  import { round, SETS, STAR, WORDS } from './words';
 
   // A round of 8 words from the chosen stone. ponytail: no sound map or saved progress yet (build step 3).
   let audio = $state<PhonicsAudio | null>(null), stone = $state(readStone());
@@ -69,8 +69,10 @@
         </fieldset>
         <fieldset class="reveal-choice">
           <legend>Words to read</legend>
-          <label class:on={stone === 1}><input type="radio" name="stone" checked={stone === 1} onchange={() => setStone(1)}/><span><b class="letters">s a t p i n</b><small>pin, tap, sit</small></span></label>
-          <label class:on={stone === 2}><input type="radio" name="stone" checked={stone === 2} onchange={() => setStone(2)}/><span><b class="letters">+ m d g o</b><small>dog, pig, mop</small></span></label>
+          {#each SETS as set, i}
+            {@const n = i + 1}
+            <label class:on={stone === n}><input type="radio" name="stone" checked={stone === n} onchange={() => setStone(n)}/><span><b class="letters">{n > 1 ? '+ ' : ''}{set.join(' ')}</b><small>{WORDS.filter(w => w.set === n && w.picture).slice(0, 3).map(w => w.text).join(', ')}</small></span></label>
+          {/each}
         </fieldset>
       </div>
     </div>
@@ -118,7 +120,7 @@
   .reveal-choice input{accent-color:var(--grape-bottom);width:20px;height:20px;margin:0;flex-shrink:0}
   .reveal-choice span{display:flex;flex-direction:column;gap:2px}
   .reveal-choice b{font-weight:400;font-size:17px}
-  .reveal-choice .letters{font-family:'Andika',sans-serif;font-weight:700;font-size:20px;letter-spacing:.04em}
+  .reveal-choice .letters{font-family:'Andika',sans-serif;font-weight:700;font-size:20px;word-spacing:.4em}
   .reveal-choice small{font-size:13px;color:var(--ink-soft)}
   @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
   @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}
