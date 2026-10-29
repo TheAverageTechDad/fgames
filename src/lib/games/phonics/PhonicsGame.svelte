@@ -8,12 +8,12 @@
   import { createPhonicsAudio, type PhonicsAudio } from './audio';
   import { modal } from '#lib/components/modal';
   import ReadCard from './ReadCard.svelte';
-  import { readReveal, saveReveal, type Reveal } from './settings';
+  import { readReveal, readStone, saveReveal, saveStone, type Reveal } from './settings';
   import { round, STAR, WORDS } from './words';
 
-  // A round of 8 words from the first stone. ponytail: no sound map or saved progress yet (build step 3).
-  let audio = $state<PhonicsAudio | null>(null);
-  let words = $state(round(1)), index = $state(0), muted = $state(sound.muted);
+  // A round of 8 words from the chosen stone. ponytail: no sound map or saved progress yet (build step 3).
+  let audio = $state<PhonicsAudio | null>(null), stone = $state(readStone());
+  let words = $state(round(readStone())), index = $state(0), muted = $state(sound.muted);
   const finished = $derived(index >= words.length);
 
   function next() {
@@ -21,18 +21,23 @@
     audio?.praise(); haptic('celebrate');
     if (!matchMedia('(prefers-reduced-motion: reduce)').matches) confetti({ particleCount: 110, spread: 90, origin: { y: .55 }, colors: ['#7657ee', '#6ce6b8', '#ff9a6b', '#86ceff', '#ffd166'] });
   }
-  function again() { words = round(1); index = 0; }
+  function again() { words = round(stone); index = 0; }
   function toggleSound() { muted = sound.toggleMute(); }
   let attempt = $state(0), reveal = $state<Reveal>(readReveal()), settingsOpen = $state(false);
   function setReveal(value: Reveal) { reveal = value; saveReveal(value); }
+  function setStone(value: number) { stone = value; saveStone(value); void audio?.preload(WORDS.filter(w => w.set === value)); again(); }
 
   onMount(() => {
     const removeHaptics = installHaptics(), a = createPhonicsAudio();
     audio = a;
-    void a.preload(WORDS.filter(w => w.set === 1));
+    void a.preload(WORDS.filter(w => w.set === stone));
     const unlock = () => a.unlock();
     addEventListener('pointerdown', unlock, { capture: true });
-    return () => { removeHaptics(); removeEventListener('pointerdown', unlock, { capture: true }); a.close(); };
+    // Safari's edge swipe goes back a page, so a slide started near the screen's edge would leave the game. Buttons
+    // there still tap. ponytail: Android's system back gesture can't be blocked from a page.
+    const edge = (e: TouchEvent) => { const x = e.touches[0].clientX; if ((x < 28 || x > innerWidth - 28) && !(e.target as Element).closest('button')) e.preventDefault(); };
+    addEventListener('touchstart', edge, { passive: false });
+    return () => { removeHaptics(); removeEventListener('pointerdown', unlock, { capture: true }); removeEventListener('touchstart', edge); a.close(); };
   });
 </script>
 
@@ -62,6 +67,11 @@
           <label class:on={reveal === 'pause'}><input type="radio" name="reveal" checked={reveal === 'pause'} onchange={() => setReveal('pause')}/><span><b>After 3 seconds</b><small>Your child says it first, then hears it</small></span></label>
           <label class:on={reveal === 'tap'}><input type="radio" name="reveal" checked={reveal === 'tap'} onchange={() => setReveal('tap')}/><span><b>Only when tapped</b><small>Your child taps the speaker to check</small></span></label>
         </fieldset>
+        <fieldset class="reveal-choice">
+          <legend>Words to read</legend>
+          <label class:on={stone === 1}><input type="radio" name="stone" checked={stone === 1} onchange={() => setStone(1)}/><span><b class="letters">s a t p i n</b><small>pin, tap, sit</small></span></label>
+          <label class:on={stone === 2}><input type="radio" name="stone" checked={stone === 2} onchange={() => setStone(2)}/><span><b class="letters">+ m d g o</b><small>dog, pig, mop</small></span></label>
+        </fieldset>
       </div>
     </div>
   {/if}
@@ -83,7 +93,11 @@
 </main></div>
 
 <style>
-  .phonics-screen{display:flex;flex-direction:column;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink);overflow:hidden}
+  /* The game fits one screen: no scrolling, rubber-banding, pinch zoom or Chrome's swipe-to-go-back. The cards on top
+     still scroll if a small phone needs it. */
+  :global(html:has(.phonics-screen)),:global(body:has(.phonics-screen)){overflow:hidden;overscroll-behavior:none}
+  .phonics-screen{touch-action:none;display:flex;flex-direction:column;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink);overflow:hidden}
+  .phonics-screen :global(:is(.modal-card,.win-card)){touch-action:pan-y}
   .phonics-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(14px,env(safe-area-inset-top)) 16px 4px;flex-shrink:0}
   .progress{display:flex;gap:7px;list-style:none;margin:0;padding:0}
   .progress li{width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:var(--cream);transition:background 200ms,scale 200ms}
@@ -104,6 +118,7 @@
   .reveal-choice input{accent-color:var(--grape-bottom);width:20px;height:20px;margin:0;flex-shrink:0}
   .reveal-choice span{display:flex;flex-direction:column;gap:2px}
   .reveal-choice b{font-weight:400;font-size:17px}
+  .reveal-choice .letters{font-family:'Andika',sans-serif;font-weight:700;font-size:20px;letter-spacing:.04em}
   .reveal-choice small{font-size:13px;color:var(--ink-soft)}
   @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
   @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}

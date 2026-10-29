@@ -1,8 +1,8 @@
 // Words in the order UK schools teach the sounds (docs/superpowers/specs/2026-10-29-phonics-game-design.md).
 // A word is split into its sounds with `|` (`ch|i|ck`); a piece names its sound after a colon when its spelling has
 // two (`th:dh|i|s`). A word only uses spellings taught in its own set or an earlier one (words.test.ts checks).
-// ponytail: set 1 only for the first build; the other stones' sets join here in build step 3.
-export const SETS = [['s', 'a', 't', 'p', 'i', 'n']];
+// ponytail: sets 1 and 2 so far; the other stones' sets join here in build step 3.
+export const SETS = [['s', 'a', 't', 'p', 'i', 'n'], ['m', 'd', 'g', 'o']];
 
 // Spellings that share a sound file (c, k and ck all say /k/).
 const SOUND_OF: Record<string, string> = { c: 'k', ck: 'k', ff: 'f', ll: 'l', ss: 's', zz: 'z' };
@@ -22,7 +22,11 @@ export const WORDS: Word[] = [
   word('p|i|n', 1, true), word('p|a|n', 1, true), word('t|a|p', 1, true), word('t|i|n', 1, true), word('n|a|p', 1, true),
   word('s|i|p', 1, true), word('s|i|t', 1, true), word('p|i|t', 1, true), word('s|a|t', 1, true), word('p|a|t', 1, true),
   word('t|i|p', 1, true), word('n|i|p', 1, true), word('s|a|p', 1, true),
-  word('t|a|n', 1), word('a|t', 1), word('a|n', 1), word('i|n', 1), word('i|t', 1)
+  word('t|a|n', 1), word('a|t', 1), word('a|n', 1), word('i|n', 1), word('i|t', 1),
+  word('m|a|n', 2, true), word('m|a|p', 2), word('m|a|t', 2, true), word('d|a|d', 2, true), word('s|a|d', 2, true),
+  word('m|a|d', 2, true), word('d|i|g', 2, true), word('p|i|g', 2, true), word('d|o|g', 2, true), word('p|o|t', 2, true),
+  word('t|o|p', 2, true), word('m|o|p', 2, true), word('d|o|t', 2), word('p|o|d', 2, true), word('d|i|p', 2, true),
+  word('o|n', 2), word('n|o|t', 2), word('g|o|t', 2), word('d|i|d', 2), word('a|m', 2), word('a|n|d', 2)
 ];
 
 // Real words that turn up in phonics lists and must never be shown.
