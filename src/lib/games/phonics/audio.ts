@@ -1,3 +1,4 @@
+import { wake } from '#lib/audio-wake.js';
 import { sound } from '#lib/sound';
 import type { Word } from './words';
 
@@ -8,7 +9,9 @@ const PRAISE = ['excellent', 'wonderful', 'brilliant'].map(name => `/catcha/asse
 const CHIME = [523.25, 659.25, 783.99];
 
 export function createPhonicsAudio() {
-  const ctx = new AudioContext();
+  // Decoded buffers outlive the context, so one iOS gave up on is simply replaced (see audio-wake).
+  let ctx = new AudioContext();
+  const revive = () => wake(ctx, () => { ctx = new AudioContext(); });
   const buffers = new Map<string, AudioBuffer>();
   let current: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
 
@@ -17,7 +20,7 @@ export function createPhonicsAudio() {
     try { buffers.set(url, await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer())); } catch { /* a missing clip stays silent */ }
   }
   function play(url: string, level = 1) {
-    void ctx.resume();
+    revive();
     const buffer = buffers.get(url);
     if (sound.muted || !buffer) return 0;
     const t = ctx.currentTime;
@@ -32,7 +35,7 @@ export function createPhonicsAudio() {
 
   return {
     // iOS only starts audio from a touch: resume on the first press anywhere.
-    unlock: () => void ctx.resume(),
+    unlock: revive,
     preload: (words: Word[]) => Promise.all([...new Set(words.flatMap(w => [wordUrl(w.text), ...w.pieces.map(p => soundUrl(p.sound))])), ...PRAISE].map(load)),
     sound: (id: string) => play(soundUrl(id)),
     // Seconds until the word has been said (0 when muted or missing).

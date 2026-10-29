@@ -16,12 +16,13 @@
  * The AudioContext is created in initAudio() and resumed by a real key press or tap.
  */
 
+import { wake } from "#lib/audio-wake.js";
 import { createSoundtrack } from "./soundtrack.js";
 
 const MASTER_GAIN = 0.38;
 
 /** @type {AudioContext|null} */
-let ctx = null;
+let ctx = null, listening = false;
 /** @type {GainNode|null} */
 let master = null;
 /** @type {GainNode|null} */
@@ -126,8 +127,12 @@ export function initAudio() {
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1;
 
+  loadClips();
+  if (listening) return;
+  listening = true;
+  // A context iOS has given up on is dropped and the whole graph rebuilt on the next tap (see audio-wake).
   const resume = () => {
-    if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+    if (ctx) wake(ctx, () => { ctx = null; fallbackBus = null; initAudio(); });
   };
   window.addEventListener("keydown", resume, { capture: true });
   window.addEventListener("pointerdown", resume, { capture: true });
@@ -138,7 +143,6 @@ export function initAudio() {
   window.addEventListener("touchend", resume, { capture: true, passive: true });
   window.addEventListener("click", resume, { capture: true });
   resume();
-  loadClips();
 }
 
 /* ─────────────────────────────── family voices ─────────────────────────────── */

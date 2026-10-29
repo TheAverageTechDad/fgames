@@ -1,3 +1,4 @@
+import { wake } from '#lib/audio-wake.js';
 import { haptic, type HapticPattern } from '#lib/haptics';
 import { sound } from '#lib/sound';
 import { FAMILY, onAsphalt } from './court';
@@ -60,7 +61,8 @@ export function createHoopsAudio() {
         const files = [...SAMPLES.map(name => [name, name in VOICES ? VOICES[name as keyof typeof VOICES] : `/hoops/audio/${name}.m4a`]), ...Object.values(FAMILY_VOICES).flatMap(v => Object.values(v).flat()).map(url => [url, url])];
         for (const [name, url] of files) void fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => c.decodeAudioData(b)).then(buffer => { if (!closed) buffers.set(name, buffer); }).catch(() => { /* the synthesized sound stays */ });
       }
-      if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
+      // A context iOS has given up on is dropped, and the next tap builds a new one (see audio-wake).
+      if (!document.hidden) wake(ctx, () => { clearTimeout(musicTimer); ctx = null; });
     } catch { /* the game plays fine silent */ }
   };
   async function loadMusic(c: AudioContext) {

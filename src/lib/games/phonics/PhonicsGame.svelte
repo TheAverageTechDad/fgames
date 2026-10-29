@@ -41,12 +41,12 @@
     audio = a;
     void a.preload(WORDS);
     const unlock = () => a.unlock();
-    addEventListener('pointerdown', unlock, { capture: true });
+    addEventListener('pointerdown', unlock, { capture: true }); addEventListener('pointerup', unlock, { capture: true });
     // Safari's edge swipe goes back a page, so a slide started near the screen's edge would leave the game. Buttons
     // there still tap. ponytail: Android's system back gesture can't be blocked from a page.
     const edge = (e: TouchEvent) => { const x = e.touches[0].clientX; if ((x < 28 || x > innerWidth - 28) && !(e.target as Element).closest('button')) e.preventDefault(); };
     addEventListener('touchstart', edge, { passive: false });
-    return () => { removeHaptics(); removeEventListener('pointerdown', unlock, { capture: true }); removeEventListener('touchstart', edge); a.close(); };
+    return () => { removeHaptics(); removeEventListener('pointerdown', unlock, { capture: true }); removeEventListener('pointerup', unlock, { capture: true }); removeEventListener('touchstart', edge); a.close(); };
   });
 </script>
 

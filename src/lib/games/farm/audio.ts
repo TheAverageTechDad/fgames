@@ -1,3 +1,4 @@
+import { wake } from '#lib/audio-wake.js';
 import { haptic, type HapticPattern } from '#lib/haptics';
 import type { FarmEvent, FarmState } from './model';
 
@@ -31,7 +32,8 @@ export function createFarmAudio(state: FarmState) {
     if (closed) return;
     try {
       if (!ctx) { ctx = new AudioContext(); build(ctx); void loadMusic(); }
-      if (ctx.state === 'suspended' && !document.hidden) void ctx.resume().catch(() => {});
+      // A context iOS has given up on is dropped, and the next tap builds a new one (see audio-wake).
+      if (!document.hidden) wake(ctx, () => { clearTimeout(musicTimer); ctx = null; });
     } catch { /* visual feedback remains available */ }
   };
   async function loadMusic() {
@@ -61,7 +63,7 @@ export function createFarmAudio(state: FarmState) {
     music.gain.setTargetAtTime(state.music ? MUSIC_LEVEL * (paused ? 0.45 : 1) : 0, now, 0.4);
   }
   const visibility = () => { if (!ctx) return; if (document.hidden) void ctx.suspend().catch(() => {}); else void ctx.resume().catch(() => {}); };
-  window.addEventListener('pointerdown', unlock); window.addEventListener('keydown', unlock);
+  window.addEventListener('pointerdown', unlock); window.addEventListener('pointerup', unlock); window.addEventListener('keydown', unlock);
   document.addEventListener('visibilitychange', visibility);
 
   const vary = (amount = 0.03) => 1 + (Math.random() * 2 - 1) * amount;
@@ -185,7 +187,7 @@ export function createFarmAudio(state: FarmState) {
     refresh(isPaused = paused) { paused = isPaused; level(); },
     destroy() {
       closed = true; clearTimeout(musicTimer);
-      window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('pointerdown', unlock); window.removeEventListener('pointerup', unlock); window.removeEventListener('keydown', unlock); document.removeEventListener('visibilitychange', visibility);
       void ctx?.close().catch(() => {});
     }
   };

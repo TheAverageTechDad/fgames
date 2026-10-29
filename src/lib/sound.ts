@@ -1,3 +1,4 @@
+import {wake} from './audio-wake.js';
 import {haptic, type HapticPattern} from './haptics';
 let audioCtx:AudioContext|null=null;
 let mute=false;
@@ -6,7 +7,7 @@ function context(){
  if(typeof window==='undefined')return null;
  const Audio=window.AudioContext || (window as unknown as {webkitAudioContext:typeof AudioContext}).webkitAudioContext;
  if(!Audio)return null;
- audioCtx??=new Audio();if(audioCtx.state==='suspended')void audioCtx.resume().catch(()=>{});return audioCtx;
+ audioCtx??=new Audio();wake(audioCtx,()=>{audioCtx=null;});return audioCtx;
 }
 // C-major pentatonic. Sine fundamentals with a quiet second harmonic give soft toy tones.
 const notes=[261.63,293.66,329.63,392,440,523.25,587.33,659.25,783.99,880,1046.5];
