@@ -5,7 +5,7 @@ Working title for the phonics reading game. Build step 1, the Read card: rounds 
 - `words.ts`: the sets in school order, the words split into sounds (`ch|i|ck`, `th:dh|i|s`), the banned list and `round()`. `words.test.ts` checks every spelling is taught, every audio file exists and no banned word slips in.
 - `audio.ts`: decoded buffers for instant playback, each clip fading the last over ~40 ms, the word chime and Dad's praise (Catcha's recordings). Follows the arcade's mute switch.
 - `ReadCard.svelte`: one word. Sound buttons (dot per sound, bar for two-letter sounds), the blending rail (drag, or ArrowRight on the handle) ending in a goal ring, the join, then the child's turn: a yellow speaker counts down 3 s (or waits for a tap, per the setting) before the word is spoken, then the card turns and the picture develops out of a blur with a shine, and Next. An idle handle nudges itself after 3.5 s.
-- `PhonicsGame.svelte`: the shell: back, 8 progress dots, settings (sound; say the word after 3 s or only when tapped, `settings.ts`, saved as `phonics_reveal`), the round-end card.
+- `PhonicsGame.svelte`: the shell: back, 8 progress dots, settings (sound; say the word after 3 s or only when tapped, `settings.ts`, saved as `phonics_reveal`), the round-end card. Read it again (↺ beside Next) and a finished word's progress dot both remount the card fresh.
 
 Audio in `static/phonics/audio`, all one Gemini 3.8 Flash TTS voice (Fola, AI Studio): `sounds/{id}.m4a` (s a t p i n, from one batched request) and `words/{word}.m4a` (two batched requests with a warm "you read it!" style). Batches are cut at their silences, peak-normalised and checked with Whisper. Replace any file under the same name; no code changes.
 

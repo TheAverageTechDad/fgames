@@ -23,7 +23,7 @@
   }
   function again() { words = round(1); index = 0; }
   function toggleSound() { muted = sound.toggleMute(); }
-  let reveal = $state<Reveal>(readReveal()), settingsOpen = $state(false);
+  let attempt = $state(0), reveal = $state<Reveal>(readReveal()), settingsOpen = $state(false);
   function setReveal(value: Reveal) { reveal = value; saveReveal(value); }
 
   onMount(() => {
@@ -40,7 +40,7 @@
   <header class="phonics-header">
     <button class="toy-button icon-button round" onclick={() => goto('/')} aria-label="Back to arcade"><Icon name="arrow-left"/></button>
     <ol class="progress" aria-label={`Word ${Math.min(index + 1, words.length)} of ${words.length}`}>
-      {#each words as _, i}<li class:done={i < index} class:now={i === index}></li>{/each}
+      {#each words as w, i}<li class:done={i < index} class:now={i === index}>{#if i < index}<button onclick={() => index = i} aria-label={`Read ${w.text} again`}></button>{/if}</li>{/each}
     </ol>
     <button class="toy-button icon-button round" onclick={() => settingsOpen = true} aria-label="Settings"><Icon name="gear-six"/></button>
   </header>
@@ -48,7 +48,8 @@
   {#if muted}<button class="sound-tip" onclick={toggleSound}><Icon name="speaker-slash" size={18}/> Sound is off · tap to turn it on</button>{/if}
 
   {#if audio && !finished}
-    {#key index}<ReadCard word={words[index]} {audio} {reveal} onNext={next}/>{/key}
+    <!-- Read it again, or a tapped dot, remounts the card fresh. -->
+    {#key `${index}:${attempt}`}<ReadCard word={words[index]} {audio} {reveal} onNext={next} onRetry={() => attempt++}/>{/key}
   {/if}
 
   {#if settingsOpen}
@@ -86,7 +87,9 @@
   .phonics-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(14px,env(safe-area-inset-top)) 16px 4px;flex-shrink:0}
   .progress{display:flex;gap:7px;list-style:none;margin:0;padding:0}
   .progress li{width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:var(--cream);transition:background 200ms,scale 200ms}
-  .progress li.done{background:var(--grape-bottom)}
+  .progress li.done{position:relative;background:var(--grape-bottom)}
+  /* A finished word's dot goes back to it; the hit area is bigger than the dot. */
+  .progress li button{position:absolute;inset:-12px -5px;padding:0;border:0;background:none;cursor:pointer}
   .progress li.now{scale:1.3;background:var(--grape-top)}
   .sound-tip{align-self:center;display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 14px;border:2px solid var(--ink);border-radius:99px;background:var(--cream);color:var(--ink);font-size:14px}
   .read-words{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}

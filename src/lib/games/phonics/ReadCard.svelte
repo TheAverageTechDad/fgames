@@ -10,7 +10,7 @@
   // One word to read. Drag the handle along the rail: each sound lights and plays as the handle reaches its letters.
   // Reaching the end closes the gaps, then it's the child's turn to say the word: the speaker counts down (`reveal`
   // 'pause') or waits for a tap ('tap') before the word is said and the picture turns over.
-  let { word, audio, reveal, onNext }: { word: Word; audio: PhonicsAudio; reveal: Reveal; onNext: () => void } = $props();
+  let { word, audio, reveal, onNext, onRetry }: { word: Word; audio: PhonicsAudio; reveal: Reveal; onNext: () => void; onRetry: () => void } = $props();
 
   const HANDLE = 56, TURN = 3000;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -25,6 +25,8 @@
   let lit = $state(pieces.map(() => false));
   let stage = $state<'reading' | 'joining' | 'turn' | 'saying' | 'done'>('reading');
   let grab = 0, idle = 0, turnTimer = 0, alive = true;
+  // Next and Read it again show once the word has been heard, or straight away when it's only said on a tap.
+  const ready = $derived(stage === 'done' || (stage === 'turn' && reveal === 'tap'));
 
   const maxX = () => rail.clientWidth - HANDLE;
   function measure() {
@@ -151,7 +153,10 @@
     <div class="handle" class:dragging class:returning class:nudge role="slider" tabindex="0" aria-label="Slide to blend the sounds" aria-valuemin="0" aria-valuemax={pieces.length} aria-valuenow={lit.filter(Boolean).length} onkeydown={key} onanimationend={() => nudge = false}></div>
   </div>
 
-  <button class="toy-button mint next" class:shown={stage === 'done' || (stage === 'turn' && reveal === 'tap')} disabled={!(stage === 'done' || (stage === 'turn' && reveal === 'tap'))} bind:this={nextEl} onclick={onNext} aria-hidden={!(stage === 'done' || (stage === 'turn' && reveal === 'tap'))}>Next <Icon name="arrow-right"/></button>
+  <div class="after" class:shown={ready} aria-hidden={!ready}>
+    <button class="toy-button icon-button round again" disabled={!ready} onclick={onRetry} aria-label="Read it again"><Icon name="arrow-counter-clockwise"/></button>
+    <button class="toy-button mint next" disabled={!ready} bind:this={nextEl} onclick={onNext}>Next <Icon name="arrow-right"/></button>
+  </div>
 </section>
 
 <style>
@@ -206,8 +211,10 @@
   .handle:focus-visible{outline:3px solid var(--ink);outline-offset:4px}
   .full .handle{background:radial-gradient(circle at 34% 30%,#fff9 0 14%,transparent 15%),linear-gradient(var(--mint-top),var(--mint-bottom));box-shadow:0 5px 0 var(--mint-lip)}
 
-  .next{min-width:180px;min-height:58px;font-size:22px;visibility:hidden;scale:.6;opacity:0}
-  .next.shown{visibility:visible;animation:pop-in 340ms cubic-bezier(.3,1.6,.5,1) both 240ms}
+  .after{display:flex;align-items:center;gap:14px;visibility:hidden;scale:.6;opacity:0}
+  .after.shown{visibility:visible;animation:pop-in 340ms cubic-bezier(.3,1.6,.5,1) both 240ms}
+  .again{width:58px;height:58px;min-height:58px}
+  .next{min-width:180px;min-height:58px;font-size:22px}
 
   @keyframes card-in{from{opacity:0;transform:translateX(28px)}}
   @keyframes q-bob{50%{transform:translateY(-5px) rotate(-4deg)}}
@@ -218,8 +225,8 @@
   @keyframes nudge{30%{translate:18px 0}55%{translate:-3px 0}75%{translate:6px 0}}
   @keyframes rail-glow{from{filter:brightness(1.35)}}
   @media (prefers-reduced-motion:reduce){
-    .speaker.turn,.read-card,.front span,.open .back img,.open .shine,.speaker,.next.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
-    .next.shown{scale:1;opacity:1}
+    .speaker.turn,.read-card,.front span,.open .back img,.open .shine,.speaker,.after.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
+    .after.shown{scale:1;opacity:1}
     .flip,.piece,.handle.returning,.fill{transition-duration:1ms}
   }
 </style>
