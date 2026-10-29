@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isOpen } from './settings';
-import { BANNED, round, SETS, WORDS } from './words';
+import { BANNED, choices, round, SETS, WORDS } from './words';
 
 const files = import.meta.glob(['../../../../static/phonics/audio/*/*.m4a', '../../../../static/phonics/pictures/*.webp']);
 const has = (path: string) => `../../../../static/phonics/${path}` in files;
@@ -31,5 +31,18 @@ describe('phonics words', () => {
     const p = { rounds: [1, 0, 0, 0], open: false };
     expect([1, 2, 3, 4].map(n => isOpen(p, n))).toEqual([true, true, false, false]);
     expect(isOpen({ ...p, open: true }, 4)).toBe(true);
+  });
+
+  it('gives every word two taught look-alikes to pick between, never more than 2 sounds apart', () => {
+    for (const w of WORDS) {
+      // A copy, as the game passes a reactive proxy rather than the list's own object.
+      const c = choices({ ...w });
+      expect(c).toHaveLength(3);
+      expect(new Set(c.map(o => o.text)).size).toBe(3);
+      expect(c.map(o => o.text)).toContain(w.text);
+      for (const o of c) expect(o.set <= w.set && o.pieces.length === w.pieces.length, `${w.text}: ${o.text}`).toBe(true);
+      const apart = c.filter(o => o.text !== w.text).map(o => o.pieces.filter((p, i) => p.spelling !== w.pieces[i].spelling).length);
+      expect(Math.max(...apart), `${w.text}: ${c.map(o => o.text)}`).toBeLessThanOrEqual(2);
+    }
   });
 });

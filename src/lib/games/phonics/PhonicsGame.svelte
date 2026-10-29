@@ -7,12 +7,15 @@
   import { sound } from '#lib/sound';
   import { createPhonicsAudio, type PhonicsAudio } from './audio';
   import { modal } from '#lib/components/modal';
+  import PickCard from './PickCard.svelte';
   import ReadCard from './ReadCard.svelte';
   import { isOpen, readProgress, readReveal, saveProgress, saveReveal, type Reveal } from './settings';
   import SoundMap from './SoundMap.svelte';
   import { round, SETS, STAR, WORDS, type Word } from './words';
 
-  // The sound map, or a round of 8 words from the stone picked on it (stone is null on the map).
+  // The sound map, or a round of 8 words from the stone picked on it (stone is null on the map). The 3rd, 6th and 8th
+  // words are Pick cards (hear it, tap it among look-alikes) for a change of pace; the rest are read on the slider.
+  const PICKS = [2, 5, 7];
   let audio = $state<PhonicsAudio | null>(null), stone = $state<number | null>(null), progress = $state(readProgress());
   let words = $state<Word[]>([]), index = $state(0), muted = $state(sound.muted), opened = $state<number | null>(null);
   const finished = $derived(stone !== null && index >= words.length);
@@ -67,7 +70,10 @@
     <SoundMap {progress} onPick={play}/>
   {:else if audio && !finished}
     <!-- Read it again, or a tapped dot, remounts the card fresh. -->
-    {#key `${index}:${attempt}`}<ReadCard word={words[index]} {audio} {reveal} onNext={next} onRetry={() => attempt++}/>{/key}
+    {#key `${index}:${attempt}`}
+      {#if PICKS.includes(index)}<PickCard word={words[index]} {audio} onNext={next}/>
+      {:else}<ReadCard word={words[index]} {audio} {reveal} onNext={next} onRetry={() => attempt++}/>{/if}
+    {/key}
   {/if}
 
   {#if settingsOpen}

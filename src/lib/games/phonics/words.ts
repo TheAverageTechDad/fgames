@@ -40,9 +40,22 @@ export const WORDS: Word[] = [
 // Real words that turn up in phonics lists and must never be shown.
 export const BANNED = ['tit', 'tits', 'git', 'nob', 'fag', 'fanny', 'cock', 'dick', 'prick', 'piss', 'shit'];
 
+const shuffle = <T>(list: T[], random: () => number) => {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+};
+
 // A round: `size` words from the set, shuffled with no repeats.
 export function round(set: number, size = 8, random = Math.random) {
-  const pool = WORDS.filter(w => w.set === set);
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  return pool.slice(0, size);
+  return shuffle(WORDS.filter(w => w.set === set), random).slice(0, size);
+}
+
+// Pick: the word and two look-alikes to choose between, from its own set or earlier and with as many sounds, the ones
+// differing by the fewest sounds first (pin: pit, tin), in a random order.
+export function choices(target: Word, random = Math.random) {
+  const differs = (w: Word) => w.pieces.filter((p, i) => p.spelling !== target.pieces[i].spelling).length;
+  const alike = shuffle(WORDS.filter(w => w.set <= target.set && w.text !== target.text && w.pieces.length === target.pieces.length), random)
+    .sort((a, b) => differs(a) - differs(b));
+  return shuffle([target, ...alike.slice(0, 2)], random);
 }
