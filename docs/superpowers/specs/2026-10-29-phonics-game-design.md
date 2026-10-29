@@ -107,6 +107,12 @@ Both folders are precached for offline play, like Hoops' audio.
 - **Encoding:** the script then trims silence, evens out the loudness and encodes the first surviving take to `.m4a` with ffmpeg.
 - **Fallback:** any sound Gemini can't do cleanly (the quick stops p, t, k, b, d, g are the likely trouble) is recorded by the user, using the Oxford Owl phonics audio guide as a by-ear reference, and dropped in under the same name. No code changes.
 
+**Listening test, 29 October 2026** (AI Studio, voice Fola, a "pure phonics sound, no vowel after it, never the letter name" style). Checked by waveform and Whisper; the user's ears are still the judge.
+- **Clean:** "sssss", "mmmmm" and "shhh" written out as they sound, and /a/, /p/ and /t/ written between slashes. Plain "p" got the letter name, so sounds are written between slashes or spelled out as they sound.
+- **Schwa trouble, as expected:** /b/, /d/ and /g/ came back with a short vowel after them ("duh", "gah"). Next tries are trimming the clip to the first ~80 ms, or recording these.
+- **Batching works:** six sounds in one request ("/s/ ... /a/ ... /t/ ... /p/ ... /i/ ... /n/") came back as six clean, separated sounds that can be cut at the silences, so one request per stone is fine.
+- **Access:** AI Studio generated everything while signed in, with no API key selected. A key is still the better route for the full run.
+
 **Until the real sounds exist,** placeholder audio comes from the Mac's British voice (`say -v Daniel`). Its single sounds will often be wrong; they're only there to test the feel of the interactions. The tile stays off the home screen until the user has approved the real sounds, so no other family hears a wrong "suh". The user reaches the game directly at `/phonics`.
 
 ## Build order
