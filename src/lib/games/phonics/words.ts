@@ -1,8 +1,8 @@
 // Words in the order UK schools teach the sounds (docs/superpowers/specs/2026-10-29-phonics-game-design.md).
 // A word is split into its sounds with `|` (`ch|i|ck`); a piece names its sound after a colon when its spelling has
 // two (`th:dh|i|s`). A word only uses spellings taught in its own set or an earlier one (words.test.ts checks).
-// ponytail: sets 1 to 3 so far; the other stones' sets join here in build step 3.
-export const SETS = [['s', 'a', 't', 'p', 'i', 'n'], ['m', 'd', 'g', 'o'], ['c', 'k', 'ck', 'e', 'u', 'r']];
+// ponytail: sets 1 to 4 so far; the other stones' sets join here in build step 3.
+export const SETS = [['s', 'a', 't', 'p', 'i', 'n'], ['m', 'd', 'g', 'o'], ['c', 'k', 'ck', 'e', 'u', 'r'], ['h', 'b', 'f', 'l', 'ff', 'll', 'ss']];
 
 // Spellings that share a sound file (c, k and ck all say /k/).
 const SOUND_OF: Record<string, string> = { c: 'k', ck: 'k', ff: 'f', ll: 'l', ss: 's', zz: 'z' };
@@ -30,7 +30,11 @@ export const WORDS: Word[] = [
   word('c|a|t', 3, true), word('d|u|ck', 3, true), word('s|u|n', 3, true), word('c|u|p', 3, true), word('s|o|ck', 3, true),
   word('r|o|ck', 3, true), word('p|e|n', 3, true), word('n|e|t', 3, true), word('t|e|n', 3, true), word('m|u|m', 3, true),
   word('n|u|t', 3, true), word('r|u|g', 3, true), word('r|a|t', 3, true), word('p|e|g', 3, true), word('k|i|ck', 3, true),
-  word('n|e|ck', 3, true), word('u|p', 3), word('u|s', 3), word('g|e|t', 3), word('r|e|d', 3), word('r|a|n', 3), word('c|a|n', 3)
+  word('n|e|ck', 3, true), word('u|p', 3), word('u|s', 3), word('g|e|t', 3), word('r|e|d', 3), word('r|a|n', 3), word('c|a|n', 3),
+  word('h|a|t', 4, true), word('h|e|n', 4, true), word('h|u|g', 4, true), word('b|e|d', 4, true), word('b|u|s', 4, true),
+  word('b|a|g', 4, true), word('b|a|t', 4, true), word('b|e|ll', 4, true), word('b|u|n', 4, true), word('f|a|n', 4, true),
+  word('f|i|n', 4, true), word('l|o|g', 4, true), word('l|e|g', 4, true), word('l|i|d', 4, true), word('h|i|ll', 4, true),
+  word('d|o|ll', 4, true), word('h|i|m', 4), word('h|a|d', 4), word('b|u|t', 4), word('i|f', 4), word('o|ff', 4), word('f|e|ll', 4)
 ];
 
 // Real words that turn up in phonics lists and must never be shown.

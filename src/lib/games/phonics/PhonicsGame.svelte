@@ -98,8 +98,9 @@
   /* The game fits one screen: no scrolling, rubber-banding, pinch zoom or Chrome's swipe-to-go-back. The cards on top
      still scroll if a small phone needs it. */
   :global(html:has(.phonics-screen)),:global(body:has(.phonics-screen)){overflow:hidden;overscroll-behavior:none}
-  .phonics-screen{touch-action:none;display:flex;flex-direction:column;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink);overflow:hidden}
+  .phonics-screen{touch-action:none;font-variant-ligatures:none;display:flex;flex-direction:column;background:linear-gradient(var(--cream),var(--cream-bottom));color:var(--ink);overflow:hidden}
   .phonics-screen :global(:is(.modal-card,.win-card)){touch-action:pan-y}
+  .phonics-screen :global(.modal-card){gap:14px}
   .phonics-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:max(14px,env(safe-area-inset-top)) 16px 4px;flex-shrink:0}
   .progress{display:flex;gap:7px;list-style:none;margin:0;padding:0}
   .progress li{width:12px;height:12px;border:2px solid var(--ink);border-radius:50%;background:var(--cream);transition:background 200ms,scale 200ms}
@@ -112,9 +113,9 @@
   .read-words button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);color:var(--ink);animation:word-in 360ms cubic-bezier(.22,1,.36,1) both calc(120ms + var(--i) * 60ms)}
   .read-words img{width:72%;aspect-ratio:1;object-fit:cover;border:2px solid var(--ink);border-radius:10px}
   .read-words small{font-family:'Andika',sans-serif;font-weight:700;font-size:17px}
-  .reveal-choice{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
-  .reveal-choice legend{font-size:15px;color:var(--ink-soft);margin-bottom:8px}
-  .reveal-choice label{display:flex;align-items:center;gap:12px;padding:12px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);cursor:pointer}
+  .reveal-choice{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+  .reveal-choice legend{font-size:15px;color:var(--ink-soft);margin-bottom:4px}
+  .reveal-choice label{display:flex;align-items:center;gap:12px;padding:7px 12px;border:2px solid var(--ink);border-radius:14px;background:var(--cream);cursor:pointer}
   .reveal-choice label.on{background:var(--grape-top);color:var(--cream)}
   .reveal-choice label.on small{color:var(--cream)}
   .reveal-choice input{accent-color:var(--grape-bottom);width:20px;height:20px;margin:0;flex-shrink:0}
