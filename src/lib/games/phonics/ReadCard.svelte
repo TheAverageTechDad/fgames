@@ -224,6 +224,15 @@
   @keyframes pop-in{from{scale:.6;opacity:0}to{scale:1;opacity:1}}
   @keyframes nudge{30%{translate:18px 0}55%{translate:-3px 0}75%{translate:6px 0}}
   @keyframes rail-glow{from{filter:brightness(1.35)}}
+  /* A phone on its side: the picture card on the left, the word, its slider and the buttons stacked on the right. */
+  @media (orientation:landscape) and (max-height:600px){
+    .read-card{display:grid;grid-template-columns:min(56dvh,210px) minmax(0,1fr);align-content:center;justify-content:center;justify-items:center;column-gap:clamp(24px,5vw,56px);row-gap:10px;padding:4px max(24px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+    .read-card>*{--size:min(88px,22dvh,calc((100cqw - min(56dvh,210px) - clamp(24px,5vw,56px) - 40px) / (var(--n) * .78)))}
+    .mystery{grid-column:1;grid-row:1 / span 3;width:min(56dvh,210px)}
+    .word{grid-column:2;grid-row:1}
+    .rail{grid-column:2;grid-row:2}
+    .after{grid-column:2;grid-row:3}
+  }
   @media (prefers-reduced-motion:reduce){
     .speaker.turn,.read-card,.front span,.open .back img,.open .shine,.speaker,.after.shown,.handle.nudge,.full .fill,.full .goal{animation:none}
     .after.shown{scale:1;opacity:1}

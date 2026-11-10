@@ -112,5 +112,21 @@
   .hoops-world :global(.hoops-joystick){position:absolute;display:none;width:100px;height:100px;margin:-50px;border:2px solid #fff8e899;background:#fff8e82b;border-radius:50%;pointer-events:none;z-index:4}.hoops-world :global(.hoops-joystick>div){position:absolute;left:30px;top:30px;width:36px;height:36px;background:#fff8e8c9;border:2px solid #ffffffc9;border-radius:50%}
   @keyframes pop{0%{opacity:0;scale:.6}20%{opacity:1;scale:1.15}70%{opacity:1;scale:1}100%{opacity:0;translate:0 -20px}}
   @media(min-width:600px){.hoops-surround{padding:14px}.hoops-shell{height:min(960px,calc(100dvh - 28px));border-radius:28px;box-shadow:0 12px 50px #3b2a1d66;border:3px solid #6b4a2f}}
+  /* A phone on its side: the court fills the whole screen (notch-safe); the pause card widens and sheds its tall stack. */
+  @media(orientation:landscape) and (max-height:600px){
+    .hoops-surround{padding:0;background:#f2cf98}
+    .hoops-shell{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;--hoops-top:max(10px,env(safe-area-inset-top))}
+    /* The score moves out from over the backboard, to sit beside the back button. */
+    .hoops-header{justify-content:flex-start;gap:10px;padding:var(--hoops-top) max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left))}
+    .hoops-header .small{margin-left:auto}
+    .hoops-hint{bottom:max(14px,env(safe-area-inset-bottom))}
+    .hoops-pop{top:22%}
+    .hoops-loading{padding:16px max(24px,env(safe-area-inset-right)) 16px max(24px,env(safe-area-inset-left));gap:10px}
+    .hoops-pause[open]{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;width:min(680px,calc(100% - 32px));max-width:none;padding:18px 24px 20px}
+    .hoops-pause h2{grid-column:1 / -1;font-size:26px}
+    .hoops-pause p{grid-column:1 / -1;margin:6px 0 12px}
+    .hoops-switches{grid-column:1 / -1}
+    .hoops-pause button{margin-top:12px}
+  }
   @media(prefers-reduced-motion:reduce){.hoops-pop,.hoops-hint{animation:none}}
 </style>

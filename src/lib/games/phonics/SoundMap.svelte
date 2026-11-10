@@ -48,5 +48,13 @@
   .stars svg.on{fill:#ffd166}
   @keyframes stone-in{from{opacity:0;transform:translateY(16px) scale(.85)}}
   @keyframes bob{50%{transform:translateY(-6px)}}
+  /* A phone on its side: the same winding path, now running across the screen with the stones up and down in turn. */
+  @media (orientation:landscape) and (max-height:600px){
+    .map{flex-direction:row;justify-content:space-around;align-items:stretch;gap:0;overflow:auto hidden;touch-action:pan-x;padding:10px max(32px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(32px,env(safe-area-inset-left));background:radial-gradient(circle,var(--ink-soft) 2px,transparent 2.5px) 0 50%/14px 14px repeat-x}
+    .map li,.map li.right{margin:0;align-self:stretch;justify-content:flex-start}
+    .map li.right{justify-content:flex-end}
+    .stone{width:min(132px,30dvh);height:min(132px,30dvh);padding:8px}
+    .letters{font-size:clamp(18px,5.4dvh,24px);text-wrap:balance}
+  }
   @media (prefers-reduced-motion:reduce){.map li,.stone.next{animation:none}}
 </style>

@@ -93,7 +93,9 @@ export function createFarmScene(host: HTMLElement, state: FarmState, callbacks: 
     const { width, height } = host.getBoundingClientRect();
     if (!width || !height) return;
     renderer.setSize(width, height);
-    const halfWidth = 3.35, halfHeight = halfWidth * height / width;
+    // A phone upright shows 3.35 units either side of her. On its side that would be a thin strip, so past a square screen
+    // the view holds a fixed height (3.9 above and below) and takes in more to the left and right instead.
+    const halfWidth = Math.max(3.35, 3.9 * width / height), halfHeight = halfWidth * height / width;
     Object.assign(camera, { left: -halfWidth, right: halfWidth, top: halfHeight, bottom: -halfHeight }); camera.updateProjectionMatrix();
   };
   const observer = new ResizeObserver(resize); observer.observe(host); resize();

@@ -106,6 +106,14 @@
   @keyframes develop{from{scale:1.16;filter:blur(10px) saturate(.3)}}
   @keyframes shine{to{translate:130% 0}}
   @keyframes pop-in{from{scale:.6;opacity:0}to{scale:1;opacity:1}}
+  /* A phone on its side: the picture card on the left; the three words in a row, then Next, on the right. */
+  @media (orientation:landscape) and (max-height:600px){
+    .pick-card{display:grid;grid-template-columns:min(56dvh,210px) minmax(0,1fr);align-content:center;justify-content:center;column-gap:clamp(24px,5vw,56px);row-gap:14px;padding:4px max(24px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}
+    .mystery{grid-column:1;grid-row:1 / span 2;align-self:center;width:min(56dvh,210px)}
+    .options{grid-column:2;grid-row:1;align-self:end;flex-direction:row;width:auto;gap:10px}
+    .option{flex:1;min-width:0;width:auto;min-height:72px;font-size:min(44px,11.5dvh);padding:6px 8px 10px}
+    .after{grid-column:2;grid-row:2;align-self:start;justify-self:center}
+  }
   @media (prefers-reduced-motion:reduce){
     .pick-card,.option,.open .back img,.open .shine,.after.shown,.saying .front :global(svg){animation:none}
     .after.shown{scale:1;opacity:1}

@@ -141,14 +141,15 @@
           <i><span style:transform={`scaleX(${hud.progress})`}></span></i>
         </div>
       </div>
+      <!-- In the header so a phone on its side can lay them out in the same row; upright they're positioned on their own. -->
+      <div class="farm-side-controls">
+        <button class="farm-round small" aria-label={hud.muted ? 'Turn sound on' : 'Mute sound'} aria-pressed={hud.muted} onclick={toggleSound}><Icon name={hud.muted ? 'speaker-slash' : 'speaker-high'} size={21}/></button>
+        <button class="farm-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
+      </div>
       <div class="farm-wallet" class:paying={hud.paying} bind:this={wallet} aria-label={`Wallet: ${hud.wallet} coins, level ${hud.level}`}>
         {@render coin()}<div><strong data-wallet>{hud.wallet}</strong><small data-level>Level {hud.level}</small></div>
       </div>
     </header>
-    <div class="farm-side-controls">
-      <button class="farm-round small" aria-label={hud.muted ? 'Turn sound on' : 'Mute sound'} aria-pressed={hud.muted} onclick={toggleSound}><Icon name={hud.muted ? 'speaker-slash' : 'speaker-high'} size={21}/></button>
-      <button class="farm-round small" aria-label="Pause game" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
-    </div>
     {#if toast}
       {#key toastId}<div class="farm-toast" class:big={toastBig} role="status">{toast}</div>{/key}
     {/if}
@@ -202,12 +203,16 @@
     {/if}
     <dialog class="farm-pause" bind:this={pauseDialog} onclose={resume}>
       <h2>A little breather</h2><p>Your farm is saved. Pick up right where you left off.</p>
-      <button class="setting-row" onclick={toggleSound}><Icon name={hud.muted ? 'speaker-slash' : 'speaker-high'} size={22}/><span>Sound</span><strong>{hud.muted ? 'Off' : 'On'}</strong></button>
-      <button class="setting-row" onclick={toggleMusic}><Icon name={hud.music ? 'music-notes' : 'speaker-slash'} size={22}/><span>Music</span><strong>{hud.music ? 'On' : 'Off'}</strong></button>
-      <button class="setting-row" onclick={toggleHaptics}><Icon name="vibrate" size={22}/><span>Vibration</span><strong>{hud.haptics ? 'On' : 'Off'}</strong></button>
-      <button class="toy-button mint" onclick={() => pauseDialog.close()}>Back to farming</button>
-      <button class="farm-text-button" onclick={home}>Back to arcade</button>
-      <button class="farm-text-button reset" class:confirm={confirmReset} data-reset onclick={startOver}>{confirmReset ? 'Tap again to erase this farm and start over' : 'Start a new farm'}</button>
+      <div class="pause-settings">
+        <button class="setting-row" onclick={toggleSound}><Icon name={hud.muted ? 'speaker-slash' : 'speaker-high'} size={22}/><span>Sound</span><strong>{hud.muted ? 'Off' : 'On'}</strong></button>
+        <button class="setting-row" onclick={toggleMusic}><Icon name={hud.music ? 'music-notes' : 'speaker-slash'} size={22}/><span>Music</span><strong>{hud.music ? 'On' : 'Off'}</strong></button>
+        <button class="setting-row" onclick={toggleHaptics}><Icon name="vibrate" size={22}/><span>Vibration</span><strong>{hud.haptics ? 'On' : 'Off'}</strong></button>
+      </div>
+      <div class="pause-actions">
+        <button class="toy-button mint" onclick={() => pauseDialog.close()}>Back to farming</button>
+        <button class="farm-text-button" onclick={home}>Back to arcade</button>
+        <button class="farm-text-button reset" class:confirm={confirmReset} data-reset onclick={startOver}>{confirmReset ? 'Tap again to erase this farm and start over' : 'Start a new farm'}</button>
+      </div>
     </dialog>
   </main>
 </div>
@@ -253,5 +258,24 @@
   @keyframes toast-pop{from{opacity:0;translate:0 10px;scale:.9}to{opacity:1;translate:0 0;scale:1}}@keyframes coin-travel{0%{opacity:0;transform:translate(0,0) scale(.6)}15%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.7)}}@keyframes hint-life{0%{opacity:0;translate:-8px 0}6%,88%{opacity:1;translate:0 0}100%{opacity:0}}@keyframes basket-full{50%{scale:1.06}}
   @media(min-width:600px){.farm-surround{padding:14px}.farm-shell{height:min(960px,calc(100dvh - 28px));border-radius:28px;box-shadow:0 12px 50px #1c362e66;border:3px solid #365437}}
   @media(max-height:720px){.farm-toast{top:20%}}
+  /* A phone on its side: the farm fills the whole screen (notch-safe). The HUD becomes one slim row along the top, the shop
+     docks down the right edge beside her, and the pause card goes two columns. */
+  @media(orientation:landscape) and (max-height:600px){
+    .farm-surround{padding:0;background:#8db75b}
+    .farm-shell{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;--farm-top:max(10px,env(safe-area-inset-top))}
+    .farm-header{align-items:center;padding:var(--farm-top) max(16px,env(safe-area-inset-right)) 8px max(16px,env(safe-area-inset-left))}
+    .farm-status{flex-direction:row;align-items:center;gap:10px;padding-top:0}
+    .farm-goal{width:min(100%,240px)}
+    .farm-side-controls{position:static;flex-direction:row;gap:8px}
+    .farm-bottom{left:max(16px,env(safe-area-inset-left));right:max(16px,env(safe-area-inset-right));bottom:max(12px,calc(env(safe-area-inset-bottom) + 4px))}
+    .farm-toast{top:68px}
+    .farm-shop{left:auto;right:max(12px,env(safe-area-inset-right));top:calc(var(--farm-top) + 56px);bottom:max(12px,env(safe-area-inset-bottom));width:min(44vw,400px);max-height:none}
+    .farm-loading{padding:16px max(24px,env(safe-area-inset-right)) 16px max(24px,env(safe-area-inset-left));gap:10px}.loading-sprout{font-size:56px}
+    .farm-pause[open]{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"title settings" "text settings" "actions settings";grid-template-rows:auto auto 1fr;column-gap:22px;width:min(680px,calc(100% - 32px));max-width:none;padding:18px 24px 20px}
+    .farm-pause h2{grid-area:title;font-size:26px}
+    .farm-pause p{grid-area:text;margin:6px 0 8px}
+    .pause-settings{grid-area:settings;align-self:start}.pause-actions{grid-area:actions}
+    .pause-settings>:first-child,.pause-actions>:first-child{margin-top:0}
+  }
   @media(prefers-reduced-motion:reduce){.money-flight{display:none}.farm-toast,.farm-basket.full{animation:none}}
 </style>

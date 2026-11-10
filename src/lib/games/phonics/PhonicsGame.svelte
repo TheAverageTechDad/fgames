@@ -144,4 +144,21 @@
   .opened{color:var(--grape-lip)}
   @keyframes word-in{from{opacity:0;transform:translateY(10px) scale(.8)}}
   @media (prefers-reduced-motion:reduce){.read-words button{animation:none}}
+
+  /* A phone on its side: the game fills the whole screen (notch-safe), the header gets slimmer, and the cards that sat
+     in a stack go side by side. The size cut-off matches the arcade menu's landscape layout. */
+  @media (orientation:landscape) and (max-height:600px){
+    .app-shell.phonics-screen{max-width:none;height:100dvh;border:0;border-radius:0;box-shadow:none}
+    .phonics-header{padding:max(8px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+    .sound-tip{position:absolute;z-index:5;left:max(16px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom));min-height:36px;padding:6px 12px;font-size:13px}
+    .phonics-screen :global(.modal-overlay){padding:10px max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left))}
+    /* Settings and the round-complete card: two columns instead of one tall stack. */
+    .phonics-screen :global(:is(.modal-card,.win-card)){max-width:660px;max-height:100%;padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;align-items:center}
+    .phonics-screen :global(.modal-heading){grid-column:1 / -1}
+    .reveal-choice{grid-column:2;grid-row:2 / span 2}
+    .phonics-screen :global(.win-card h2){font-size:26px}
+    .read-words{grid-column:2;grid-row:1 / span 5;gap:6px}
+    .read-words button{padding:6px 0 4px}
+    .read-words small{font-size:15px}
+  }
 </style>
