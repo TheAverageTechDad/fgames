@@ -11,7 +11,7 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "vitest run",
+		"test": "vitest run && node --test src/lib/games/catcha/tests/",
 		"levels": "node scripts/generate-levels.mjs",
 		"smoke": "node scripts/smoke.mjs"
 	},

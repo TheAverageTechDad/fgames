@@ -1,0 +1,209 @@
+import { describe, expect, it } from 'vitest';
+import { ARC_R, BALL_R, FAMILY, FENCE, POLE, RIM } from './court';
+import { streakWord, DUNK_R, LAYUP_R, RELEASE_HEIGHT, RUN_SPEED, SPRINT_TIME, cancelAim, createShootaround, heldBallPosition, jump, nextRelease, releasePoint, shoot, startAim, stepShootaround, type GameEvent, type Move, type Shootaround } from './game';
+import { shotVelocity } from './shot';
+
+const still: Move = { x: 0, z: 0, sprint: false };
+const ideal = { dx: 0, dy: -78, minSide: 390 }; // drag straight up at the rim: Dad starts straight out from it
+const run = (s: Shootaround, seconds: number, move = still) => { const events: GameEvent[] = []; for (let i = 0; i < Math.round(seconds * 60); i++) events.push(...stepShootaround(s, 1 / 60, move)); return events; };
+const speed = (s: Shootaround) => Math.hypot(s.player.vx, s.player.vz);
+
+describe('shootaround', () => {
+  it('never loses the dribble while sprinting around', () => {
+    const s = createShootaround();
+    for (let i = 0; i < 600; i++) {
+      stepShootaround(s, 1 / 60, { x: Math.cos(i / 40), z: Math.sin(i / 40), sprint: i % 200 > 100 });
+      expect(s.mode).toBe('held');
+      expect(Math.hypot(s.ball.p.x - s.player.x, s.ball.p.z - s.player.z)).toBeLessThan(0.8);
+    }
+  });
+  it('bounces the dribble off the floor faster when moving', () => {
+    const count = (move: Move) => run(createShootaround(), 2, move).filter(e => e.type === 'dribble').length;
+    expect(count({ x: 1, z: 0, sprint: false })).toBeGreaterThan(count(still));
+  });
+  it('speeds up and slows down instead of snapping', () => {
+    const s = createShootaround(), right = { x: 1, z: 0, sprint: false };
+    run(s, 1 / 60, right); expect(speed(s)).toBeLessThan(RUN_SPEED * 0.5);
+    run(s, 0.6, right); expect(speed(s)).toBeGreaterThan(RUN_SPEED * 0.95);
+    run(s, 1 / 60); expect(speed(s)).toBeGreaterThan(RUN_SPEED * 0.5);
+    run(s, 0.6); expect(speed(s)).toBeLessThan(0.05);
+  });
+  it('sprints after a short crouch: a burst, then a fast run', () => {
+    const s = createShootaround(), dash = { x: 1, z: 0, sprint: true };
+    const events = run(s, 0.6, dash);
+    expect(events.filter(e => e.type === 'dash')).toHaveLength(1);
+    expect(speed(s)).toBeGreaterThan(RUN_SPEED * 1.3);
+  });
+  it('skids when a real sprint ends, not after a quick one', () => {
+    const quick = createShootaround(); run(quick, 0.2, { x: 1, z: 0, sprint: true });
+    expect(run(quick, 0.1, { x: 1, z: 0, sprint: false }).some(e => e.type === 'skid')).toBe(false);
+    const long = createShootaround(); run(long, 0.6, { x: 1, z: 0, sprint: true });
+    expect(run(long, 0.1, { x: 1, z: 0, sprint: false }).some(e => e.type === 'skid')).toBe(true);
+  });
+  it('runs out of puff after SPRINT_TIME of sprinting, and only runs until rested', () => {
+    const s = createShootaround();
+    let tired = 0;
+    for (let i = 0; i < Math.round((SPRINT_TIME + 0.5) * 60); i++) {
+      // back and forth across the court so he never pins against the fence
+      const dir = Math.floor(i / 90) % 2 ? -1 : 1;
+      tired += stepShootaround(s, 1 / 60, { x: dir, z: 0, sprint: true }).filter(e => e.type === 'tired').length;
+    }
+    expect(tired).toBe(1); expect(s.tired).toBe(true);
+    run(s, 0.6, { x: 1, z: 0, sprint: true });
+    expect(speed(s)).toBeLessThan(RUN_SPEED * 1.02);
+    run(s, 2.5); expect(s.tired).toBe(false);
+  });
+  it('does not tire from ordinary running', () => {
+    const s = createShootaround();
+    run(s, 4, { x: 0.3, z: 0.2, sprint: false });
+    expect(s.stamina).toBe(1);
+  });
+  it('walks around the family on the sideline, not through them', () => {
+    const s = createShootaround(), fan = FAMILY[0];
+    s.player.x = fan.x; s.player.z = fan.z + 2;
+    run(s, 3, { x: 0, z: -1, sprint: false });
+    for (const f of FAMILY) expect(Math.hypot(s.player.x - f.x, s.player.z - f.z)).toBeGreaterThan(f.radius + 0.25);
+  });
+  it('keeps Dad inside the fence and out of the pole', () => {
+    const s = createShootaround();
+    run(s, 5, { x: 1, z: 1, sprint: true });
+    expect(s.player.x).toBeLessThan(FENCE.side); expect(s.player.z).toBeLessThan(FENCE.front);
+    s.player.x = 1; run(s, 4, { x: 0, z: -1, sprint: false });
+    expect(s.player.z).toBeLessThan(0); // he can walk behind the baseline
+    s.player.x = POLE.x; run(s, 2, { x: 0, z: 1, sprint: false }); run(s, 4, { x: 0, z: -1, sprint: false });
+    expect(Math.hypot(s.player.x - POLE.x, s.player.z - POLE.z)).toBeGreaterThan(0.3);
+    expect(s.player.z).toBeGreaterThan(FENCE.back);
+  });
+  it('plants his feet and faces the rim while aiming', () => {
+    const s = createShootaround(); s.player.x = 2;
+    run(s, 0.3, { x: 1, z: 0, sprint: false });
+    expect(startAim(s)).toBe(true); expect(s.mode).toBe('aim');
+    const x = s.player.x;
+    run(s, 0.3, { x: 1, z: 0, sprint: false });
+    expect(s.player.x).toBe(x);
+    expect(s.player.yaw).toBeCloseTo(Math.atan2(RIM.x - s.player.x, RIM.z - s.player.z), 5);
+    expect(heldBallPosition(s)).toEqual(releasePoint(s));
+  });
+  it('goes back to the dribble when the aim is cancelled', () => {
+    const s = createShootaround(); startAim(s); cancelAim(s);
+    expect(s.mode).toBe('held');
+  });
+  it('releases the moment the thumb lets go, from where the ball was, and scores the ideal pull once', () => {
+    const s = createShootaround(); startAim(s);
+    const from = releasePoint(s), event = shoot(s, ideal);
+    expect(event?.type).toBe('shot'); expect(s.mode).toBe('flight'); expect(s.ball.p).toEqual(from);
+    const events = run(s, 3);
+    expect(events.filter(e => e.type === 'score')).toHaveLength(1);
+    expect([s.score, s.made, s.shots]).toEqual([1, 1, 1]);
+  });
+  it('jumps while aiming and lets the ball go at the top of the leap by itself, cleanly', () => {
+    const s = createShootaround(); startAim(s); s.pull = ideal; jump(s);
+    const shot = run(s, 0.5).find(e => e.type === 'shot'); // the 0.09 s crouch, then a quarter second up to the top
+    expect(shot?.type === 'shot' && shot.release).toBeGreaterThan(0.85);
+    expect(shot?.at.y).toBeGreaterThan(RELEASE_HEIGHT + 0.6);
+    expect(run(s, 3).some(e => e.type === 'score')).toBe(true);
+  });
+  it('shows the arc the jump shot will fly while he is still on the way up', () => {
+    // A long pull: past a set shot's sweet band but inside a clean release's wider one, so the release quality shows.
+    const long = { ...ideal, dy: ideal.dy * 1.25 };
+    for (const rise of [0.05, 0.2]) {
+      const s = createShootaround(); startAim(s); s.pull = long; jump(s);
+      run(s, rise);
+      const next = nextRelease(s), v = shotVelocity(next.at, long, next.quality);
+      const shot = run(s, 0.5).find(e => e.type === 'shot');
+      // From the top of the leap (the frame-by-frame jump peaks a few cm under the exact one)...
+      expect(Math.abs((shot?.at.y ?? 0) - next.at.y), `release height after ${rise} s`).toBeLessThan(0.08);
+      // ...at the same heading and speed: within 0.045 m/s (a few cm at the rim), where a set shot's arc is 0.06 off.
+      expect(Math.hypot(s.ball.v.x - v.x, s.ball.v.z - v.z), `flight after ${rise} s`).toBeLessThan(0.045);
+    }
+  });
+  it('waits for the top when the thumb lets go on the way up', () => {
+    const s = createShootaround(); startAim(s); jump(s);
+    run(s, 0.2);
+    expect(shoot(s, ideal)).toBeNull(); expect(s.mode).toBe('aim');
+    const shot = run(s, 0.3).find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.release).toBeGreaterThan(0.85);
+    expect(run(s, 3).some(e => e.type === 'score')).toBe(true);
+  });
+  it('rates a set shot as no jump at all', () => {
+    const s = createShootaround(); startAim(s);
+    const event = shoot(s, ideal);
+    expect(event?.type === 'shot' && event.release).toBe(0);
+  });
+  it('dunks on a jump right by the rim, slamming it down through the ring once', () => {
+    const s = createShootaround(); s.player.x = 0.3; s.player.z = RIM.z + 0.8;
+    jump(s);
+    const events = run(s, 2);
+    const shot = events.find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.move).toBe('dunk');
+    expect(events.filter(e => e.type === 'score')).toHaveLength(1);
+    expect([s.score, s.shots]).toEqual([1, 1]);
+    expect(s.player.y).toBe(0);
+  });
+  it('lays it up on a jump a little further out', () => {
+    const s = createShootaround(); s.player.x = 1; s.player.z = RIM.z + 2;
+    expect(Math.hypot(s.player.x - RIM.x, s.player.z - RIM.z)).toBeGreaterThan(DUNK_R);
+    jump(s);
+    const events = run(s, 3);
+    const shot = events.find(e => e.type === 'shot');
+    expect(shot?.type === 'shot' && shot.move).toBe('layup');
+    expect(s.score).toBe(1);
+  });
+  it('starts out of layup range, so a jump from the opening spot is just a jump', () => {
+    const s = createShootaround();
+    expect(Math.hypot(s.player.x - RIM.x, s.player.z - RIM.z)).toBeGreaterThan(LAYUP_R);
+  });
+  it('only jumps further out, or without the ball', () => {
+    const far = createShootaround(); far.player.z = RIM.z + LAYUP_R + 0.5;
+    jump(far); expect(run(far, 1.5).some(e => e.type === 'shot')).toBe(false); expect(far.mode).toBe('held');
+    const empty = createShootaround(); empty.player.z = RIM.z + 0.8; empty.mode = 'loose'; empty.ball.p = { x: 3, y: BALL_R, z: 6 };
+    jump(empty); expect(run(empty, 1.5).some(e => e.type === 'shot')).toBe(false);
+  });
+  it('counts makes in a row and resets the streak on a miss', () => {
+    const s = createShootaround();
+    for (let i = 0; i < 3; i++) { s.mode = 'held'; startAim(s); shoot(s, ideal); run(s, 2.5); }
+    expect([s.made, s.streak]).toEqual([3, 3]);
+    s.mode = 'held'; startAim(s); shoot(s, { dx: 0, dy: -25, minSide: 390 });
+    expect(run(s, 3).filter(e => e.type === 'miss')).toHaveLength(1);
+    expect(s.streak).toBe(0);
+  });
+  it('praises a streak as Catcha does', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13].map(streakWord)).toEqual([null, null, 'excellent', null, 'wonderful', null, 'brilliant', null, 'excellent', 'wonderful', 'brilliant']);
+  });
+  it('scores two from beyond the arc', () => {
+    const s = createShootaround(); s.player.z = RIM.z + ARC_R + 0.8;
+    startAim(s); shoot(s, ideal); run(s, 3);
+    expect(s.score).toBe(2);
+  });
+  it('cannot aim or shoot without the ball', () => {
+    const s = createShootaround();
+    startAim(s); shoot(s, ideal); run(s, 0.3);
+    expect(startAim(s)).toBe(false); expect(shoot(s, ideal)).toBeNull();
+  });
+  it('picks up a loose ball within reach', () => {
+    const s = createShootaround();
+    s.mode = 'loose'; s.ball.p = { x: s.player.x + 0.4, y: BALL_R, z: s.player.z }; s.ball.v = { x: 0, y: 0, z: 0 };
+    expect(run(s, 0.1).some(e => e.type === 'pickup')).toBe(true);
+    expect(s.mode).toBe('held');
+  });
+  for (const [where, p] of [['off the side', { x: FENCE.side - 0.6, y: 1.5, z: 3 }], ['behind the backboard', { x: 1.5, y: 1.5, z: -1 }]] as const) {
+    it(`leaves a ball that goes out ${where} for Dad to walk over and fetch`, () => {
+      const s = createShootaround();
+      s.mode = 'loose'; s.ball.p = { ...p }; s.ball.v = { x: 0, y: 0, z: 0 };
+      run(s, 4); // no toss back: it settles where it went and waits
+      expect(Math.hypot(s.ball.p.x - s.player.x, s.ball.p.z - s.player.z)).toBeGreaterThan(2);
+      let picked = false;
+      for (let i = 0; i < 480 && !picked; i++) {
+        const dx = s.ball.p.x - s.player.x, dz = s.ball.p.z - s.player.z, len = Math.hypot(dx, dz) || 1;
+        picked = stepShootaround(s, 1 / 60, { x: dx / len, z: dz / len, sprint: false }).some(e => e.type === 'pickup');
+      }
+      expect(picked).toBe(true);
+    });
+  }
+  it('jumps with a crouch first and lands', () => {
+    const s = createShootaround();
+    jump(s); run(s, 0.05); expect(s.player.y).toBe(0);
+    run(s, 0.2); expect(s.player.y).toBeGreaterThan(0.3);
+    run(s, 1); expect(s.player.y).toBe(0);
+  });
+});

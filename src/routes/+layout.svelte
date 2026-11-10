@@ -7,6 +7,9 @@
 
 
     onMount(() => {
+        // A long press on a phone selects text or opens a menu on top of the game's own hold; no page here has text to select.
+        const block = (event: Event) => event.preventDefault();
+        for (const type of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(type, block);
         if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
         const register = () => {
             if (!navigator.onLine) return;

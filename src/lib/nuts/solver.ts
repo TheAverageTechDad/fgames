@@ -24,13 +24,17 @@ export function isLevelSolved(bolts: NutColor[][], capacity = 4): boolean {
 	return true;
 }
 
-export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = Infinity): NutMove[] | null {
+/**
+ * A* over grouped moves. weight 1 gives the shortest solution; big boards (9+ colours of 6) are too
+ * large for that, so they search with weight > 1, which finds a near-shortest solution quickly.
+ */
+export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = Infinity, weight = 1): NutMove[] | null {
 	if (isLevelSolved(bolts, capacity)) return [];
 
 	const queue = new MinHeap<{ state: NutColor[][]; path: NutMove[] }>();
 	const visited = new Map<string, number>();
 
-	queue.push({ state: bolts.map((b) => [...b]), path: [] }, lowerBound(bolts));
+	queue.push({ state: bolts.map((b) => [...b]), path: [] }, weight * lowerBound(bolts));
 	visited.set(canonicalKey(bolts), 0);
 
 	while (queue.size > 0 && visited.size < maxStates) {
@@ -93,7 +97,7 @@ export function solveNutsGame(bolts: NutColor[][], capacity = 4, maxStates = Inf
 						queue.push({
 							state: nextState,
 							path: [...path, { from: i, to: j, count: moveCount }]
-						}, path.length + 1 + lowerBound(nextState));
+						}, path.length + 1 + weight * lowerBound(nextState));
 					}
 				}
 			}

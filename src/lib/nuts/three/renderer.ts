@@ -1,16 +1,18 @@
 import * as THREE from 'three';
-import {getNutGeometry,createBoltMeshGroup} from './geometries';
+import {getNutGeometry,createBoltMeshGroup,getCapGeometry} from './geometries';
 import {getNutIconTexture,makeCanvas} from './textures';
 import {NUT_THEMES,type NutColor,type NutItem} from '../types';
-import {createGraphicsPolicy} from '#lib/feedback/graphics-settings.js';
-export interface SceneState {bolts:NutItem[][];selectedBolt:number|null;hintMove:{from:number;to:number}|null;isWon:boolean;capacity:number;guided:boolean;}
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+export interface SceneState {bolts:NutItem[][];selectedBolt:number|null;hintMove:{from:number;to:number}|null;isWon:boolean;capacity:number;guided:boolean;nudge?:{bolt:number;at:number}|null;}
 export interface Viewport {width:number;height:number;dpr:number;}
 export interface SceneCallbacks {bolt:(index:number)=>void;settled:()=>void;targets:(targets:{x:number;y:number}[])=>void;ready:()=>void;}
 /** The existing Three scene runs unchanged in a worker, with a main-thread fallback. */
 export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,viewport:Viewport,state:SceneState,callbacks:SceneCallbacks){
  let {bolts,selectedBolt,hintMove,isWon,capacity,guided}=state;
+ let lastNudge=state.nudge?.at??0;
  const onBoltClick=callbacks.bolt,onSettled=callbacks.settled;
- const graphics=createGraphicsPolicy();
+ // ponytail: a static puzzle board is cheap, so it always renders at native resolution (up to 3x)
+ const pixelRatio=()=>Math.min(viewport.dpr||1,3);
  let alive=true,ready=false;
  const schedule=typeof requestAnimationFrame==='function'?requestAnimationFrame:(callback:FrameRequestCallback)=>setTimeout(()=>callback(performance.now()),16) as unknown as number;
  const cancel=typeof cancelAnimationFrame==='function'?cancelAnimationFrame:clearTimeout;
@@ -24,39 +26,29 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 	// Constants for 3D layout (Scaled down & spaced out for clean, airy layout)
 	const NUT_HEIGHT = 0.50;
-	const NUT_BASE_Y = 0.22;
-	const SHAFT_TOP_Y = 2.57;
-	const HOVER_Y_OFFSET = 3.25;
+	const NUT_BASE_Y = 0.42; // nut is .50 tall and centred: its bottom rests on the base hub (y .16)
+	const SHAFT_TOP_Y = 2.57; // the shaft is built for 4 nuts; taller stacks stretch it (see buildScene)
+	// Lift height for a selected nut: clear of the shaft tip at any capacity (3.25 for the usual 4).
+	const hoverOffset = () => Math.max(3.25, NUT_BASE_Y + capacity * NUT_HEIGHT + 0.83);
+	let HOVER_Y_OFFSET = hoverOffset();
 
 	const BOLT_SPACING_X_TOP = 2.24;
 	const BOLT_SPACING_X_BOTTOM = 1.95;
-	const TOP_Y = 1.30;
-	const BOTTOM_Y = -2.35;
 
 	function getBoltPosition(index: number, total: number): THREE.Vector3 {
 		if (total <= 4) {
 			const x = (index - (total - 1) / 2) * BOLT_SPACING_X_TOP;
 			return new THREE.Vector3(x, 0, 0);
 		}
-		if (total <= 6) {
-			const isTop = index < 3;
-			const col = isTop ? index : index - 3;
-			const x = (col - 1) * 2.3;
-			const y = isTop ? 1.4 : -1.8;
-			return new THREE.Vector3(x, y, 0);
-		}
-		const topCount = Math.ceil(total / 2);
-        if (index < topCount) {
-			// Top row of 4 bolts
-			const x = (index - (topCount - 1) / 2) * BOLT_SPACING_X_TOP;
-			return new THREE.Vector3(x, TOP_Y, 0);
-		} else {
-			// Bottom row of remaining bolts (centered)
-			const bottomCount = total - topCount;
-			const bottomIdx = index - topCount;
-			const x = (bottomIdx - (bottomCount - 1) / 2) * BOLT_SPACING_X_BOTTOM;
-			return new THREE.Vector3(x, BOTTOM_Y, 0);
-		}
+		// Two rows. The gap follows the stack height so a lifted nut on the bottom row stays clear of
+		// the row above, whatever the level's capacity.
+		const rowGap = HOVER_Y_OFFSET + 0.9;
+		const topCount = total <= 6 ? 3 : Math.ceil(total / 2);
+		const isTop = index < topCount;
+		const count = isTop ? topCount : total - topCount;
+		const col = isTop ? index : index - topCount;
+		const spacing = total <= 6 ? 2.3 : BOLT_SPACING_X_BOTTOM;
+		return new THREE.Vector3((col - (count - 1) / 2) * spacing, isTop ? rowGap / 2 : -rowGap / 2, 0);
 	}
 
 	// Nut animation state structure
@@ -87,23 +79,33 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 	const nutInstances: Map<string, NutInstance> = new Map();
 	const boltMeshes: THREE.Group[] = [];
+	// One gold acorn nut per bolt: screwed on once that bolt's set is finished, so it reads as locked.
+	const caps: THREE.Mesh[] = [];
+	const capProgress: number[] = [];
+	const capWobble: number[] = [];
+	const CAP_DROP = 0.32;
+	const WOBBLE = 0.45;
 
 	// Materials (Clean matte finish for nuts, crisp metallic for screw shafts)
-	const nutMaterials: Map<NutColor, THREE.MeshStandardMaterial> = new Map();
+	const nutMaterials: Map<NutColor, THREE.MeshPhysicalMaterial> = new Map();
 	let boltMaterial: THREE.MeshStandardMaterial;
 	let baseMaterial: THREE.MeshStandardMaterial;
 	let lockedBaseMaterial: THREE.MeshStandardMaterial;
+	let capMaterial: THREE.MeshStandardMaterial;
 	let hintSourceMarker: THREE.Group;
 	let hintTargetMarker: THREE.Group;
 
-	function getNutMaterial(color: NutColor): THREE.MeshStandardMaterial {
+	function getNutMaterial(color: NutColor): THREE.MeshPhysicalMaterial {
 		if (nutMaterials.has(color)) return nutMaterials.get(color)!;
 
 		const theme = NUT_THEMES[color];
-		const mat = new THREE.MeshStandardMaterial({
+		// glossy toy plastic: a clear coat over a saturated base, like the reference game's nuts
+		const mat = new THREE.MeshPhysicalMaterial({
 			color: new THREE.Color(theme.primary),
-			roughness: 0.62,
-			metalness: 0.04
+			roughness: 0.42,
+			metalness: 0,
+			clearcoat: 0.8,
+			clearcoatRoughness: 0.22
 		});
 		nutMaterials.set(color, mat);
 		return mat;
@@ -125,11 +127,17 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			powerPreference: 'default'
 		});
 		renderer.setSize(viewport.width, viewport.height, false);
-		renderer.setPixelRatio(graphics.dimensions(viewport.width,viewport.height,viewport.dpr).sceneRatio);
+		renderer.setPixelRatio(pixelRatio());
 		renderer.shadowMap.enabled = false;
 		renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-		renderer.toneMapping = THREE.ACESFilmicToneMapping;
-		renderer.toneMappingExposure = 1.22;
+		// Neutral keeps the nut colours saturated (ACES at 1.22 washed them out, as it did in Catcha)
+		renderer.toneMapping = THREE.NeutralToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		// reflections for the steel bolts and the nuts' clear coat
+		const pmrem = new THREE.PMREMGenerator(renderer);
+		scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+		scene.environmentIntensity = 0.7;
+		pmrem.dispose();
 
 		raycaster = new THREE.Raycaster();
 		pointer = new THREE.Vector2();
@@ -137,15 +145,15 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 		// Studio 3-Point + Hemisphere Lighting
 		// 1. Soft purple ambient bounce matching background
-		const ambient = new THREE.AmbientLight(new THREE.Color('#fff6e6'), 1.4);
+		const ambient = new THREE.AmbientLight(new THREE.Color('#fff6e6'), 0.25);
 		scene.add(ambient);
 
 		// 2. Hemisphere Light (Soft Sky White above, Slate/Ground below)
-		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7058, 1.6);
+		const hemiLight = new THREE.HemisphereLight(0xffffff, 0x6b7058, 0.45);
 		scene.add(hemiLight);
 
 		// 3. Main Key Light (Warm white, cast soft shadows)
-		const keyLight = new THREE.DirectionalLight(new THREE.Color('#ffffff'), 2.6);
+		const keyLight = new THREE.DirectionalLight(new THREE.Color('#ffffff'), 2.0);
 		keyLight.position.set(-6, 16, 12);
 		keyLight.castShadow = false;
 		keyLight.shadow.mapSize.width = 1024;
@@ -156,12 +164,12 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 		scene.add(keyLight);
 
 		// 4. Cool Specular Rim Light (Cyan/Blue back highlight)
-		const rimLight = new THREE.DirectionalLight(new THREE.Color('#93c5fd'), 2.2);
+		const rimLight = new THREE.DirectionalLight(new THREE.Color('#93c5fd'), 0.7);
 		rimLight.position.set(8, 12, -7);
 		scene.add(rimLight);
 
 		// 5. Direct Top Highlight
-		const topLight = new THREE.DirectionalLight(new THREE.Color('#f8fafc'), 1.8);
+		const topLight = new THREE.DirectionalLight(new THREE.Color('#f8fafc'), 0.9);
 		topLight.position.set(0, 16, 4);
 		scene.add(topLight);
 
@@ -184,6 +192,14 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			color: new THREE.Color('#2d1f47'),
 			metalness: 0.2,
 			roughness: 0.6
+		});
+
+		capMaterial = new THREE.MeshStandardMaterial({
+			color: new THREE.Color('#f5b82e'),
+			metalness: 0.75,
+			roughness: 0.3,
+			emissive: new THREE.Color('#5c3b00'),
+			emissiveIntensity: 0.25
 		});
 
 		// 3D Hint Source Marker (Pulsing Gold Torus Ring)
@@ -214,8 +230,11 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	}
 
 	function buildScene() {
+		HOVER_Y_OFFSET = hoverOffset();
 		boltMeshes.forEach((m) => scene.remove(m));
 		boltMeshes.length = 0;
+		caps.forEach((cap) => scene.remove(cap));
+		caps.length = capProgress.length = capWobble.length = 0;
 
 		const totalBolts = bolts.length;
 
@@ -223,6 +242,8 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			const isExtraEmpty = i >= bolts.length;
 			const bMat = isExtraEmpty ? lockedBaseMaterial : baseMaterial;
 			const boltGroup = createBoltMeshGroup(boltMaterial, bMat, isExtraEmpty);
+			// keep the shaft tip above the stack when a level holds more than 4 nuts
+			boltGroup.children.at(-1)!.scale.y = Math.max(1, (NUT_BASE_Y + capacity * NUT_HEIGHT + 0.15) / SHAFT_TOP_Y);
 
 			const pos = getBoltPosition(i, totalBolts);
 			boltGroup.position.copy(pos);
@@ -246,6 +267,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
 			scene.add(boltGroup);
 			boltMeshes.push(boltGroup);
+
+			const cap = new THREE.Mesh(getCapGeometry(), capMaterial);
+			cap.visible = false;
+			scene.add(cap);
+			caps.push(cap);
+			capProgress.push(0);
+			capWobble.push(0);
 		}
 
 		syncNuts();
@@ -437,13 +465,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 
         const positions=bolts.map((_,i)=>getBoltPosition(i,bolts.length));
         if(!positions.length)return;
-        const minX=Math.min(...positions.map(p=>p.x))-1.15;
-        const maxX=Math.max(...positions.map(p=>p.x))+1.15;
+        const minX=Math.min(...positions.map(p=>p.x))-1.0;
+        const maxX=Math.max(...positions.map(p=>p.x))+1.0;
         const minY=Math.min(...positions.map(p=>p.y))-.7;
         const maxY=Math.max(...positions.map(p=>p.y))+HOVER_Y_OFFSET+1.4;
         const centerY=(minY+maxY)/2;
         const tan=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-        const distance=Math.max((maxX-minX)/(2*tan*aspect),(maxY-minY)/(2*tan))*1.16;
+        const distance=Math.max((maxX-minX)/(2*tan*aspect),(maxY-minY)/(2*tan))*1.06;
         camera.position.set(0,centerY+distance*.23,distance);
         camera.lookAt(0,centerY,0);
         camera.updateProjectionMatrix();
@@ -456,6 +484,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 	function handleResize() {
 		if (!renderer || !camera) return;
 		updateCameraFraming();
+		renderer.setPixelRatio(pixelRatio());
 		renderer.setSize(viewport.width, viewport.height, false);
 	}
 
@@ -472,7 +501,6 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 		const delta = Math.min(rawDelta, 0.05); // Cap to 50ms to prevent jumps if tab backgrounded
 		const time = clock.getElapsedTime();
 		const totalBolts = bolts.length;
-        if(graphics.sample(rawDelta*1000,true))renderer.setPixelRatio(graphics.dimensions(viewport.width,viewport.height,viewport.dpr).sceneRatio);
 
 		for (const inst of nutInstances.values()) {
 			const anim = inst.anim;
@@ -568,6 +596,23 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			}
 		}
 
+		// Locking caps: drop and screw on once a finished bolt's nuts have all landed.
+		bolts.forEach((nuts, i) => {
+			const cap = caps[i];
+			if (!cap) return;
+			const finished = nuts.length === capacity && nuts.every((n) => n.color === nuts[0].color);
+			if (!finished) { cap.visible = false; capProgress[i] = 0; capWobble[i] = 0; return; }
+			if (!nuts.every((n) => nutInstances.get(n.id)?.anim.state === 'resting')) return;
+			const pos = getBoltPosition(i, totalBolts);
+			capProgress[i] = Math.min(1, capProgress[i] + delta / CAP_DROP);
+			const t = easeOutCubic(capProgress[i]);
+			capWobble[i] = Math.max(0, capWobble[i] - delta);
+			const w = capWobble[i] / WOBBLE;
+			cap.visible = true;
+			cap.position.set(pos.x, pos.y + NUT_BASE_Y + capacity * NUT_HEIGHT - NUT_HEIGHT / 2 + (1 - t) * 0.9, pos.z);
+			cap.rotation.set(0, (1 - t) * -Math.PI * 2, Math.sin(w * Math.PI * 6) * 0.14 * w);
+		});
+
 		// 3D Hint Indicators (Pulsing glowing rings above source and destination)
 		if (hintMove) {
 			const total = bolts.length;
@@ -576,13 +621,13 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
 			const pulse = 1.0 + Math.sin(time * 6.5) * 0.12;
 
 			if (hintSourceMarker) {
-				hintSourceMarker.position.set(srcPos.x, srcPos.y + 3.4, srcPos.z);
+				hintSourceMarker.position.set(srcPos.x, srcPos.y + HOVER_Y_OFFSET + 0.15, srcPos.z);
 				hintSourceMarker.scale.set(pulse, pulse, pulse);
 				hintSourceMarker.rotation.y = time * 2.0;
 				hintSourceMarker.visible = true;
 			}
 			if (hintTargetMarker) {
-				hintTargetMarker.position.set(dstPos.x, dstPos.y + 3.4, dstPos.z);
+				hintTargetMarker.position.set(dstPos.x, dstPos.y + HOVER_Y_OFFSET + 0.15, dstPos.z);
 				hintTargetMarker.scale.set(pulse, pulse, pulse);
 				hintTargetMarker.rotation.y = -time * 2.0;
 				hintTargetMarker.visible = true;
@@ -626,7 +671,7 @@ export function createNutsRenderer(canvas:HTMLCanvasElement|OffscreenCanvas,view
  initThree();buildScene();
  void renderer.compileAsync(scene,camera).then(()=>{if(alive)animate();});
  return {
-  update(next:SceneState){const oldLength=bolts.length;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(oldLength!==bolts.length)buildScene();else syncNuts();},
+  update(next:SceneState){const oldLength=bolts.length,oldCapacity=capacity;({bolts,selectedBolt,hintMove,isWon,capacity,guided}=next);if(next.nudge&&next.nudge.at!==lastNudge){lastNudge=next.nudge.at;capWobble[next.nudge.bolt]=WOBBLE;}if(oldLength!==bolts.length||oldCapacity!==capacity)buildScene();else syncNuts();},
   resize(next:Viewport){viewport=next;handleResize();},
   pointer:pointerDown,
   destroy(){alive=false;cancel(animationFrameId);scene.traverse(obj=>{if(obj instanceof THREE.Mesh){obj.geometry.dispose();const materials=Array.isArray(obj.material)?obj.material:[obj.material];for(const material of materials){if(material.map)material.map.dispose();material.dispose();}}});renderer.dispose();}

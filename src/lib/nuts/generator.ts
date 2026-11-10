@@ -3,33 +3,15 @@ import { isLevelSolved } from './solver.ts';
 import { NUTS_LEVELS } from './levels.ts';
 import type { NutsLevel, NutColor } from './types.ts';
 
-const ALL_COLORS: NutColor[] = ['blue', 'orange', 'green', 'yellow', 'red', 'purple'];
+const ALL_COLORS: NutColor[] = ['blue', 'orange', 'green', 'yellow', 'red', 'purple', 'pink', 'cyan', 'brown', 'lime'];
 
+// Sized against the reference game, whose Hard is 9 colours of 6 nuts with 2 empty bolts (~43 moves).
+// One empty bolt makes these unsolvable, so Extra Hard grows the stacks instead.
 const DIFFICULTY_CONFIG = {
-	easy: {
-		colorCount: 3,
-		capacity: 4,
-		emptyBolts: 2,
-		shuffleSteps: 30
-	},
-	medium: {
-		colorCount: 5,
-		capacity: 4,
-		emptyBolts: 2,
-		shuffleSteps: 45
-	},
-	hard: {
-		colorCount: 5,
-		capacity: 4,
-		emptyBolts: 2,
-		shuffleSteps: 60
-	},
-	extra_hard: {
-		colorCount: 6,
-		capacity: 4,
-		emptyBolts: 2,
-		shuffleSteps: 160
-	}
+	easy: { colorCount: 4, capacity: 4, emptyBolts: 2, shuffleSteps: 30 },
+	medium: { colorCount: 6, capacity: 5, emptyBolts: 2, shuffleSteps: 60 },
+	hard: { colorCount: 9, capacity: 6, emptyBolts: 2, shuffleSteps: 120 },
+	extra_hard: { colorCount: 10, capacity: 7, emptyBolts: 2, shuffleSteps: 200 }
 };
 
 // Curated levels lookup
@@ -69,7 +51,6 @@ export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'h
 	const totalBolts = config.colorCount + config.emptyBolts;
 
     // Offline candidate mode: the build script checks solvability and exact move count.
-    // Six distinct colours keep advanced boards readable without pink/cyan near-duplicates.
     if (!preferCurated) {
         const pieces=prng.shuffle(colors.flatMap(color=>Array(config.capacity).fill(color)));
         const candidate: NutColor[][]=[];
@@ -144,6 +125,7 @@ export function getNutsLevel(levelId: number, difficulty: 'easy' | 'medium' | 'h
 		id: levelId,
 		name: `Level ${levelId}`,
 		difficulty,
+		capacity: config.capacity,
 		bolts
 	};
 }

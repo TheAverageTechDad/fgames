@@ -66,20 +66,21 @@ describe('Nuts & Bolts Solver and Generator', () => {
 		for (const difficulty of ['easy', 'medium', 'hard', 'extra_hard'] as const) {
 			for (let id = 1; id <= 12; id++) {
 				const level = getNutsLevel(id, difficulty);
+				const cap = level.capacity ?? 4;
 				const counts = new Map<NutColor, number>();
 				for (const bolt of level.bolts) {
-					expect(bolt.length).toBeLessThanOrEqual(4);
+					expect(bolt.length).toBeLessThanOrEqual(cap);
 					for (const color of bolt) counts.set(color, (counts.get(color) ?? 0) + 1);
 				}
-				expect([...counts.values()].every((count) => count === 4)).toBe(true);
-				expect(isLevelSolved(level.bolts)).toBe(false);
+				expect([...counts.values()].every((count) => count === cap)).toBe(true);
+				expect(isLevelSolved(level.bolts, cap)).toBe(false);
 				expect(level.bolts.some((bolt) => bolt.length === 0)).toBe(true);
 			}
 		}
 		for (const difficulty of ['easy', 'medium'] as const) {
 			for (const id of [1, 4, 7]) {
 				const level = getNutsLevel(id, difficulty);
-				expect(solveNutsGame(level.bolts, 4, 100000), `${difficulty} ${id}`).not.toBeNull();
+				expect(solveNutsGame(level.bolts, level.capacity ?? 4, 100000), `${difficulty} ${id}`).not.toBeNull();
 			}
 		}
 	});

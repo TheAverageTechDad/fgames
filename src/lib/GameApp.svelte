@@ -13,6 +13,8 @@
  let {library}:{library?:Library}=$props();
  const selectedGame=$derived(page.params.game==='escape'?'escape':'nuts');
  const screen=$derived(!page.params.game?'home':page.url.pathname.endsWith('/play')?'play':'difficulty');
+ // the status-bar strip shows the page background: match the screen so play runs edge to edge
+ $effect(()=>{document.documentElement.style.setProperty('--screen-bg',screen!=='play'?'#fff6e6':selectedGame==='nuts'?'#e1e8d1':'#d3deca');});
  const currentDifficulty=$derived((['easy','medium','hard','extra_hard'].includes(page.url.searchParams.get('difficulty')??'')?page.url.searchParams.get('difficulty'):'easy') as Difficulty);
  let initialLevel=$state(1);
  $effect(()=>{initialLevel=Math.max(1,Math.min(savedLevel(selectedGame,currentDifficulty),Number(page.url.searchParams.get('stage'))||savedLevel(selectedGame,currentDifficulty)));});
@@ -28,7 +30,7 @@
  const goDifficulty=()=>backTo(`/${selectedGame}?difficulty=${currentDifficulty}`);
 </script>
 <svelte:head><title>{screen==='home'?'Offline Games':selectedGame==='nuts'?'Nuts & Bolts · Offline Games':'Escape · Offline Games'}</title></svelte:head>
-<div class="app-surround"><div class="app-shell">
+<div class="app-surround"><div class="app-shell" class:home-shell={screen==='home'}>
  {#key `${screen}-${selectedGame}`}
  <div class="screen-transition">
  {#if screen==='home'}
@@ -36,9 +38,9 @@
  <GameHeader title="Offline Games"/>
  <main class="game-library">
  <p class="home-intro">Little games. Any spare moment.</p>
- {#each [{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'}] as game}
- <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();goto(`/${game.game}`,{state:{parent:'/'}});}} aria-label={`Play ${game.title}`}>
- <div class="library-art"><img src={`/cards/${game.game}-gameplay.webp`} alt={`${game.title} gameplay`} width="640" height="340"/></div>
+ {#each [{game:'phonics',title:'Sound It Out',description:'Slide along a word. Read it yourself.',skin:'grape'},{game:'hoops',title:'Hoops',description:'Dad, a ball and a hoop.',skin:'coral'},{game:'farm',title:'Pocket Farm',description:'Plant a little. Grow something lovely.',skin:'mint'},{game:'catcha',title:'Catcha',description:'Tidy, cook and play together.',skin:'coral'},{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'}] as game}
+ <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();if(game.game==='catcha')location.href='/catcha';else goto(`/${game.game}`,{state:{parent:'/'}});}} aria-label={`Play ${game.title}`}>
+ <div class="library-art"><img src={`/cards/${game.game}-poster-v1.webp`} alt={`${game.title} illustrated game cover`} width="1280" height="680" loading={game.game==='phonics'?'eager':'lazy'} decoding="async"/></div>
  <div class="library-label"><div><h2>{game.title}</h2><p>{game.description}</p></div><span class="card-play"><Icon name="play" size={26}/></span></div>
  </button>
  {/each}

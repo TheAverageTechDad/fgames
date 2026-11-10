@@ -23,7 +23,7 @@
  {#each difficulties as d,i}<button class={`toy-button ${currentDifficulty===d?skins[i]:''}`} aria-pressed={currentDifficulty===d} onclick={()=>choose(d)}>{labels[i]}{#if currentDifficulty===d}<Icon name="check" size={20}/>{/if}</button>{/each}
  </div>
  <label class="level-choice">Level <select aria-label="Choose level" bind:value={selectedLevel}>{#each Array.from({length:unlocked},(_,i)=>i+1) as level}<option value={level}>{level}</option>{/each}</select><span>of 100</span></label>
- <div class="play-row"><button class="toy-button coral" onclick={()=>{sound.playTap();onPlay(selectedLevel);}}><Icon name="play"/>Play · Level {selectedLevel}</button><button class="toy-button icon-button" onclick={()=>help=true} aria-label="How to play"><Icon name="question"/></button></div>
+ <div class="play-row"><button class="toy-button coral" onclick={()=>{sound.playTap();onPlay(selectedLevel);}}><Icon name="play"/>Play · Level {selectedLevel}</button><button class="toy-button icon-button round" onclick={()=>help=true} aria-label="How to play"><Icon name="question"/></button></div>
  </main>
  {#if help}<HowToPlayModal {gameType} onClose={()=>help=false}/>{/if}
 </div>

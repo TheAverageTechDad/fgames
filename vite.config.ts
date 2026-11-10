@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 export default defineConfig({
 	plugins: [
@@ -22,5 +23,7 @@ export default defineConfig({
 				strict: true
 			})
 		})
-	]
+	],
+	// Catcha's suite is node:test — run it with `node --test src/lib/games/catcha/tests/`
+	test: { exclude: [...configDefaults.exclude, 'src/lib/games/catcha/**'] }
 });
