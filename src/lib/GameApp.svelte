@@ -30,7 +30,7 @@
  const goDifficulty=()=>backTo(`/${selectedGame}?difficulty=${currentDifficulty}`);
 </script>
 <svelte:head><title>{screen==='home'?'Offline Games':selectedGame==='nuts'?'Nuts & Bolts · Offline Games':'Escape · Offline Games'}</title></svelte:head>
-<div class="app-surround"><div class="app-shell">
+<div class="app-surround"><div class="app-shell" class:home-shell={screen==='home'}>
  {#key `${screen}-${selectedGame}`}
  <div class="screen-transition">
  {#if screen==='home'}
