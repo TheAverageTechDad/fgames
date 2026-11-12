@@ -179,7 +179,7 @@
             {#each view.tray as id (id)}
               <button class="tile" class:held={view.held === id} data-piece={id} aria-label={view.held === id ? `Put the ${byId[id]?.name.toLowerCase()} back` : byId[id]?.name} aria-pressed={view.held === id}
                 onclick={() => { if (trayPress?.lifted) { trayPress = null; return; } engine?.pick(id); }} onpointerdown={trayDown} onpointermove={e => trayMove(e, id)} oncontextmenu={e => e.preventDefault()}>
-                {#if thumbs[id]}<img src={thumbs[id]} alt="" draggable="false">{:else}<span>{byId[id]?.name}</span>{/if}
+                {#if thumbs[id]}<img src={thumbs[id]} alt="" draggable="false">{/if}<span>{byId[id]?.name}</span>
                 {#if view.held === id}<i class="put-back" aria-hidden="true"><Icon name="x" size={14}/></i>{/if}
               </button>
             {/each}
@@ -299,11 +299,13 @@
   .mode-badge{display:grid;place-items:center;width:36px;height:36px;min-width:36px;border-radius:50%;background:#ffd36b;border:2px solid var(--ink)}
   .mode:nth-child(2) .mode-badge{background:#86ceff}.mode:nth-child(3) .mode-badge{background:#ff9a7a}
   .mode-text{display:flex;flex-direction:column;gap:1px}.mode-text b{font-family:'Luckiest Guy',cursive;font-weight:400;font-size:19px;letter-spacing:.02em}.mode-text small{font-size:13px;color:var(--ink-soft)}
-  .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:12px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none}
+  .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:12px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none;align-items:flex-end}
   .tray::-webkit-scrollbar{display:none}
-  .tile{position:relative;flex:0 0 auto;display:grid;place-items:center;width:62px;height:62px;padding:3px;border:0;border-radius:16px;background:#fff6e6e6;box-shadow:0 2px 0 #241b3a33;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s,background .15s}
+  .tile{position:relative;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;width:62px;min-height:62px;padding:3px;border:0;border-radius:16px;background:#fff6e6e6;box-shadow:0 2px 0 #241b3a33;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s,background .15s}
   .tile img{width:56px;height:56px;border-radius:12px;pointer-events:none;-webkit-user-drag:none}
-  .tile span{font-size:10px;line-height:1.1;text-align:center}
+  /* the name stays tucked away until you pick the part up, then slides out underneath it */
+  .tile span{font-size:10px;line-height:1.1;text-align:center;max-height:0;opacity:0;overflow:hidden;translate:0 -4px;transition:max-height .25s ease,opacity .2s ease .05s,translate .25s ease,margin .25s ease}
+  .tile.held span,.tile:not(:has(img)) span{max-height:2.4em;opacity:1;translate:0 0;margin:2px 0 1px}
   .tile.held{background:#ffd36b;transform:translateY(-5px);box-shadow:0 0 0 3px var(--ink),0 5px 0 #241b3a55}
   .put-back{position:absolute;top:-4px;right:-4px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#fff6e6;border:2px solid var(--ink);color:var(--ink)}
   .clock{font-variant-numeric:tabular-nums;min-width:62px;justify-content:center}
@@ -358,7 +360,7 @@
     .card{max-width:380px;padding:8px 14px 10px;gap:3px}.card h2{font-size:22px}.toy-button.big{min-height:48px;font-size:19px;margin-top:2px}
     .pedal{width:96px;height:96px;font-size:22px}.swatch{width:40px;height:40px}
     .modes{flex-direction:row}.mode{flex-direction:column;text-align:center;gap:4px;padding:6px}.mode-text small{font-size:11px}.card.home{max-width:620px}
-    .tile{width:54px;height:54px}.tile img{width:48px;height:48px}
+    .tile{width:54px;min-height:54px}.tile img{width:48px;height:48px}
     /* building from the tray: the parts stand in a thin column down the right, the bike gets the rest */
     .tray{position:fixed;top:calc(var(--top) + 50px);bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:66px;margin:0;padding:12px 6px 8px;align-items:center;
       flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y proximity;touch-action:pan-y}
