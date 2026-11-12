@@ -111,7 +111,8 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
   // ---- loading ------------------------------------------------------------------------------------------------------
   const draco = new DRACOLoader().setDecoderPath('/garage/draco/');
   const loader = new GLTFLoader().setDRACOLoader(draco);
-  const ready = loader.loadAsync('/garage/roadster.glb').then(gltf => {
+  // a new file name for every new model: for one visit after a deploy, the old offline cache still answers for the old name
+  const ready = loader.loadAsync('/garage/roadster-v2.glb').then(gltf => {
     frameNode = gltf.scene.getObjectByName('part_frame') ?? null;
     bike = frameNode?.parent ?? gltf.scene;
     scene.add(gltf.scene);
@@ -128,7 +129,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     });
     for (const p of PARTS) {
       const node = bike.getObjectByName(`part_${p.id}`);
-      if (!node) throw new Error(`roadster.glb has no part_${p.id}`);
+      if (!node) throw new Error(`roadster-v2.glb has no part_${p.id}`);
       parts[p.id] = node;
     }
     if (paintMat) paintMat.color.set(paintColor(view.paint));
