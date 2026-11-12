@@ -14,13 +14,14 @@ describe('garage save', () => {
   });
   it('round-trips bikes and a build in progress', () => {
     const store = memory(null);
-    const garage = { bikes: [{ paint: 'blue' as const, stars: 7, built: 5, mode: 'master' as const }], building: { mode: 'mechanic' as const, placed: ['engine', 'forks'], paint: 'pink' as const }, voice: false, mode: 'mechanic' as const, radio: false };
+    const garage = { bikes: [{ paint: 'blue' as const, stars: 7, built: 5, mode: 'master' as const, time: 412 }], building: { mode: 'mechanic' as const, placed: ['engine', 'forks'], paint: 'pink' as const, time: 63.5 },
+      voice: false, mode: 'mechanic' as const, radio: false, best: { master: 412 } };
     saveGarage(store, garage);
     expect(readGarage(store)).toEqual(garage);
   });
   it('reads the first save format as an Apprentice build', () => {
     const g = readGarage(memory(JSON.stringify({ bikes: [{ paint: 'red', stars: 3, built: 1 }], building: { steps: 2, paint: 'green' }, voice: true })));
-    expect(g.building).toEqual({ mode: 'apprentice', placed: ['engine', 'swingarm'], paint: 'green' });
+    expect(g.building).toEqual({ mode: 'apprentice', placed: ['engine', 'swingarm'], paint: 'green', time: 0 });
     expect(g.bikes[0].mode).toBe('apprentice');
   });
   it('drops what it cannot trust', () => {
@@ -28,6 +29,9 @@ describe('garage save', () => {
     expect(g.bikes).toEqual([{ paint: 'red', stars: 0, built: 0, mode: 'apprentice' }]);
     expect(g.building).toBeNull();
     expect(readGarage(memory(JSON.stringify({ building: { mode: 'master', placed: ['tank', 'tank', 'engine', 7] } }))).building?.placed).toEqual(['tank']);
+    const odd = readGarage(memory(JSON.stringify({ best: { master: -4, mechanic: 'fast', apprentice: 9 }, building: { mode: 'master', placed: [], time: 'NaN' } })));
+    expect(odd.best).toEqual({});
+    expect(odd.building?.time).toBe(0);
   });
 });
 

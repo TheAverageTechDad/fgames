@@ -19,6 +19,8 @@ export type GarageView = {
   /** What the card says: a part's fact once it is on, or why a part didn't go where it was put. */
   note: string; noteKind: '' | 'fact' | 'wrong';
   mistakes: number; boltsLeft: number; paint: PaintId; radio: boolean;
+  /** Mechanic and Master: whole seconds on the build's stopwatch, and whether the finished time beat the mode's best. */
+  time: number; newBest: boolean;
   engine: 'off' | 'cranking' | 'running'; revved: boolean;
   stars: number; starTotal: number; progress: number; speed: number;
 };
@@ -63,7 +65,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
 
   // ---- state ------------------------------------------------------------------------------------------------------
   const view: GarageView = { phase: 'loading', mode: garage.building?.mode ?? garage.mode, stage: 'pick', held: '', placed: [], tray: [], total: 0,
-    note: '', noteKind: '', mistakes: 0, boltsLeft: 0, paint: garage.building?.paint ?? garage.bikes.at(-1)?.paint ?? 'red', radio: garage.radio,
+    note: '', noteKind: '', mistakes: 0, time: 0, newBest: false, boltsLeft: 0, paint: garage.building?.paint ?? garage.bikes.at(-1)?.paint ?? 'red', radio: garage.radio,
     engine: 'off', revved: false, stars: 0, starTotal: 0, progress: 0, speed: 0 };
   let changed = true;
   const set = (patch: Partial<GarageView>) => { Object.assign(view, patch); changed = true; };
@@ -75,7 +77,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
   const partBolts: Record<string, THREE.Vector3[]> = {};
   let pieces: Rt[] = [];
   const done = new Set<string>();
-  let held = -1;
+  let held = -1, timer = 0;
   const puzzle = () => view.mode !== 'apprentice';
 
   // ---- camera: framed by the game, turned, pinched and panned by the child ------------------------------------
@@ -135,7 +137,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     }
     if (paintMat) paintMat.color.set(paintColor(view.paint));
     const b = garage.building;
-    setup(b ? b.mode : garage.mode, b ? b.placed : garage.bikes.length ? 'all' : []);
+    setup(b ? b.mode : garage.mode, b ? b.placed : garage.bikes.length ? 'all' : [], b?.time ?? 0);
     stand.group.visible = !!b || !garage.bikes.length;
     room.setPhotos(garage.bikes);
     wholeBike(); placeCamera(0, true);
@@ -147,7 +149,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
   audio.radio(garage.radio);
 
   /** Group the bike's parts into this mode's pieces; `placed` are on already, the rest wait in the tray. */
-  function setup(mode: ModeId, placed: string[] | 'all') {
+  function setup(mode: ModeId, placed: string[] | 'all', time = 0) {
     for (const p of pieces) { for (const child of [...p.node.children]) bike.add(child); p.node.removeFromParent(); }
     const defs = piecesFor(mode);
     pieces = defs.map(def => {
@@ -164,7 +166,8 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     for (const p of pieces) { p.node.visible = done.has(p.def.id); p.node.position.set(0, 0, 0); p.node.scale.setScalar(1); }
     held = -1;
     const tray = mode === 'apprentice' ? [] : shuffle(pieces.filter(p => !done.has(p.def.id)).map(p => p.def.id));
-    set({ mode, placed: [...done], tray, total: pieces.length, held: '', stage: 'pick', note: '', noteKind: '', mistakes: 0 });
+    timer = time;
+    set({ mode, placed: [...done], tray, total: pieces.length, held: '', stage: 'pick', note: '', noteKind: '', mistakes: 0, time: Math.floor(time), newBest: false });
     if (mode !== 'apprentice') renderThumbs();
   }
   function shuffle<T>(list: T[]) { for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } return list; }
@@ -246,6 +249,12 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     if (view.phase !== 'build' || !puzzle() || flight || (view.stage !== 'pick' && view.stage !== 'present')) return;
     const i = pieces.findIndex(p => p.def.id === id); if (i < 0 || done.has(id)) return;
     audio.unlock();
+    if (held === i && !e) {
+      // a second tap on the same part puts it back on the bench, hands empty
+      if (view.stage !== 'present') return;
+      pieces[i].node.visible = false; held = -1; back = null;
+      set({ stage: 'pick', held: '' }); audio.tap(); return;
+    }
     if (held !== i) { if (held >= 0) pieces[held].node.visible = false; present(i); }
     if (e) {
       drag = { id: e.pointerId, kind: 'part', x: 0, y: 0, x0: 0, y0: 0, t0: performance.now(), moved: true, grab: new THREE.Vector3() };
@@ -292,14 +301,14 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
   function finishStep() {
     const p = pieces[held];
     done.add(p.def.id);
-    garage.building = { mode: view.mode, placed: [...done], paint: view.paint }; callbacks.save();
+    garage.building = { mode: view.mode, placed: [...done], paint: view.paint, time: timer }; callbacks.save();
     audio.chime(Math.round((done.size - 1) * 13 / Math.max(1, pieces.length - 1))); fx.sparkle(p.home.centre, 16, p.home.radius * 0.8);
     set({ stage: 'done', placed: [...done], tray: view.tray.filter(id => id !== p.def.id), note: p.def.fact, noteKind: 'fact' }); doneAt = clock;
     setTimeout(() => { if (view.note === p.def.fact) audio.say(p.def.fact); }, 650);
   }
   function next() {
     held = -1;
-    if (done.size >= pieces.length) { toPaint(); return; }
+    if (done.size >= pieces.length) { stopClock(); toPaint(); return; }
     if (puzzle()) { set({ stage: 'pick', held: '' }); return; }
     present(pieces.findIndex(p => !done.has(p.def.id)));
   }
@@ -452,6 +461,14 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     const tank = pieces.find(p => p.def.members.includes('tank'))!;
     fx.mist(tank.home.centre, paintColor(id), camera.position);
   }
+  /** The build's done: its time is kept with the bike, and becomes the mode's best if it beat it. */
+  function stopClock() {
+    if (!puzzle() || !garage.building) return;
+    const t = Math.max(1, Math.round(timer)), best = garage.best[view.mode], newBest = !best || t < best;
+    if (newBest) garage.best[view.mode] = t;
+    garage.building.time = t; callbacks.save();
+    set({ time: t, newBest });
+  }
   let standDrop = 0, standGoing = false;
   function toPaint() { set({ phase: 'paint', held: '', note: '', noteKind: '' }); frame(new THREE.Vector3(0.05, 0.8, 0), 0.62, 24, 22); resetView(); }
   function toStart() {
@@ -475,7 +492,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     set({ starTotal: ride.total });
   }
   function finishRide(stars: number) {
-    garage.bikes.push({ paint: view.paint, stars, built: Date.now(), mode: view.mode }); garage.building = null; callbacks.save();
+    garage.bikes.push({ paint: view.paint, stars, built: Date.now(), mode: view.mode, ...(puzzle() ? { time: view.time } : {}) }); garage.building = null; callbacks.save();
     room.setPhotos(garage.bikes);
     set({ phase: 'finish', stars });
     audio.fanfare();
@@ -500,7 +517,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     if (kind === 'ride') { stand.group.visible = false; toStart(); return; }
     if (kind === 'new') {
       // the old bike comes apart, last part first, back to the bare frame on its stand
-      garage.mode = mode; garage.building = { mode, placed: [], paint: view.paint }; callbacks.save();
+      garage.mode = mode; garage.building = { mode, placed: [], paint: view.paint, time: 0 }; callbacks.save();
       strip = { t: 0, from: pieces.filter(p => p.node.visible), mode }; stand.group.visible = true; standDrop = 0; stand.posts.position.y = 0;
       set({ phase: 'build', stage: 'done', held: '', note: '', noteKind: '' });
       wholeBike(); resetView();
@@ -529,6 +546,10 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     const phase = view.phase;
     if (phase === 'garage' && !posed) { goal.az = 25 + Math.sin(clock * 0.18) * 16; }
     if (phase === 'build') updateBuild(dt);
+    if (phase === 'build' && puzzle() && !strip && done.size < pieces.length) {
+      timer += dt;   // ponytail: frame time, capped at 50 ms a frame, so it runs a touch slow below 20 fps
+      if (Math.floor(timer) !== view.time) set({ time: Math.floor(timer) });
+    }
     if (paintMat && paintT < 1) { paintT = Math.min(1, paintT + dt / 0.8); paintMat.color.copy(paintFrom).lerp(paintTo, ease(paintT)); }
     if (standGoing) {
       standDrop = Math.min(1, standDrop + dt / 0.8); stand.posts.position.y = -0.14 * ease(standDrop);

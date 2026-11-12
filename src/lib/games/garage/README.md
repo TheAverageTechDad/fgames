@@ -6,6 +6,8 @@ Build a real motorbike part by part, paint it, fire it up and take it for its fi
 - **Mechanic**: the same 13 parts laid out in a tray, shuffled. No ghost, no hand, no camera help. Drop a part where it belongs; a part whose mounts aren't on yet is refused ("Not yet! First the back wheel, then the chain.").
 - **Master**: 28 smaller parts (crankcase, cylinders, carburettors, shocks, fork clamps, levers…), a tighter drop, so the small ones need a pinch-zoom.
 
+Mechanic and Master run a stopwatch from the first part to the last (it pauses with the game and carries over when a build is resumed); the fastest build per mode shows on its button as "Best m:ss". Apprentice is never timed. Tapping the part in hand's tile again (it shows a ×) puts it back on the bench.
+
 Every part that goes on shows and speaks a one-line fact about what it does. Part names are spoken as they're picked up.
 
 - `steps.ts`: `PARTS`, the 28 parts with what each bolts onto (the build's dependency graph) and a fact; `STEPS`, the 13 big steps in a mechanic's order with where each waits, how it slides in and its camera angle; `MODES`; `piecesFor(mode)`, which turns either into what the child fits; the seven paints and the dial sweeps.
