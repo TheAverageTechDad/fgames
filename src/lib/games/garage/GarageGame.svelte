@@ -41,11 +41,16 @@
   }
   // the tray scrolls sideways; pull a part up out of it to carry it straight onto the bike
   let trayPress: { x: number; y: number; id: number; lifted: boolean } | null = null;
-  function trayDown(e: PointerEvent) { trayPress = { x: e.clientX, y: e.clientY, id: e.pointerId, lifted: false }; }
+  function trayDown(e: PointerEvent) {
+    trayPress = { x: e.clientX, y: e.clientY, id: e.pointerId, lifted: false };
+    if (e.pointerType === 'mouse') (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);   // touch is captured already
+  }
   function trayMove(e: PointerEvent, part: string) {
     if (!trayPress || trayPress.id !== e.pointerId || trayPress.lifted) return;
-    const dx = e.clientX - trayPress.x, dy = e.clientY - trayPress.y;
-    if (dy < -14 && -dy > Math.abs(dx)) { trayPress.lifted = true; engine?.pick(part, e); }
+    // across the tray (up out of a sideways one, left out of the upright one on a phone on its side) lifts the part
+    const upright = getComputedStyle((e.currentTarget as HTMLElement).parentElement!).flexDirection === 'column';
+    const dx = e.clientX - trayPress.x, dy = e.clientY - trayPress.y, across = upright ? -dx : -dy, along = Math.abs(upright ? dy : dx);
+    if (across > 14 && across > along) { trayPress.lifted = true; engine?.pick(part, e); }
   }
   async function ride() {
     fading = true;
@@ -136,7 +141,7 @@
         <div class="card home" data-home>
           {#if choosing || (!building && !bikes)}
             <h2>{bikes ? 'Build another' : 'Build a motorbike'}</h2>
-            <p>Every part is a real one. How hard?</p>
+            <p>Real parts. How hard?</p>
             {@render modes()}
             {#if bikes}<button class="text-button" onclick={() => (choosing = false)}>Not now</button>{/if}
           {:else if building}
@@ -157,7 +162,7 @@
         {#key view.held + view.stage}
           <div class="card step" class:done={view.stage === 'done'} class:wrong={view.noteKind === 'wrong'} role="status" data-step={view.held}>
             {#if held && view.stage !== 'pick'}
-              <small>{puzzle ? 'In your hand' : `Part ${view.placed.length + (view.stage === 'done' ? 0 : 1)} of ${view.total}`}</small>
+              <small>{puzzle ? (view.stage === 'present' ? 'In your hand' : 'On the bike') : `Part ${view.placed.length + (view.stage === 'done' ? 0 : 1)} of ${view.total}`}</small>
               <h2>{held.name}{#if view.stage === 'done'}<span class="tick"><Icon name="check" size={26}/></span>{/if}</h2>
             {:else if view.noteKind === 'fact' && lastOn}
               <small><Icon name="check" size={14}/> {lastOn.name}</small>
@@ -285,11 +290,11 @@
   .step.wrong{background:#fff1e8f2;border-color:#b5482b;animation:nudge .35s ease-out}
   .count{display:flex;align-items:center;gap:5px;padding:4px 12px 4px 9px;border-radius:16px;background:#fff6e6e6;font-size:19px;box-shadow:0 2px 0 #241b3a33}.count b{font-weight:400}
   .modes{display:flex;flex-direction:column;gap:7px;width:100%;margin-top:4px}
-  .mode{display:flex;align-items:center;gap:12px;width:100%;padding:8px 12px;border:3px solid var(--ink);border-radius:18px;background:#fffaf0;box-shadow:0 4px 0 #241b3a55;text-align:left;color:var(--ink)}
+  .mode{display:flex;align-items:center;gap:10px;width:100%;padding:5px 10px;border:3px solid var(--ink);border-radius:18px;background:#fffaf0;box-shadow:0 4px 0 #241b3a55;text-align:left;color:var(--ink)}
   .mode:active{transform:translateY(3px);box-shadow:0 1px 0 #241b3a55}.mode.last{background:#fff1c9}
-  .mode-badge{display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:50%;background:#ffd36b;border:2px solid var(--ink)}
+  .mode-badge{display:grid;place-items:center;width:36px;height:36px;min-width:36px;border-radius:50%;background:#ffd36b;border:2px solid var(--ink)}
   .mode:nth-child(2) .mode-badge{background:#86ceff}.mode:nth-child(3) .mode-badge{background:#ff9a7a}
-  .mode-text{display:flex;flex-direction:column;gap:1px}.mode-text b{font-family:'Luckiest Guy',cursive;font-weight:400;font-size:20px;letter-spacing:.02em}.mode-text small{font-size:13px;color:var(--ink-soft)}
+  .mode-text{display:flex;flex-direction:column;gap:1px}.mode-text b{font-family:'Luckiest Guy',cursive;font-weight:400;font-size:19px;letter-spacing:.02em}.mode-text small{font-size:13px;color:var(--ink-soft)}
   .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:4px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none}
   .tray::-webkit-scrollbar{display:none}
   .tile{flex:0 0 auto;width:78px;padding:4px 4px 6px;border:3px solid var(--ink);border-radius:16px;background:#efe4cc;box-shadow:0 4px 0 #241b3a55;display:flex;flex-direction:column;align-items:center;gap:2px;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s}
@@ -346,6 +351,12 @@
     .pedal{width:96px;height:96px;font-size:22px}.swatch{width:40px;height:40px}
     .modes{flex-direction:row}.mode{flex-direction:column;text-align:center;gap:4px;padding:6px}.mode-text small{font-size:11px}.card.home{max-width:620px}
     .tile{width:68px}.tile img{width:54px;height:54px}
+    /* building from the tray: the parts stand in a column down the right, the card sits bottom left, the bike gets the middle */
+    .garage-bottom:has(.tray){align-items:flex-start;right:calc(max(12px,env(safe-area-inset-right)) + 84px)}
+    .garage-bottom:has(.tray) .card{max-width:330px}
+    .tray{position:fixed;top:calc(var(--top) + 50px);bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:80px;margin:0;padding:4px 6px 8px;
+      flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y proximity;touch-action:pan-y}
+    .tray .tile{touch-action:pan-y}
   }
   @media(prefers-reduced-motion:reduce){.pips li.now,.pedal.start.busy,.loading-nut{animation:none}}
 </style>

@@ -80,7 +80,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
 
   // ---- camera: framed by the game, turned, pinched and panned by the child ------------------------------------
   const goal = { target: new THREE.Vector3(0, 0.55, 0), az: 25, el: 12, radius: 1.3 };
-  const cam = { target: goal.target.clone(), az: 25, el: 12, dist: 5 };
+  const cam = { target: goal.target.clone(), az: 25, el: 12, dist: 5, lift: 0.1 };
   let userAz = 0, userEl = 0, posed = false, zoom = 1;
   const pan = new THREE.Vector3();
   const frame = (target: THREE.Vector3, radius: number, az: number, el: number) => { goal.target.copy(target); goal.radius = radius; goal.az = az; goal.el = el; };
@@ -96,16 +96,17 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     cam.target.lerp(aim.copy(goal.target).add(pan), k); cam.dist += (dist - cam.dist) * k;
     cam.az += (goal.az + userAz - cam.az) * k; cam.el += (Math.max(-5, Math.min(62, goal.el + userEl)) - cam.el) * k;
     const az = cam.az * RAD, el = cam.el * RAD;
-    // turned right round, the camera would end up through a wall: it comes in closer instead
+    // turned right round, the camera would end up through a wall: it comes in closer instead (the front is open)
     const dir = tmp2.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
     let reach = cam.dist;
-    for (const [axis, lo, hi] of [['x', ROOM.left + 0.25, ROOM.right - 0.25], ['y', 0.15, ROOM.height - 0.2], ['z', ROOM.back + 0.25, 5]] as const) {
+    for (const [axis, lo, hi] of [['x', ROOM.left + 0.25, ROOM.right - 0.25], ['y', 0.15, ROOM.height - 0.2], ['z', ROOM.back + 0.25, 40]] as const) {
       const d = dir[axis], from = cam.target[axis];
       if (d > 1e-4) reach = Math.min(reach, (hi - from) / d); else if (d < -1e-4) reach = Math.min(reach, (lo - from) / d);
     }
     camera.position.copy(cam.target).addScaledVector(dir, Math.max(0.3, reach));
-    // the bottom bar is the taller one, so the bike sits a touch above the middle
-    camera.lookAt(cam.target.x, cam.target.y - goal.radius * zoom * 0.1, cam.target.z);
+    // the bottom bar is the taller one, so the bike sits a touch above the middle (well above it over the garage's home card)
+    cam.lift += ((view.phase === 'garage' ? 0.42 : 0.1) - cam.lift) * k;
+    camera.lookAt(cam.target.x, cam.target.y - goal.radius * zoom * cam.lift, cam.target.z);
   }
 
   // ---- loading ------------------------------------------------------------------------------------------------------
@@ -248,8 +249,9 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     if (held !== i) { if (held >= 0) pieces[held].node.visible = false; present(i); }
     if (e) {
       drag = { id: e.pointerId, kind: 'part', x: 0, y: 0, x0: 0, y0: 0, t0: performance.now(), moved: true, grab: new THREE.Vector3() };
-      const p = pointer(e); drag.x = drag.x0 = p.x; drag.y = drag.y0 = p.y;
-      plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(tmp), centreOf(pieces[held])); back = null;
+      const p = pointer(e), pc = pieces[held]; drag.x = drag.x0 = p.x; drag.y = drag.y0 = p.y;
+      plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(tmp), centreOf(pc)); back = null;
+      if (rayAt(p.x, p.y).intersectPlane(plane, hit)) placeAt(pc, hit, pc.node.scale.x);   // straight under the finger
       hideHand();
     }
   }

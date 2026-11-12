@@ -55,10 +55,10 @@ export async function createLife(parent: THREE.Object3D) {
   });
 
   // Dad, wandering between the bench, the paint shelf and the door, always behind or beside the bike
-  const dad = person(dadFile.scene, 1.62); group.add(dad.root);
+  const dad = person(dadFile.scene, 1.5); group.add(dad.root);
   // (the corner is only a turning point, so the walk from the door back to the bench goes round behind the bike)
   const stops = [
-    { x: BENCH.x - 0.2, z: BENCH.z + 0.62, face: Math.PI, wait: 7 },     // at the bench
+    { x: BENCH.x - 1.0, z: BENCH.z + 0.6, face: Math.PI * 0.92, wait: 7 },   // at the end of the bench, by the radio (not behind the bike)
     { x: -3.5, z: ROOM.back + 1.15, face: Math.PI * 0.85, wait: 5 },     // at the tool chest
     { x: 1.75, z: ROOM.back + 0.75, face: Math.PI, wait: 5 },            // looking over the paint tins
     { x: 3.95, z: 0.35, face: Math.PI / 2, wait: 7 },                    // in the doorway, watching the girls

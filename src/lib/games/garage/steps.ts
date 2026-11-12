@@ -66,9 +66,9 @@ export const PARTS: Part[] = [
 ];
 
 export const MODES = [
-  { id: 'apprentice', name: 'Apprentice', blurb: 'One part at a time. A glow shows where it goes.' },
-  { id: 'mechanic', name: 'Mechanic', blurb: '13 parts on the bench. Work out where they go.' },
-  { id: 'master', name: 'Master', blurb: '28 parts. No help. Pinch to zoom in close.' }
+  { id: 'apprentice', name: 'Apprentice', blurb: 'One part at a time, with help.' },
+  { id: 'mechanic', name: 'Mechanic', blurb: '13 parts. Work out where they go.' },
+  { id: 'master', name: 'Master', blurb: '28 parts, no help. Zoom in close.' }
 ] as const;
 export type ModeId = typeof MODES[number]['id'];
 export const isMode = (v: unknown): v is ModeId => MODES.some(m => m.id === v);
