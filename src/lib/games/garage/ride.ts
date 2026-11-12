@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { IDLE_RPM, REDLINE, SPEEDO_SWEEP, TACH_SWEEP } from './steps';
 import type { GarageAudio } from './audio';
@@ -9,7 +8,6 @@ import type { GarageAudio } from './audio';
 // Game axes as in the garage: x along the road, y up, z towards the camera.
 export const ROAD_LENGTH = 520;
 const TOP_SPEED = 24, GEARS = [7.5, 12, 16, 19.5, 22.5, 26];
-const RIDER = '/catcha/assets/chibi-dad.glb';
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 /** The road's height: flat at the garage and the finish, rolling hills between. */
 export const roadHeight = (x: number) => smooth(25, 70, x) * (1 - smooth(ROAD_LENGTH - 70, ROAD_LENGTH - 20, x)) *
@@ -35,6 +33,63 @@ function strip(x0: number, x1: number, step: number, z0: number, z1: number, lif
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+
+/** Where a two-bone limb (thigh and shin, upper arm and forearm) bends to reach from `a` to `c`, bending towards `hint`. */
+function bend(a: THREE.Vector3, c: THREE.Vector3, l1: number, l2: number, hint: THREE.Vector3) {
+  const dir = c.clone().sub(a), d = Math.min(dir.length(), l1 + l2 - 1e-3); dir.normalize();
+  const cos = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), sin = Math.sqrt(Math.max(0, 1 - cos * cos));
+  const perp = hint.clone().addScaledVector(dir, -hint.dot(dir)).normalize();
+  return a.clone().addScaledVector(dir, l1 * cos).addScaledVector(perp, l1 * sin);
+}
+/**
+ * A rider in leathers, jeans and boots, in a full-face helmet the bike's colour, posed on the roadster from its
+ * measured seat (805 mm), grips and footpegs. Built from rounded limbs: at riding distance it reads as a person.
+ */
+function buildRider(helmet: string, std: (c: THREE.ColorRepresentation, r?: number, extra?: THREE.MeshStandardMaterialParameters) => THREE.MeshStandardMaterial,
+  keep: <T extends { dispose(): void }>(x: T) => T) {
+  const g = new THREE.Group(), V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z), UP = V(0, 1, 0);
+  const leather = std('#26282d', 0.42, { metalness: 0.05 }), denim = std('#34465f', 0.9), boot = std('#151517', 0.5), glove = std('#1c1c1e', 0.55);
+  const shell = std(helmet, 0.22, { metalness: 0.15 }), visor = std('#14171d', 0.06, { metalness: 0.7 }), trim = std(helmet, 0.4);
+  const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material) => { const m = new THREE.Mesh(keep(geo), mat); m.castShadow = true; g.add(m); return m; };
+  const limb = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, mat: THREE.Material) => {
+    const d = b.clone().sub(a), m = mesh(new THREE.CylinderGeometry(r1, r0, d.length(), 16), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(UP, d.normalize()); return m;
+  };
+  const ball = (p: THREE.Vector3, r: number, mat: THREE.Material, sx = 1, sy = 1, sz = 1) => { const m = mesh(new THREE.SphereGeometry(r, 20, 14), mat); m.position.copy(p); m.scale.set(sx, sy, sz); return m; };
+
+  const lean = 24 * Math.PI / 180, hip = V(-0.36, 0.9, 0), spine = V(Math.sin(lean), Math.cos(lean), 0);
+  const shoulders = hip.clone().addScaledVector(spine, 0.5);
+  // pelvis and torso: a rounded block of jacket, a touch broader at the chest
+  ball(hip.clone().add(V(0, 0.02, 0)), 0.15, denim, 1.15, 0.8, 1.2);
+  const torso = mesh(new THREE.CapsuleGeometry(0.15, 0.3, 6, 16), leather);
+  torso.position.copy(hip).addScaledVector(spine, 0.26); torso.quaternion.setFromUnitVectors(UP, spine); torso.scale.set(0.82, 1, 1.25);
+  limb(hip.clone().addScaledVector(spine, 0.12).add(V(0.12, 0, 0)), shoulders.clone().add(V(0.1, -0.06, 0)), 0.01, 0.01, trim);   // zip line
+  for (const side of [1, -1]) {
+    // legs: hip to a boot on the peg, knees out against the tank
+    const h = V(hip.x, hip.y, 0.11 * side), ankle = V(-0.25, 0.345, 0.215 * side);
+    const knee = bend(h, ankle, 0.45, 0.44, V(1, 0.2, 0.45 * side));
+    limb(h, knee, 0.085, 0.064, denim); ball(knee, 0.064, denim);
+    limb(knee, knee.clone().lerp(ankle, 0.45), 0.06, 0.056, denim);
+    limb(knee.clone().lerp(ankle, 0.42), ankle, 0.058, 0.05, boot); ball(ankle, 0.05, boot);
+    const foot = mesh(new THREE.CapsuleGeometry(0.045, 0.16, 4, 10), boot); foot.position.set(-0.19, 0.305, 0.22 * side); foot.rotation.z = Math.PI / 2 + 0.12;
+    // arms: shoulder to the grip, elbows bent out a little
+    const sh = V(shoulders.x, shoulders.y - 0.03, 0.19 * side), grip = V(0.255, 1.03, 0.3 * side);
+    const elbow = bend(sh, grip, 0.3, 0.29, V(-0.3, -1, 0.7 * side));
+    ball(sh, 0.07, leather); limb(sh, elbow, 0.062, 0.05, leather); ball(elbow, 0.05, leather);
+    limb(elbow, grip, 0.048, 0.04, leather);
+    limb(sh.clone().add(V(0, 0.05, 0.03 * side)), elbow.clone().add(V(0, 0.04, 0.03 * side)), 0.012, 0.012, trim);   // stripe down the sleeve
+    ball(grip, 0.046, glove, 1.25, 0.95, 1.1);
+  }
+  // neck and full-face helmet, looking up the road
+  const head = shoulders.clone().add(V(0.07, 0.19, 0));
+  limb(shoulders.clone().add(V(0.01, 0.02, 0)), head.clone().add(V(-0.03, -0.08, 0)), 0.055, 0.05, leather);
+  ball(head, 0.148, shell, 1.1, 1, 0.94);
+  const band = mesh(new THREE.SphereGeometry(0.151, 24, 10, Math.PI - 0.95, 1.9, Math.PI * 0.37, Math.PI * 0.19), visor);
+  band.position.copy(head); band.scale.set(1.1, 1, 0.94);
+  const chin = mesh(new THREE.SphereGeometry(0.12, 18, 10, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), shell);
+  chin.position.copy(head).add(V(0.03, -0.03, 0)); chin.scale.set(1.15, 0.9, 0.95);
+  return g;
 }
 
 type Ctx = {
@@ -149,35 +204,8 @@ export async function createRide(o: Ctx) {
   });
   let collected = 0;
 
-  // the rider: Dad, sat on the seat, hands on the bars, in a helmet the colour of the bike
-  const rider = new THREE.Group();
-  try {
-    const gltf = await new GLTFLoader().loadAsync(RIDER);
-    const model = gltf.scene, box = new THREE.Box3().setFromObject(model), size = box.getSize(new THREE.Vector3());
-    model.scale.setScalar(1.42 / size.y); model.position.y = -box.min.y * model.scale.y;
-    model.rotation.y = Math.PI / 2;                                     // faces +z as built; turn it to face along the road
-    rider.add(model); rider.updateMatrixWorld(true);              // scale first, so the head is measured at its real size
-    model.traverse(m => { if (m instanceof THREE.Mesh) m.castShadow = true; });
-    const joint = (n: string) => model.getObjectByName(n);
-    for (const side of ['left', 'right']) {
-      const legNode = joint(`leg-${side}`); if (legNode) legNode.rotation.x = -1.45;
-      const armNode = joint(`arm-${side}`); if (armNode) { armNode.rotation.x = -1.2; armNode.rotation.z = (side === 'left' ? -1 : 1) * 0.12; }
-    }
-    const head = joint('head');
-    if (head) {
-      rider.updateMatrixWorld(true);
-      const hb = new THREE.Box3().setFromObject(head, true), hc = hb.getCenter(new THREE.Vector3()), hs = hb.getSize(new THREE.Vector3());
-      const radius = Math.max(hs.x, hs.y, hs.z) * 0.58;
-      const shell = new THREE.Mesh(keep(new THREE.SphereGeometry(radius, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.6)), std(o.helmet, 0.25, { metalness: 0.1 }));
-      const visor = new THREE.Mesh(keep(new THREE.SphereGeometry(radius * 1.02, 24, 12, -Math.PI * 0.32, Math.PI * 0.64, Math.PI * 0.36, Math.PI * 0.2)),
-        std('#1b2230', 0.1, { metalness: 0.6, transparent: true, opacity: 0.85 }));
-      const helmet = new THREE.Group(); helmet.add(shell, visor);
-      helmet.position.copy(rider.worldToLocal(hc.clone())); helmet.position.y += radius * 0.12;
-      helmet.rotation.y = Math.PI / 2; rider.add(helmet);
-      shell.castShadow = true;
-    }
-  } catch (e) { console.warn('Rider did not load; the bike rides on its own', e); }
-  rider.position.set(-0.42, 0.42, 0); bike.add(rider);
+  // the rider, in full gear, sat on the seat with hands on the grips and boots on the pegs
+  const rider = buildRider(o.helmet, std, keep); bike.add(rider);
 
   // ride state
   let s = 0, v = 0, wheel = 0, wheelie = 0, finished = false, rpm = IDLE_RPM, gear = 0, throttleS = 0, puffT = 0;

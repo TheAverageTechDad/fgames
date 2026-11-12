@@ -4,7 +4,7 @@
   import Icon from '#lib/components/Icon.svelte';
   import { installHaptics, hapticsEnabled, setHapticsEnabled } from '#lib/haptics';
   import { sound } from '#lib/sound';
-  import { PAINTS, STEPS, type PaintId } from './steps';
+  import { MODES, PAINTS, piecesFor, type ModeId, type PaintId } from './steps';
   import { readGarage, saveGarage } from './storage';
   import { createGarageAudio } from './audio';
   import type { GarageScene, GarageView } from './scene';
@@ -14,22 +14,38 @@
   const store = { getItem: (k: string) => localStorage.getItem(k), setItem: (k: string, v: string) => localStorage.setItem(k, v) };
   let garage = $state(readGarage({ getItem: () => null, setItem: () => {} }));
   const audio = createGarageAudio();
-  let view = $state<GarageView>({ phase: 'loading', step: 0, stage: 'present', boltsLeft: 0, paint: 'red', engine: 'off', revved: false, stars: 0, starTotal: 0, progress: 0, speed: 0 });
+  let view = $state<GarageView>({ phase: 'loading', mode: 'apprentice', stage: 'pick', held: '', placed: [], tray: [], total: 13, note: '', noteKind: '', mistakes: 0,
+    boltsLeft: 0, paint: 'red', radio: true, engine: 'off', revved: false, stars: 0, starTotal: 0, progress: 0, speed: 0 });
   let error = $state(''), muted = $state(sound.muted), haptics = $state(true), saveWarning = $state(false), fading = $state(false), holding = $state(false);
+  let thumbs = $state<Record<string, string>>({}), choosing = $state(false);
   // snapshot of what the garage holds, for the home card
-  let bikes = $state(0), building = $state<{ steps: number } | null>(null);
-  const refresh = () => { bikes = garage.bikes.length; building = garage.building ? { steps: garage.building.steps } : null; };
+  let bikes = $state(0), building = $state<{ placed: number; mode: ModeId } | null>(null);
+  const refresh = () => { bikes = garage.bikes.length; building = garage.building ? { placed: garage.building.placed.length, mode: garage.building.mode } : null; };
   function save() { if (!saveGarage(store, garage)) saveWarning = true; refresh(); }
 
-  const step = $derived(STEPS[Math.min(view.step, STEPS.length - 1)]);
-  const hint = $derived(view.phase !== 'build' ? '' : view.stage === 'present' ? 'Drag it onto the bike' : view.stage === 'bolts'
-    ? (view.boltsLeft > 1 ? 'Tap the bolts to tighten them' : 'Tap the bolt to tighten it') : view.stage === 'done' ? 'Brilliant!' : '');
+  const pieces = $derived(piecesFor(view.mode));
+  const byId = $derived(Object.fromEntries(pieces.map(p => [p.id, p])));
+  const held = $derived(byId[view.held]);
+  const lastOn = $derived(byId[view.placed.at(-1) ?? '']);
+  const puzzle = $derived(view.mode !== 'apprentice');
+  const modeName = (id: ModeId) => MODES.find(m => m.id === id)!.name;
+  const hint = $derived(view.phase !== 'build' ? '' : view.stage === 'present' ? (puzzle ? 'Where does it go? Drag it on.' : 'Drag it onto the bike')
+    : view.stage === 'bolts' ? (view.boltsLeft > 1 ? 'Tap the bolts to tighten them' : 'Tap the bolt to tighten it')
+    : view.stage === 'pick' ? (view.mode === 'master' && !view.placed.length ? 'Pick a part. Pinch to zoom in close.' : 'Pick a part from the bench') : '');
 
-  function begin(kind: 'build' | 'ride' | 'new') { audio.unlock(); sound.playTap(); engine?.begin(kind); }
+  function begin(kind: 'build' | 'ride' | 'new', mode?: ModeId) { audio.unlock(); sound.playTap(); choosing = false; engine?.begin(kind, mode); }
   function choose(id: PaintId) { engine?.paint(id); }
   function hold(on: boolean, e?: PointerEvent) {
     if (e) { e.preventDefault(); if (on) (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); }
     holding = on; engine?.throttle(on);
+  }
+  // the tray scrolls sideways; pull a part up out of it to carry it straight onto the bike
+  let trayPress: { x: number; y: number; id: number; lifted: boolean } | null = null;
+  function trayDown(e: PointerEvent) { trayPress = { x: e.clientX, y: e.clientY, id: e.pointerId, lifted: false }; }
+  function trayMove(e: PointerEvent, part: string) {
+    if (!trayPress || trayPress.id !== e.pointerId || trayPress.lifted) return;
+    const dx = e.clientX - trayPress.x, dy = e.clientY - trayPress.y;
+    if (dy < -14 && -dy > Math.abs(dx)) { trayPress.lifted = true; engine?.pick(part, e); }
   }
   async function ride() {
     fading = true;
@@ -63,7 +79,7 @@
         await document.fonts.ready;
         const { createGarageScene } = await import('./scene');
         if (cancelled) return;
-        engine = createGarageScene(host, overlay, garage, audio, { change: v => { view = v; }, save });
+        engine = createGarageScene(host, overlay, garage, audio, { change: v => { view = v; }, save, thumbs: t => { thumbs = t; } });
         await engine.ready;
         if (import.meta.env.DEV) (window as unknown as { garage: GarageScene }).garage = engine; // for driving it from the console while testing
         if (!cancelled) host.dataset.ready = 'true';
@@ -81,6 +97,17 @@
   });
 </script>
 
+{#snippet modes()}
+  <div class="modes" role="group" aria-label="How hard?">
+    {#each MODES as m, i (m.id)}
+      <button class="mode" class:last={garage.mode === m.id} data-mode={m.id} onclick={() => begin('new', m.id)}>
+        <span class="mode-badge" aria-hidden="true"><Icon name={['hand-pointing', 'nut', 'gear-six'][i]} size={22}/></span>
+        <span class="mode-text"><b>{m.name}</b><small>{m.blurb}</small></span>
+      </button>
+    {/each}
+  </div>
+{/snippet}
+
 <div class="garage-surround">
   <main class="garage-shell" aria-label="Garage">
     <div class="garage-world" bind:this={host}></div>
@@ -89,10 +116,12 @@
     <header class="garage-header">
       <button class="round" aria-label="Back to arcade" onclick={home}><Icon name="arrow-left" size={24}/></button>
       <div class="header-middle">
-        {#if view.phase === 'build'}
-          <ol class="pips" aria-label={`Part ${Math.min(view.step + 1, STEPS.length)} of ${STEPS.length}`}>
-            {#each STEPS as s, i (s.id)}<li class:done={i < view.step || (i === view.step && view.stage === 'done')} class:now={i === view.step && view.stage !== 'done'}></li>{/each}
+        {#if view.phase === 'build' && !puzzle}
+          <ol class="pips" aria-label={`${view.placed.length} of ${view.total} parts on`}>
+            {#each pieces as s (s.id)}<li class:done={view.placed.includes(s.id)} class:now={view.held === s.id && view.stage !== 'done'}></li>{/each}
           </ol>
+        {:else if view.phase === 'build'}
+          <div class="count" aria-label={`${view.placed.length} of ${view.total} parts on`}><Icon name="nut" size={18}/><b>{view.placed.length}</b>/{view.total}</div>
         {:else if view.phase === 'ride'}
           <div class="ride-bar" aria-label={`${Math.round(view.progress * 100)}% of the way`}><span style:transform={`scaleX(${view.progress})`}></span><i style:left={`${view.progress * 100}%`}></i></div>
           <div class="star-count" aria-label={`${view.stars} stars`}><b>★</b>{view.stars}</div>
@@ -105,31 +134,48 @@
     <section class="garage-bottom">
       {#if view.phase === 'garage'}
         <div class="card home" data-home>
-          {#if building}
-            <h2>{building.steps >= STEPS.length ? 'Nearly there!' : building.steps ? 'Half built' : 'A bare frame'}</h2>
-            <p>{building.steps >= STEPS.length ? 'Give it some paint and fire it up.' : `${building.steps} of ${STEPS.length} parts on.`}</p>
-            <button class="toy-button go big" data-begin onclick={() => begin('build')}><Icon name="nut" size={26}/>{building.steps ? 'Keep building' : 'Build a bike'}</button>
-          {:else if bikes}
+          {#if choosing || (!building && !bikes)}
+            <h2>{bikes ? 'Build another' : 'Build a motorbike'}</h2>
+            <p>Every part is a real one. How hard?</p>
+            {@render modes()}
+            {#if bikes}<button class="text-button" onclick={() => (choosing = false)}>Not now</button>{/if}
+          {:else if building}
+            <h2>{building.placed >= piecesFor(building.mode).length ? 'Nearly there!' : building.placed ? 'Half built' : 'A bare frame'}</h2>
+            <p>{building.placed >= piecesFor(building.mode).length ? 'Give it some paint and fire it up.' : `${modeName(building.mode)}: ${building.placed} of ${piecesFor(building.mode).length} parts on.`}</p>
+            <button class="toy-button go big" data-begin onclick={() => begin('build')}><Icon name="nut" size={26}/>{building.placed ? 'Keep building' : 'Start building'}</button>
+            <button class="text-button" onclick={() => (choosing = true)}>Start again</button>
+          {:else}
             <h2>{bikes === 1 ? 'Your bike' : `${bikes} bikes built`}</h2>
             <p>Take it for a ride, or build another.</p>
             <div class="row">
               <button class="toy-button go big" data-begin onclick={() => begin('ride')}><Icon name="play" size={24}/>Ride it</button>
-              <button class="toy-button" onclick={() => begin('new')}><Icon name="plus" size={22}/>New bike</button>
+              <button class="toy-button" onclick={() => (choosing = true)}><Icon name="plus" size={22}/>New bike</button>
             </div>
-          {:else}
-            <h2>Build a motorbike</h2>
-            <p>Thirteen real parts. Every bolt tight.</p>
-            <button class="toy-button go big" data-begin onclick={() => begin('build')}><Icon name="nut" size={26}/>Let's build</button>
           {/if}
         </div>
       {:else if view.phase === 'build'}
-        {#key view.step}
-          <div class="card step" class:done={view.stage === 'done'} role="status" data-step={step.id}>
-            <small>Part {view.step + 1} of {STEPS.length}</small>
-            <h2>{step.name}{#if view.stage === 'done'}<span class="tick"><Icon name="check" size={26}/></span>{/if}</h2>
-            {#if hint}<p class="hint">{#if view.stage === 'present'}<Icon name="hand-pointing" size={20}/>{/if}{hint}</p>{/if}
+        {#key view.held + view.stage}
+          <div class="card step" class:done={view.stage === 'done'} class:wrong={view.noteKind === 'wrong'} role="status" data-step={view.held}>
+            {#if held && view.stage !== 'pick'}
+              <small>{puzzle ? 'In your hand' : `Part ${view.placed.length + (view.stage === 'done' ? 0 : 1)} of ${view.total}`}</small>
+              <h2>{held.name}{#if view.stage === 'done'}<span class="tick"><Icon name="check" size={26}/></span>{/if}</h2>
+            {:else if view.noteKind === 'fact' && lastOn}
+              <small><Icon name="check" size={14}/> {lastOn.name}</small>
+            {/if}
+            {#if view.note}<p class="note" class:fact={view.noteKind === 'fact'}>{#if view.noteKind === 'fact'}<Icon name="lightbulb" size={20}/>{/if}{view.note}</p>
+            {:else if hint}<p class="hint">{#if view.stage === 'present' || view.stage === 'pick'}<Icon name="hand-pointing" size={20}/>{/if}{hint}</p>{/if}
           </div>
         {/key}
+        {#if puzzle && view.tray.length}
+          <div class="tray" aria-label="Parts on the bench">
+            {#each view.tray as id (id)}
+              <button class="tile" class:held={view.held === id} data-piece={id} aria-label={byId[id]?.name} aria-pressed={view.held === id}
+                onclick={() => engine?.pick(id)} onpointerdown={trayDown} onpointermove={e => trayMove(e, id)} oncontextmenu={e => e.preventDefault()}>
+                {#if thumbs[id]}<img src={thumbs[id]} alt="" draggable="false">{/if}<span>{byId[id]?.name}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       {:else if view.phase === 'paint'}
         <div class="card paint">
           <h2>Pick a colour</h2>
@@ -171,6 +217,7 @@
         <div class="card">
           <h2>You built it. You rode it!</h2>
           <p class="stars"><b>★</b> {view.stars} of {view.starTotal} stars</p>
+          {#if view.mode !== 'apprentice'}<p>{modeName(view.mode)} build: {view.mistakes ? `${view.mistakes} wrong ${view.mistakes === 1 ? 'try' : 'tries'}` : 'not one part in the wrong place!'}</p>{/if}
           <button class="toy-button go big" data-park onclick={park}><Icon name="check" size={24}/>Park it in the garage</button>
         </div>
       </div>
@@ -192,7 +239,8 @@
       <h2>Tea break</h2><p>Your bike is saved, right where you left it.</p>
       <div class="pause-settings">
         <button class="setting-row" onclick={toggleSound}><Icon name={muted ? 'speaker-slash' : 'speaker-high'} size={22}/><span>Sound</span><strong>{muted ? 'Off' : 'On'}</strong></button>
-        <button class="setting-row" onclick={toggleVoice}><Icon name="music-notes" size={22}/><span>Say part names</span><strong>{garage.voice ? 'On' : 'Off'}</strong></button>
+        <button class="setting-row" onclick={() => engine?.toggleRadio()}><Icon name="music-notes" size={22}/><span>Radio</span><strong>{view.radio ? 'On' : 'Off'}</strong></button>
+        <button class="setting-row" onclick={toggleVoice}><Icon name="lightbulb" size={22}/><span>Say part names</span><strong>{garage.voice ? 'On' : 'Off'}</strong></button>
         <button class="setting-row" onclick={toggleHaptics}><Icon name="vibrate" size={22}/><span>Vibration</span><strong>{haptics ? 'On' : 'Off'}</strong></button>
       </div>
       <div class="pause-actions">
@@ -232,7 +280,22 @@
   .toy-button.big{min-height:58px;font-size:23px;padding:10px 22px;margin-top:6px}.home .toy-button.big{width:100%}
   .step h2{display:flex;align-items:center;gap:8px;font-size:32px}.step .tick{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#22b385;color:#fff;animation:pop .3s ease-out}
   .step.done{background:#eafff4f2;border-color:#137a5a}
-  .hint{display:flex;align-items:center;gap:6px;font-size:17px!important}
+  .hint,.note{display:flex;align-items:center;justify-content:center;gap:6px;font-size:17px!important;text-wrap:balance}
+  .note.fact{color:var(--ink)!important}.note :global(.sticker-icon){color:#e2a10f}
+  .step.wrong{background:#fff1e8f2;border-color:#b5482b;animation:nudge .35s ease-out}
+  .count{display:flex;align-items:center;gap:5px;padding:4px 12px 4px 9px;border-radius:16px;background:#fff6e6e6;font-size:19px;box-shadow:0 2px 0 #241b3a33}.count b{font-weight:400}
+  .modes{display:flex;flex-direction:column;gap:7px;width:100%;margin-top:4px}
+  .mode{display:flex;align-items:center;gap:12px;width:100%;padding:8px 12px;border:3px solid var(--ink);border-radius:18px;background:#fffaf0;box-shadow:0 4px 0 #241b3a55;text-align:left;color:var(--ink)}
+  .mode:active{transform:translateY(3px);box-shadow:0 1px 0 #241b3a55}.mode.last{background:#fff1c9}
+  .mode-badge{display:grid;place-items:center;width:42px;height:42px;min-width:42px;border-radius:50%;background:#ffd36b;border:2px solid var(--ink)}
+  .mode:nth-child(2) .mode-badge{background:#86ceff}.mode:nth-child(3) .mode-badge{background:#ff9a7a}
+  .mode-text{display:flex;flex-direction:column;gap:1px}.mode-text b{font-family:'Luckiest Guy',cursive;font-weight:400;font-size:20px;letter-spacing:.02em}.mode-text small{font-size:13px;color:var(--ink-soft)}
+  .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:4px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none}
+  .tray::-webkit-scrollbar{display:none}
+  .tile{flex:0 0 auto;width:78px;padding:4px 4px 6px;border:3px solid var(--ink);border-radius:16px;background:#efe4cc;box-shadow:0 4px 0 #241b3a55;display:flex;flex-direction:column;align-items:center;gap:2px;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s}
+  .tile img{width:64px;height:64px;border-radius:10px;pointer-events:none;-webkit-user-drag:none}
+  .tile span{font-size:11px;line-height:1.15;text-align:center;min-height:2.3em;display:flex;align-items:center}
+  .tile.held{background:#ffd36b;transform:translateY(-6px);box-shadow:0 8px 0 #241b3a55}
   .swatches{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:6px 0 4px}
   .swatch{width:40px;height:40px;border-radius:50%;border:3px solid var(--ink);background:radial-gradient(circle at 35% 30%,#ffffff88 0 18%,transparent 40%),var(--paint);box-shadow:0 3px 0 #241b3a55;transition:transform .15s}
   .swatch[aria-checked='true']{transform:scale(1.18);box-shadow:0 0 0 4px #fff6e6,0 0 0 7px var(--ink)}
@@ -268,6 +331,7 @@
   .garage-overlay :global(.garage-hand svg){width:100%;height:100%;fill:#fff;stroke:var(--ink);stroke-width:1.6}
   .garage-overlay :global(.garage-hand:not(.show)){opacity:0!important}
 
+  @keyframes nudge{25%{translate:-6px 0}50%{translate:5px 0}75%{translate:-3px 0}}
   @keyframes pip{50%{transform:scale(1.25)}}@keyframes rise{from{opacity:0;translate:0 14px}to{opacity:1;translate:0 0}}@keyframes pop{0%{transform:scale(.3)}70%{transform:scale(1.2)}100%{transform:scale(1)}}
   @keyframes shake{25%{translate:-2px 0}75%{translate:2px 0}}@keyframes fade{0%{opacity:0}40%,60%{opacity:1}100%{opacity:1}}@keyframes turn{to{rotate:360deg}}
   @keyframes bolt{50%{box-shadow:0 4px 0 #241b3a88,0 0 0 12px #ffd36b00;transform:scale(1.08)}0%,100%{box-shadow:0 4px 0 #241b3a88,0 0 0 0 #ffd36baa}}
@@ -280,6 +344,8 @@
     .garage-bottom{left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}
     .card{max-width:380px;padding:8px 14px 10px;gap:3px}.card h2{font-size:22px}.step h2{font-size:24px}.toy-button.big{min-height:48px;font-size:19px;margin-top:2px}
     .pedal{width:96px;height:96px;font-size:22px}.swatch{width:40px;height:40px}
+    .modes{flex-direction:row}.mode{flex-direction:column;text-align:center;gap:4px;padding:6px}.mode-text small{font-size:11px}.card.home{max-width:620px}
+    .tile{width:68px}.tile img{width:54px;height:54px}
   }
   @media(prefers-reduced-motion:reduce){.pips li.now,.pedal.start.busy,.loading-nut{animation:none}}
 </style>

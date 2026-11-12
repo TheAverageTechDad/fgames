@@ -1,5 +1,5 @@
 """blender -b --python scripts/roadster/export.py -- <out.glb>
-Builds the roadster and writes the game's GLB: one node per build step ("step_<id>"), each holding its parts merged
+Builds the roadster and writes the game's GLB: one node per part ("part_<id>"), each holding its parts merged
 per material, plus the moving bits on their own pivots ("spin_front-wheel", "spin_rear-wheel", "needle_speedometer",
 "needle_tachometer") and bolt markers ("bolt_<step>_<n>"); three.js drops ":" from names, so "_" separates. Metres, Y up (glTF), Draco-compressed.
 Step membership comes from STEPS; a part missing from it stops the export, so nothing is silently left out."""
@@ -19,25 +19,39 @@ from sand3d import materials as s3d_materials
 import spec
 from build import MODULES
 
-# Build order for the game, frame first (already on the stand). Patterns match top-level part names.
+# The game's parts, frame first (already on the stand). Patterns match top-level part names. The game groups these
+# into its 13 big build steps for the easy mode (src/lib/games/garage/steps.ts); the hard mode uses them one by one.
 STEPS = [
     ("frame", ["head-tube", "frame-tubes", "pivot-plates", "engine-hangers"]),
-    ("engine", ["crankcase", "oil-pan", "cylinder-block", "cylinder-head", "cam-cover", "cam-caps", "acg-cover", "clutch-cover",
-                "pulse-cover", "starter-motor", "rear-engine-bolt", "carburettors", "intake-boots", "air-box", "front-sprocket",
-                "oil-cooler", "oil-hoses"]),
-    ("swingarm", ["swingarm", "chain-adjusters", "pivot-bolt", "shock-mount-*", "shock-left", "shock-right", "chain-guard"]),
-    ("rear-wheel", ["rear-wheel", "rear-disc", "sprocket", "rear-axle", "rear-caliper"]),
+    ("crankcase", ["crankcase", "oil-pan", "acg-cover", "clutch-cover", "pulse-cover", "starter-motor", "rear-engine-bolt",
+                   "front-sprocket"]),
+    ("cylinders", ["cylinder-block", "cylinder-head", "cam-cover", "cam-caps"]),
+    ("carburettors", ["carburettors", "intake-boots", "air-box"]),
+    ("oil-cooler", ["oil-cooler", "oil-hoses"]),
+    ("swingarm", ["swingarm", "chain-adjusters", "pivot-bolt", "chain-guard"]),
+    ("shocks", ["shock-mount-*", "shock-left", "shock-right"]),
+    ("rear-wheel", ["rear-wheel", "rear-disc", "sprocket", "rear-axle"]),
+    ("rear-brake", ["rear-caliper"]),
     ("chain", ["chain", "sprocket-cover"]),
-    ("forks", ["steering-stem", "lower-clamp", "upper-clamp", "fork-leg-*"]),
-    ("front-wheel", ["front-wheel", "front-disc-*", "front-axle", "front-axle-nut-*", "caliper-*", "front-mudguard", "mudguard-bracket"]),
-    ("exhaust", ["header-*", "collector", "link-pipe-*", "muffler-*", "passenger-peg-*"]),
+    ("steering", ["steering-stem", "lower-clamp", "upper-clamp"]),
+    ("fork-legs", ["fork-leg-*"]),
+    ("front-wheel", ["front-wheel", "front-disc-*", "front-axle", "front-axle-nut-*"]),
+    ("front-brakes", ["caliper-*"]),
+    ("front-mudguard", ["front-mudguard", "mudguard-bracket"]),
+    ("headers", ["header-*", "collector"]),
+    ("silencers", ["link-pipe-*", "muffler-*", "passenger-peg-*"]),
     ("tank", ["tank", "filler-cap", "tank-badges", "knee-pads", "tank-stripes", "tank-mounts"]),
-    ("seat", ["seat", "seat-pan", "seat-welts", "seat-strap", "side-cover-*"]),
-    ("handlebars", ["riser-*", "handlebar", "bar-ends", "grip-*", "switchgear-*", "lever-*", "master-cylinder", "mirror-*",
-                    "brake-hoses", "clutch-cable", "throttle-cables"]),
-    ("headlight", ["headlamp", "headlamp-ears", "indicator-front-*", "horns", "speedometer", "tachometer", "gauge-bracket", "ignition"]),
-    ("tail-light", ["tail-fender", "tail-lamp", "indicator-rear-*", "inner-fender"]),
-    ("footpegs", ["footpeg-*", "gear-lever", "brake-pedal", "side-stand"]),
+    ("seat", ["seat", "seat-pan", "seat-welts", "seat-strap"]),
+    ("side-covers", ["side-cover-*"]),
+    ("handlebars", ["riser-*", "handlebar", "bar-ends", "grip-*"]),
+    ("controls", ["switchgear-*", "lever-*", "master-cylinder", "brake-hoses", "clutch-cable", "throttle-cables"]),
+    ("mirrors", ["mirror-*"]),
+    ("headlight", ["headlamp", "headlamp-ears", "indicator-front-*", "horns"]),
+    ("clocks", ["speedometer", "tachometer", "gauge-bracket", "ignition"]),
+    ("rear-mudguard", ["inner-fender", "tail-fender"]),
+    ("tail-light", ["tail-lamp", "indicator-rear-*"]),
+    ("footpegs", ["footpeg-*", "gear-lever", "brake-pedal"]),
+    ("side-stand", ["side-stand"]),
 ]
 # Parts that move in the game, by top-level part: (pivot name, the object whose frame is the pivot).
 SPIN = {"front-wheel": "front-wheel", "front-disc-*": "front-wheel", "rear-wheel": "rear-wheel", "rear-disc": "rear-wheel",
@@ -47,20 +61,31 @@ AX, AZ = spec.FRONT_AXLE
 RX, RZ = spec.REAR_AXLE
 # Where the child tightens bolts after a step goes on (mm, the bike's own axes; the right side faces the camera).
 BOLTS = {
-    "engine": [X(-150, -162, 430), X(322, -142, 272)],
-    "swingarm": [X(spec.PIVOT[0], -180, spec.PIVOT[1]), X(-505, -170, 696)],
+    "crankcase": [X(-150, -162, 430), X(322, -142, 272)],
+    "swingarm": [X(spec.PIVOT[0], -180, spec.PIVOT[1])],
+    "shocks": [X(-505, -170, 696)],
     "rear-wheel": [X(RX, -170, RZ)],
     "chain": [X(-102, 140, 318)],
-    "forks": [X(364, 0, 984)],
+    "steering": [X(364, 0, 984)],
     "front-wheel": [X(AX, -131, AZ)],
-    "exhaust": [X(318, -120, 586), X(-600, -178, 390)],
+    "headers": [X(318, -120, 586)],
+    "silencers": [X(-600, -178, 390)],
     "tank": [X(150, 0, 954)],
     "seat": [X(-520, -164, 790)],
     "handlebars": [X(330, -42, 1040), X(330, 42, 1040)],
     "headlight": [X(536, -84, 909)],
-    "tail-light": [X(-930, -60, 760)],
+    "rear-mudguard": [X(-930, -60, 760)],
     "footpegs": [X(-212, -196, 292)],
 }
+# Every other part gets one bolt where it shows most on the right side: the vertex furthest right, near its middle.
+
+
+def auto_bolt(objs):
+    pts = [o.matrix_world @ v.co for o in objs for v in o.data.vertices]
+    lo = Vector([min(p[i] for p in pts) for i in range(3)])
+    hi = Vector([max(p[i] for p in pts) for i in range(3)])
+    c = (lo + hi) / 2
+    return max(pts, key=lambda p: -p.y - 0.6 * ((p.x - c.x) ** 2 + (p.z - c.z) ** 2) ** 0.5).copy()
 
 
 def step_of(part):
@@ -120,6 +145,11 @@ def main(out):
         mat = obj.data.materials[0] if obj.data.materials else None
         groups[(step, mover, mat.name if mat else "none")].append(obj)
 
+    by_part = defaultdict(list)
+    for (step, _, _), objs in groups.items():
+        by_part[step] += objs
+    bolt_points = {step: BOLTS.get(step) or [auto_bolt(by_part[step])] for step, _ in STEPS[1:]}   # before joining moves them
+
     keep = []
     scale = Matrix.Scale(0.001, 4)
     empties = {}
@@ -136,9 +166,9 @@ def main(out):
 
     bike = empty("bike")
     for step, _ in STEPS:
-        empties[step] = empty(f"step_{step}", parent=bike)
+        empties[step] = empty(f"part_{step}", parent=bike)
     for mover, m in frames.items():
-        step = step_of(mover.split("_", 1)[1]) if mover.startswith("spin") else "headlight"
+        step = step_of(mover.split("_", 1)[1]) if mover.startswith("spin") else "clocks"
         loc, rot, _ = m.decompose()
         empties[mover] = empty(mover, Matrix.Translation(loc * 0.001) @ rot.to_matrix().to_4x4(), empties[step])
     stats = defaultdict(int)
@@ -155,7 +185,7 @@ def main(out):
         ob.name = f"{mover or step}|{mat}"
         keep.append(ob)
         stats[step] += sum(len(p.vertices) - 2 for p in ob.data.polygons)
-    for step, points in BOLTS.items():
+    for step, points in bolt_points.items():
         for i, p in enumerate(points):
             empty(f"bolt_{step}_{i}", Matrix.Translation(p * 0.001), bike)
     for o in list(bpy.data.objects):

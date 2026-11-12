@@ -89,10 +89,29 @@ export function createGarageAudio() {
     if (closed) return null;
     try {
       if (!ctx) { ctx = new AudioContext(); build(ctx); }
-      if (!document.hidden) wake(ctx, () => { ctx = null; engine = null; starter = null; spraying = null; });
+      if (!document.hidden) wake(ctx, () => { ctx = null; engine = null; starter = null; spraying = null; radioOut = null; });
+      if (radioWant) startRadio(ctx);
     } catch { return null; }
     return ctx;
   };
+
+  // The radio on the workbench plays Catcha's tune through a small, boxy speaker; it dips under the engine.
+  let radioWant = false, radioLevel = 1, radioOut: GainNode | null = null, radioSrc: AudioBufferSourceNode | null = null;
+  let radioBuf: Promise<AudioBuffer | null> | null = null;
+  function startRadio(c: AudioContext) {
+    if (radioOut) return;
+    const out = c.createGain(); out.gain.value = 0; radioOut = out;
+    const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 230;
+    const mid = c.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 1500; mid.gain.value = 4;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200;
+    out.connect(hp); hp.connect(mid); mid.connect(lp); lp.connect(master);
+    radioBuf ??= fetch('/catcha/assets/audio/music-gameplay.m4a').then(r => r.arrayBuffer()).then(b => c.decodeAudioData(b)).catch(() => null);
+    void radioBuf.then(buf => {
+      if (!buf || radioOut !== out || closed) return;
+      radioSrc = c.createBufferSource(); radioSrc.buffer = buf; radioSrc.loop = true; radioSrc.connect(out); radioSrc.start(); radioGain();
+    });
+  }
+  function radioGain() { if (ctx && radioOut) radioOut.gain.setTargetAtTime(radioWant ? 0.42 * radioLevel : 0, ctx.currentTime, 0.35); }
   const live = () => (ctx && !sound.muted ? ctx : null);
 
   function tone(f: number, at: number, dur: number, gain: number, type: OscillatorType = 'sine', dest: AudioNode = sfx, glide = 1) {
@@ -127,6 +146,8 @@ export function createGarageAudio() {
       haptic('land');
     },
     tighten() { unlock(); sound.playScrewDown(); },
+    /** It doesn't go there: a soft two-note "uh-uh". */
+    bonk() { unlock(); tone(262, 0, 0.14, 0.1, 'triangle', sfx, 0.8); tone(208, 0.15, 0.2, 0.09, 'triangle', sfx, 0.8); haptic('bump'); },
     /** A part finished: a bell on the next note of the build's tune. */
     chime(step: number) {
       unlock();
@@ -192,6 +213,11 @@ export function createGarageAudio() {
       } catch { /* no voice: the label shows the name */ }
     },
     set voice(v: boolean) { voice = v; },
+    /** Radio on or off; it starts once sound is allowed. */
+    radio(on: boolean) { radioWant = on; if (ctx) { if (on) startRadio(ctx); radioGain(); } },
+    /** 0–1: how loud the radio is allowed to be (quieter under the engine, silent out on the road). */
+    radioDuck(level: number) { if (Math.abs(level - radioLevel) < 0.01) return; radioLevel = level; radioGain(); },
+    click() { unlock(); tone(1800, 0, 0.025, 0.08, 'square'); tone(900, 0.03, 0.03, 0.05, 'square'); },
     refreshMute() {
       if (!ctx) return;
       master.gain.setTargetAtTime(sound.muted ? 0 : 0.9, ctx.currentTime, 0.03);
@@ -199,6 +225,7 @@ export function createGarageAudio() {
     },
     close() {
       closed = true; this.stopCranking(); engine?.stop(0.1); engine = null; spraying?.stop();
+      try { radioSrc?.stop(); } catch { /* never started */ }
       try { speechSynthesis.cancel(); } catch { /* none */ }
       if (ctx) void ctx.close().catch(() => {});
       ctx = null;

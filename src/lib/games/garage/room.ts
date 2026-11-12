@@ -118,6 +118,14 @@ export function buildRoom(scene: THREE.Scene) {
   lawn.rotation.x = -Math.PI / 2; lawn.position.set(ROOM.right + 5, 0.001, doorZ); group.add(lawn);
   const drive = new THREE.Mesh(new THREE.PlaneGeometry(10, ROOM.doorWidth - 0.4), new THREE.MeshBasicMaterial({ color: '#c9c3b6', toneMapped: false }));
   drive.rotation.x = -Math.PI / 2; drive.position.set(ROOM.right + 5, 0.003, doorZ); group.add(drive);
+  // the garden: a hedge along the back and a tree, then a haze of daylight in the doorway so outside reads as bright and soft
+  const leaf = std('#5d9a45', 0.95, 0, { flatShading: true });
+  add(new THREE.BoxGeometry(0.7, 1.0, 9), leaf, ROOM.right + 2.95, 0.5, doorZ, false);
+  add(new THREE.CylinderGeometry(0.09, 0.13, 1.6, 8), std('#7a5232', 0.9), ROOM.right + 2.4, 0.8, doorZ - 2.1, false);
+  add(new THREE.IcosahedronGeometry(0.85, 1), leaf, ROOM.right + 2.4, 2.1, doorZ - 2.1, false);
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.doorWidth, ROOM.height - 0.7),
+    new THREE.MeshBasicMaterial({ color: '#fffaf0', transparent: true, opacity: 0.32, depthWrite: false, toneMapped: false }));
+  haze.position.set(ROOM.right + 0.02, (ROOM.height - 0.7) / 2, doorZ); haze.rotation.y = -Math.PI / 2; haze.renderOrder = 3; group.add(haze);
 
   // pegboard with its tools, over the workbench behind the bike's tail
   const board = add(new THREE.PlaneGeometry(2.6, 1.2), std('#ffffff', 0.9, 0, { map: pegboard() }), -2.2, 1.75, ROOM.back + 0.02, false);
