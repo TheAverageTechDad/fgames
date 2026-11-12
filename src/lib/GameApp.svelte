@@ -40,7 +40,7 @@
  <p class="home-intro">Little games. Any spare moment.</p>
  {#each [{game:'phonics',title:'Sound It Out',description:'Slide along a word. Read it yourself.',skin:'grape'},{game:'garage',title:'Garage',description:'Bolt a real motorbike together. Fire it up.',skin:'sky'},{game:'hoops',title:'Hoops',description:'Dad, a ball and a hoop.',skin:'coral'},{game:'farm',title:'Pocket Farm',description:'Plant a little. Grow something lovely.',skin:'mint'},{game:'catcha',title:'Catcha',description:'Tidy, cook and play together.',skin:'coral'},{game:'nuts',title:'Nuts & Bolts',description:'A little order. A clear head.',skin:'mint'},{game:'escape',title:'Escape',description:'Make room. Find your way out.',skin:'sky'}] as game}
  <button class={`library-card toy-card ${game.skin}`} onclick={()=>{sound.playTap();if(game.game==='catcha')location.href='/catcha';else goto(`/${game.game}`,{state:{parent:'/'}});}} aria-label={`Play ${game.title}`}>
- <div class="library-art"><img src={`/cards/${game.game}-poster-v1.webp`} alt={`${game.title} illustrated game cover`} width="1280" height="680" loading={game.game==='phonics'?'eager':'lazy'} decoding="async"/></div>
+ <div class="library-art"><img src={`/cards/${game.game}-poster-${game.game === 'phonics' || game.game === 'garage' ? 'v2' : 'v1'}.webp`} alt={`${game.title} illustrated game cover`} width="1280" height="680" loading={game.game==='phonics'?'eager':'lazy'} decoding="async"/></div>
  <div class="library-label"><div><h2>{game.title}</h2><p>{game.description}</p></div><span class="card-play"><Icon name="play" size={26}/></span></div>
  </button>
  {/each}

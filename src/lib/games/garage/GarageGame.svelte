@@ -138,6 +138,19 @@
       <button class="round small" aria-label="Pause" onclick={pause}><span class="pause-symbol" aria-hidden="true"></span></button>
     </header>
 
+    {#if view.phase === 'build'}
+      {#key view.held + view.stage}
+        <!-- ponytail: one slim line under the top bar, never over the bike; facts fade out (scene clears them after 6s) -->
+        <div class="tip" class:done={view.stage === 'done'} class:wrong={view.noteKind === 'wrong'} role="status" data-step={view.held}>
+          {#if view.note}
+            {#if view.noteKind === 'fact' && lastOn}<b><Icon name="check" size={15}/>{lastOn.name}</b>{/if}<span>{view.note}</span>
+          {:else if held && view.stage !== 'pick'}
+            <b>{#if view.stage === 'done'}<Icon name="check" size={15}/>{/if}{held.name}</b>{#if hint}<span>{hint}</span>{/if}
+          {:else if hint}<span>{hint}</span>{/if}
+        </div>
+      {/key}
+    {/if}
+
     <section class="garage-bottom">
       {#if view.phase === 'garage'}
         <div class="card home" data-home>
@@ -161,24 +174,12 @@
           {/if}
         </div>
       {:else if view.phase === 'build'}
-        {#key view.held + view.stage}
-          <div class="card step" class:done={view.stage === 'done'} class:wrong={view.noteKind === 'wrong'} role="status" data-step={view.held}>
-            {#if held && view.stage !== 'pick'}
-              <small>{puzzle ? (view.stage === 'present' ? 'In your hand' : 'On the bike') : `Part ${view.placed.length + (view.stage === 'done' ? 0 : 1)} of ${view.total}`}</small>
-              <h2>{held.name}{#if view.stage === 'done'}<span class="tick"><Icon name="check" size={26}/></span>{/if}</h2>
-            {:else if view.noteKind === 'fact' && lastOn}
-              <small><Icon name="check" size={14}/> {lastOn.name}</small>
-            {/if}
-            {#if view.note}<p class="note" class:fact={view.noteKind === 'fact'}>{#if view.noteKind === 'fact'}<Icon name="lightbulb" size={20}/>{/if}{view.note}</p>
-            {:else if hint}<p class="hint">{#if view.stage === 'present' || view.stage === 'pick'}<Icon name="hand-pointing" size={20}/>{/if}{hint}</p>{/if}
-          </div>
-        {/key}
         {#if puzzle && view.tray.length}
           <div class="tray" aria-label="Parts on the bench">
             {#each view.tray as id (id)}
               <button class="tile" class:held={view.held === id} data-piece={id} aria-label={view.held === id ? `Put the ${byId[id]?.name.toLowerCase()} back` : byId[id]?.name} aria-pressed={view.held === id}
                 onclick={() => { if (trayPress?.lifted) { trayPress = null; return; } engine?.pick(id); }} onpointerdown={trayDown} onpointermove={e => trayMove(e, id)} oncontextmenu={e => e.preventDefault()}>
-                {#if thumbs[id]}<img src={thumbs[id]} alt="" draggable="false">{/if}<span>{byId[id]?.name}</span>
+                {#if thumbs[id]}<img src={thumbs[id]} alt="" draggable="false">{:else}<span>{byId[id]?.name}</span>{/if}
                 {#if view.held === id}<i class="put-back" aria-hidden="true"><Icon name="x" size={14}/></i>{/if}
               </button>
             {/each}
@@ -287,11 +288,10 @@
   .card .row{display:flex;gap:10px;width:100%;margin-top:4px}.card .row>:first-child{flex:1}
   .toy-button.go{--top:#ffd36b;--bottom:#f5a524;--lip:#a8650e}.toy-button.ride{--top:#86ceff;--bottom:#3a96ee;--lip:#1d5fae;color:#fff;text-shadow:0 2px 0 #1d5fae}
   .toy-button.big{min-height:58px;font-size:23px;padding:10px 22px;margin-top:6px}.home .toy-button.big{width:100%}
-  .step h2{display:flex;align-items:center;gap:8px;font-size:32px}.step .tick{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#22b385;color:#fff;animation:pop .3s ease-out}
-  .step.done{background:#eafff4f2;border-color:#137a5a}
-  .hint,.note{display:flex;align-items:center;justify-content:center;gap:6px;font-size:17px!important;text-wrap:balance}
-  .note.fact{color:var(--ink)!important}.note :global(.sticker-icon){color:#e2a10f}
-  .step.wrong{background:#fff1e8f2;border-color:#b5482b;animation:nudge .35s ease-out}
+  .tip{position:absolute;top:calc(var(--top) + 58px);left:0;right:0;margin:0 auto;z-index:3;width:max-content;max-width:min(88%,380px);padding:6px 14px;border-radius:16px;background:#fff6e6e6;box-shadow:0 2px 0 #241b3a33;
+    display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center;font-size:14px;line-height:1.25;color:var(--ink-soft);pointer-events:none;animation:rise .2s ease-out;text-wrap:balance}
+  .tip b{display:flex;align-items:center;gap:4px;font-weight:400;font-size:16px;color:var(--ink)}.tip b :global(.sticker-icon){color:#137a5a}
+  .tip.done{background:#eafff4e6}.tip.wrong{background:#fff1e8e6;color:#b5482b;animation:nudge .35s ease-out}
   .count{display:flex;align-items:center;gap:5px;padding:4px 12px 4px 9px;border-radius:16px;background:#fff6e6e6;font-size:19px;box-shadow:0 2px 0 #241b3a33}.count b{font-weight:400}
   .modes{display:flex;flex-direction:column;gap:7px;width:100%;margin-top:4px}
   .mode{display:flex;align-items:center;gap:10px;width:100%;padding:5px 10px;border:3px solid var(--ink);border-radius:18px;background:#fffaf0;box-shadow:0 4px 0 #241b3a55;text-align:left;color:var(--ink)}
@@ -299,13 +299,13 @@
   .mode-badge{display:grid;place-items:center;width:36px;height:36px;min-width:36px;border-radius:50%;background:#ffd36b;border:2px solid var(--ink)}
   .mode:nth-child(2) .mode-badge{background:#86ceff}.mode:nth-child(3) .mode-badge{background:#ff9a7a}
   .mode-text{display:flex;flex-direction:column;gap:1px}.mode-text b{font-family:'Luckiest Guy',cursive;font-weight:400;font-size:19px;letter-spacing:.02em}.mode-text small{font-size:13px;color:var(--ink-soft)}
-  .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:4px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none}
+  .tray{display:flex;gap:8px;width:calc(100% + 24px);margin:0 -12px;padding:12px 12px 6px;overflow-x:auto;scroll-snap-type:x proximity;touch-action:pan-x;scrollbar-width:none}
   .tray::-webkit-scrollbar{display:none}
-  .tile{flex:0 0 auto;width:78px;padding:4px 4px 6px;border:3px solid var(--ink);border-radius:16px;background:#efe4cc;box-shadow:0 4px 0 #241b3a55;display:flex;flex-direction:column;align-items:center;gap:2px;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s}
-  .tile img{width:64px;height:64px;border-radius:10px;pointer-events:none;-webkit-user-drag:none}
-  .tile span{font-size:11px;line-height:1.15;text-align:center;min-height:2.3em;display:flex;align-items:center}
-  .tile.held{position:relative;background:#ffd36b;transform:translateY(-6px);box-shadow:0 8px 0 #241b3a55}
-  .put-back{position:absolute;top:3px;right:3px;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff6e6;border:2px solid var(--ink);color:var(--ink)}
+  .tile{position:relative;flex:0 0 auto;display:grid;place-items:center;width:62px;height:62px;padding:3px;border:0;border-radius:16px;background:#fff6e6e6;box-shadow:0 2px 0 #241b3a33;scroll-snap-align:start;touch-action:pan-x;color:var(--ink);transition:transform .15s,background .15s}
+  .tile img{width:56px;height:56px;border-radius:12px;pointer-events:none;-webkit-user-drag:none}
+  .tile span{font-size:10px;line-height:1.1;text-align:center}
+  .tile.held{background:#ffd36b;transform:translateY(-5px);box-shadow:0 0 0 3px var(--ink),0 5px 0 #241b3a55}
+  .put-back{position:absolute;top:-4px;right:-4px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#fff6e6;border:2px solid var(--ink);color:var(--ink)}
   .clock{font-variant-numeric:tabular-nums;min-width:62px;justify-content:center}
   .best{font-family:'Lilita One',sans-serif;font-style:normal;font-size:12px;letter-spacing:0;margin-left:8px;padding:1px 7px;border-radius:9px;background:#22b385;color:#fff;vertical-align:3px}
   .built{font-size:15px!important;color:var(--ink)!important}.built b{font-weight:400;color:#137a5a}
@@ -355,14 +355,12 @@
     .garage-surround{padding:0}.garage-shell{max-width:none;height:100%;border:0;border-radius:0;box-shadow:none;--top:max(8px,env(safe-area-inset-top))}
     .garage-header{padding:var(--top) max(14px,env(safe-area-inset-right)) 6px max(14px,env(safe-area-inset-left))}
     .garage-bottom{left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}
-    .card{max-width:380px;padding:8px 14px 10px;gap:3px}.card h2{font-size:22px}.step h2{font-size:24px}.toy-button.big{min-height:48px;font-size:19px;margin-top:2px}
+    .card{max-width:380px;padding:8px 14px 10px;gap:3px}.card h2{font-size:22px}.toy-button.big{min-height:48px;font-size:19px;margin-top:2px}
     .pedal{width:96px;height:96px;font-size:22px}.swatch{width:40px;height:40px}
     .modes{flex-direction:row}.mode{flex-direction:column;text-align:center;gap:4px;padding:6px}.mode-text small{font-size:11px}.card.home{max-width:620px}
-    .tile{width:68px}.tile img{width:54px;height:54px}
-    /* building from the tray: the parts stand in a column down the right, the card sits bottom left, the bike gets the middle */
-    .garage-bottom:has(.tray){align-items:flex-start;right:calc(max(12px,env(safe-area-inset-right)) + 84px)}
-    .garage-bottom:has(.tray) .card{max-width:330px}
-    .tray{position:fixed;top:calc(var(--top) + 50px);bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:80px;margin:0;padding:4px 6px 8px;
+    .tile{width:54px;height:54px}.tile img{width:48px;height:48px}
+    /* building from the tray: the parts stand in a thin column down the right, the bike gets the rest */
+    .tray{position:fixed;top:calc(var(--top) + 50px);bottom:max(8px,env(safe-area-inset-bottom));right:max(8px,env(safe-area-inset-right));width:66px;margin:0;padding:12px 6px 8px;align-items:center;
       flex-direction:column;overflow-x:hidden;overflow-y:auto;scroll-snap-type:y proximity;touch-action:pan-y}
     .tray .tile{touch-action:pan-y}
   }

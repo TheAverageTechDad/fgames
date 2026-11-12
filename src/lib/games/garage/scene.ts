@@ -303,7 +303,7 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     done.add(p.def.id);
     garage.building = { mode: view.mode, placed: [...done], paint: view.paint, time: timer }; callbacks.save();
     audio.chime(Math.round((done.size - 1) * 13 / Math.max(1, pieces.length - 1))); fx.sparkle(p.home.centre, 16, p.home.radius * 0.8);
-    set({ stage: 'done', placed: [...done], tray: view.tray.filter(id => id !== p.def.id), note: p.def.fact, noteKind: 'fact' }); doneAt = clock;
+    set({ stage: 'done', placed: [...done], tray: view.tray.filter(id => id !== p.def.id), note: p.def.fact, noteKind: 'fact' }); doneAt = noteAt = clock;
     setTimeout(() => { if (view.note === p.def.fact) audio.say(p.def.fact); }, 650);
   }
   function next() {
@@ -563,8 +563,8 @@ export function createGarageScene(host: HTMLElement, overlay: HTMLElement, garag
     } else placeCamera(dt);
     // the radio plays in the garage, dips under the engine, and stays behind when you ride out
     audio.radioDuck(ride ? 0 : view.engine === 'running' ? 0.3 : 1);
-    if (life && !ride) life.update(dt, garage.radio && !sound.muted);
-    if (view.noteKind === 'wrong' && clock - noteAt > 3.2) set({ note: '', noteKind: '' });
+    if (life && !ride) life.update(dt, garage.radio && !sound.muted, camera.position);
+    if (view.noteKind && clock - noteAt > (view.noteKind === 'fact' ? 6 : 3.2)) set({ note: '', noteKind: '' });
     for (let i = spinning.length - 1; i >= 0; i--) {
       const s = spinning[i]; s.t += dt / 0.4;
       s.mesh.position.copy(s.at).addScaledVector(s.axis, 0.05 * (1 - ease(Math.min(1, s.t))));

@@ -76,7 +76,7 @@ export async function createLife(parent: THREE.Object3D) {
   let t = 0, level = 0;
   return {
     group, radio,
-    update(dt: number, playing: boolean) {
+    update(dt: number, playing: boolean, eye: THREE.Vector3) {
       t += dt;
       // radio: the speaker thumps, rings ripple out and notes float up while it plays
       level += ((playing ? 1 : 0) - level) * Math.min(1, dt * 3);
@@ -103,6 +103,7 @@ export async function createLife(parent: THREE.Object3D) {
         dad.arms.forEach((a, i) => { a.rotation.x *= 0.9; if (stop === 0) a.rotation.x = -0.9 + Math.sin(t * 5 + i * 2) * 0.12; });   // tinkering at the bench
         waiting -= dt; if (waiting <= 0) { stop = (stop + 1) % stops.length; waiting = stops[stop].wait; }
       }
+      dad.root.visible = Math.hypot(eye.x - pos.x, eye.z - pos.z) > 1.4;   // ponytail: he steps out of shot rather than filling the lens when the camera swings round to the back wall
       let turn = facing - dad.root.rotation.y; turn = Math.atan2(Math.sin(turn), Math.cos(turn));
       dad.root.rotation.y += turn * Math.min(1, dt * 6);
       if (dad.head) dad.head.rotation.y = Math.sin(t * 0.4) * 0.25;
